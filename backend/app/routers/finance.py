@@ -1,7 +1,7 @@
 from datetime import date
 from dateutil.relativedelta import relativedelta
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,6 +13,12 @@ from ..models import Bill, Budget, Expense, Goal, Income, PayMethod
 from ..schemas import BillIn, BillOut, BudgetIn, ExpenseIn, ExpenseOut, GoalIn, GoalOut, IncomeIn, IncomeOut, PayMethodIn, PayMethodOut
 
 router = APIRouter(prefix="/finance", tags=["finance"])
+
+# `month` is parsed with int() and fed to date(), so anything that is not
+# exactly YYYY-MM raised ValueError and surfaced as a 500. Validating at the
+# edge turns bad input into the 422 it always should have been.
+MonthParam = Query(None, pattern=r"^\d{4}-(0[1-9]|1[0-2])$",
+                   description="Calendar month as YYYY-MM.")
 
 
 async def _get(model, id_, session, user):
@@ -56,7 +62,7 @@ async def _delete(model, id_, session, user):
 
 # ---------- expenses ----------
 @router.get("/expenses", response_model=list[ExpenseOut])
-async def expenses(response: Response, month: str | None = None, page: Page = Depends(page_params),
+async def expenses(response: Response, month: str | None = MonthParam, page: Page = Depends(page_params),
                    session: AsyncSession = Depends(get_session), user: str = Depends(current_user_id)):
     stmt = select(Expense).where(Expense.user_id == user).order_by(Expense.spent_on.desc(), Expense.id)
     if month:
@@ -191,7 +197,7 @@ async def del_goal(gid: str, session: AsyncSession = Depends(get_session), user:
 
 # ---------- summary: one SQL round-trip feeds tiles, charts and reports ----------
 @router.get("/summary")
-async def summary(month: str | None = None, session: AsyncSession = Depends(get_session), user: str = Depends(current_user_id)):
+async def summary(month: str | None = MonthParam, session: AsyncSession = Depends(get_session), user: str = Depends(current_user_id)):
     ym = month or date.today().isoformat()[:7]
     y, m = int(ym[:4]), int(ym[5:7])
     start, end = date(y, m, 1), date(y, m, 1) + relativedelta(months=1)
