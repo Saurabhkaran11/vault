@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { SECTIONS, fmtStamp, daysAgo, today } from "@/lib/seed";
 import { useStore } from "@/hooks/useStore";
 import { WeeklyBars, Donut } from "./Charts";
@@ -416,9 +416,11 @@ function BackendSyncSection() {
 export default function App() {
   const { items: allItems, add, update, remove, exportJson, importJson, hydrated } = useStore();
   /* Apple Notes-style trash: deleting sets a `deleted` stamp instead of
-     removing. Everything below works on live items only. */
-  const items = allItems.filter((i) => !i.deleted);
-  const trashed = allItems.filter((i) => i.deleted);
+     removing. Everything below works on live items only.
+     Memoized: effects depend on `items`, and a fresh array identity every
+     render turns those effects into an infinite setState→render cycle. */
+  const items = useMemo(() => allItems.filter((i) => !i.deleted), [allItems]);
+  const trashed = useMemo(() => allItems.filter((i) => i.deleted), [allItems]);
 
   /* purge items that have sat in the trash for more than 30 days */
   useEffect(() => {
@@ -1241,7 +1243,7 @@ export default function App() {
 
             {ob && !ob.dismissed && ob.choice && (() => {
               let boardsOwn = false;
-              try { boardsOwn = (JSON.parse(localStorage.getItem("vault.boards.v1") || "{}").boards || []).some((b) => b.id !== "sb1"); } catch {}
+              try { boardsOwn = (JSON.parse(localStorage.getItem("vault.boards.v1") || "{}").boards || []).some((b) => !b.seeded); } catch {}
               const steps = [
                 { id: "cap", label: "Capture your first item — a link, a thought, an expense", hint: "Press C and type anything; Vault files it for you", key: "C", done: items.some((i) => +i.id > 1e12), go: () => setCapOpen(true) },
                 { id: "name", label: "Make it yours — add your name", hint: "Settings → Profile", done: !!profile.name?.trim() && profile.name.trim() !== "You", go: () => setSettingsOpen(true) },

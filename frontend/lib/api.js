@@ -41,7 +41,11 @@ export async function api(path, { method = "GET", body } = {}) {
     headers: { "Content-Type": "application/json", "X-User-Id": b.userId || "demo" },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
-  if (!res.ok) throw new Error(`API ${res.status} on ${method} ${path}`);
+  if (!res.ok) {
+    const err = new Error(`API ${res.status} on ${method} ${path}`);
+    err.status = res.status;   // an HTTP response ≠ a network failure — see flushQueue
+    throw err;
+  }
   const ct = res.headers.get("content-type") || "";
   return ct.includes("json") ? res.json() : res.text();
 }
@@ -58,11 +62,19 @@ export async function mirror(path, opts = {}) {
   }
 }
 
+/* PUT mirrors carry whole-state snapshots (boards), so only the NEWEST one
+ * per path matters — a superseded snapshot must never be replayed, or a
+ * stale one can resurrect ids the newer state already replaced. */
+const coalesce = (q) =>
+  q.filter((job, i) =>
+    (job.opts?.method || "GET") !== "PUT" ||
+    !q.some((later, j) => j > i && later.path === job.path && (later.opts?.method || "GET") === "PUT"));
+
 function enqueueRetry(path, opts) {
   try {
     const q = JSON.parse(localStorage.getItem(QKEY) || "[]");
     q.push({ path, opts, t: Date.now() });
-    localStorage.setItem(QKEY, JSON.stringify(q.slice(-500)));   // bounded
+    localStorage.setItem(QKEY, JSON.stringify(coalesce(q).slice(-500)));   // bounded
   } catch {}
 }
 
@@ -70,11 +82,15 @@ export function pendingMirrors() {
   try { return JSON.parse(localStorage.getItem(QKEY) || "[]").length; } catch { return 0; }
 }
 
-/* flush the retry queue in order; stops at the first failure */
+/* Flush the retry queue in order. Mirror bodies are deterministic, so a job
+ * the backend REJECTS (any HTTP status) would fail identically on every
+ * replay — drop it, warn, and keep going; the working copy is still local
+ * and "Sync everything again" can rebuild the server. Only network errors
+ * (backend unreachable) stop the flush and keep the queue intact. */
 export async function flushQueue() {
   if (!backendOn()) return { flushed: 0, left: pendingMirrors() };
   let q;
-  try { q = JSON.parse(localStorage.getItem(QKEY) || "[]"); } catch { q = []; }
+  try { q = coalesce(JSON.parse(localStorage.getItem(QKEY) || "[]")); } catch { q = []; }
   let flushed = 0;
   while (q.length) {
     const job = q[0];
@@ -82,8 +98,13 @@ export async function flushQueue() {
       await api(job.path, job.opts);
       q.shift();
       flushed++;
-    } catch {
-      break;
+    } catch (e) {
+      if (e && e.status) {
+        console.warn(`Vault sync: backend rejected queued ${job.opts?.method || "GET"} ${job.path} (${e.status}) — dropping it; local copy unaffected.`);
+        q.shift();
+        continue;
+      }
+      break;   // network failure — backend unreachable, retry later
     }
   }
   localStorage.setItem(QKEY, JSON.stringify(q));

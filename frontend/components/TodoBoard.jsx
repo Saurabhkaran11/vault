@@ -28,12 +28,12 @@ const toApi = (t) => ({
 const dRel = (days) => { const t = new Date(); t.setDate(t.getDate() + days); return t.toISOString().slice(0, 10); };
 
 const seedTasks = () => ([
-  { id: "t1", text: "Watch FastAPI course — section 3", done: false, due: dRel(0), high: true, created: dRel(0) },
-  { id: "t2", text: "Push Vault to GitHub", done: false, due: dRel(0), high: false, created: dRel(0) },
-  { id: "t3", text: "Finish DDIA chapter 5", done: false, due: dRel(2), high: false, created: dRel(-1) },
-  { id: "t6", text: "Renew domain (overdue sample)", done: false, due: dRel(-2), high: true, created: dRel(-6) },
-  { id: "t5", text: "Migrate file storage to IndexedDB", done: false, due: null, high: false, label: "Someday", created: dRel(-3) },
-  { id: "t4", text: "Write portfolio README v2", done: true, doneAt: dRel(0), due: dRel(0), high: false, created: dRel(-2) },
+  { id: uid(), text: "Watch FastAPI course — section 3", done: false, due: dRel(0), high: true, created: dRel(0) },
+  { id: uid(), text: "Push Vault to GitHub", done: false, due: dRel(0), high: false, created: dRel(0) },
+  { id: uid(), text: "Finish DDIA chapter 5", done: false, due: dRel(2), high: false, created: dRel(-1) },
+  { id: uid(), text: "Renew domain (overdue sample)", done: false, due: dRel(-2), high: true, created: dRel(-6) },
+  { id: uid(), text: "Migrate file storage to IndexedDB", done: false, due: null, high: false, label: "Someday", created: dRel(-3) },
+  { id: uid(), text: "Write portfolio README v2", done: true, doneAt: dRel(0), due: dRel(0), high: false, created: dRel(-2) },
 ]);
 
 /* v1 → v2 migration: flatten lists into tasks; list names inform dates/labels */

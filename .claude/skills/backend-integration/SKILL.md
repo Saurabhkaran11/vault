@@ -59,3 +59,39 @@ idempotent. Items upsert by `client_id`.
 | `tags-capture-sync` | `lib/tags.js`, `components/QuickCapture.jsx`, `components/App.jsx` (Settings UI), `docs/integration.md` | `routers/tags.py` |
 
 Every skill ends with a **Status log** — append what you did and verified.
+
+## Status log
+
+- 2026-08-19: **Browser e2e VERIFIED end to end** (user `e2e`, API :8100, fresh DB).
+  Fixes that made it pass, all committed on `feat/backend-sync`:
+  - `/sync/import` rewritten idempotent + user-scoped: same-user string ids
+    update in place (items by `(user, client_id)`, budgets by scope, tags by
+    value, boards via snapshot-replace); any id owned by another user → 409
+    with the colliding ids and NOTHING written. Curl-proved: double import →
+    1 row updated; cross-user → 409 with CORS headers present.
+  - `app/main.py`: global exception handler returns JSON 500s inside the
+    middleware stack — bare Starlette 500s skip CORSMiddleware and surface
+    in browsers as "Failed to fetch", which masked every real error.
+  - `lib/api.js` queue semantics: PUT mirrors (whole-board snapshots)
+    coalesce per path — only the newest snapshot replays, so a stale
+    pre-`ensureKeys` snapshot can't resurrect reminted sprint ids; jobs the
+    backend REJECTS (HTTP status) are dropped with a console.warn instead of
+    wedging the in-order queue forever (deterministic bodies fail identically
+    on every replay); only network failures keep the queue.
+  - Seed collisions: fixed ids (`sp1/sb1/se1/pm-cash/…`) randomized at seed
+    time in TodoBoard/CustomBoards/FinanceBoard + `seeded` flag; CustomBoards
+    `ensureKeys` heals stores that already duplicated `sp1` across boards
+    (remint + remap current/card refs).
+  - `App.jsx`: `items`/`trashed` are now `useMemo`-stable — the render-fresh
+    `.filter()` identity fed effect deps (`[items]`) and looped setPulse
+    forever on the dashboard (50+ nested updates, console spam, CPU burn).
+  Evidence: full sync imported 18 items · 12 tasks · 15 finance rows · 2
+  boards (sb1 upserted over the mirror-created row); retry queue 4 → "3
+  mirrored" (stale snapshot coalesced) → 0; live captures landed in
+  Postgres (note `1787124193655`, task `nblp135` due parsed from
+  "tomorrow", expense `hzwp2yu` $4.50, board card `4gvmvmd` in To do /
+  current sprint via debounced snapshot PUT) — plus the user's own two
+  resume uploads mirrored live mid-test; worker restart drained queued
+  reindex jobs → 20 embeddings; `/ai/ask` returns the minutes-old browser
+  note as top pgvector hit (score 0.47). Known pre-launch gap unchanged:
+  global string PKs must move to `(user_id, client_id)` before multi-user.

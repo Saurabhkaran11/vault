@@ -14,18 +14,22 @@ import { mirror } from "@/lib/api";
 const uid = () => Math.random().toString(36).slice(2, 9);
 const KEY = "vault.boards.v1";
 
-const seedBoards = () => ([{
-  id: "sb1",
-  name: "Feature: Vault backend",
-  seq: 4,
-  sprints: [{ id: "sp1", name: "Sprint 1", ended: null }],
-  current: "sp1",
-  cols: [
-    { id: "c1", title: "Backlog", cards: [{ id: "k1", num: 1, sprint: "sp1", text: "Design the API schema" }, { id: "k2", num: 2, sprint: "sp1", text: "Pick hosting for Postgres" }] },
-    { id: "c2", title: "In progress", cards: [{ id: "k3", num: 3, sprint: "sp1", text: "Define data models (items, todos, finance)" }] },
-    { id: "c3", title: "Done", cards: [{ id: "k4", num: 4, sprint: "sp1", hours: 3, text: "Choose stack — FastAPI + Postgres" }] },
-  ],
-}]);
+const seedBoards = () => {
+  const sp = uid(), b = uid();
+  return [{
+    id: b,
+    seeded: true,               // sample board — onboarding ignores it
+    name: "Feature: Vault backend",
+    seq: 4,
+    sprints: [{ id: sp, name: "Sprint 1", ended: null }],
+    current: sp,
+    cols: [
+      { id: uid(), title: "Backlog", cards: [{ id: uid(), num: 1, sprint: sp, text: "Design the API schema" }, { id: uid(), num: 2, sprint: sp, text: "Pick hosting for Postgres" }] },
+      { id: uid(), title: "In progress", cards: [{ id: uid(), num: 3, sprint: sp, text: "Define data models (items, todos, finance)" }] },
+      { id: uid(), title: "Done", cards: [{ id: uid(), num: 4, sprint: sp, hours: 3, text: "Choose stack — FastAPI + Postgres" }] },
+    ],
+  }];
+};
 
 /* Jira-style card keys: board initials + a per-board number that never
  * changes once assigned. Columns whose title reads like "done" count as
@@ -50,16 +54,35 @@ const parseLabels = (raw) =>
 const DONE_RE = /done|complete|shipped|finished/i;
 
 /* Migration: older saves get card numbers backfilled and a default
- * "Sprint 1" that adopts every existing card. */
-const ensureKeys = (boards) => boards.map((b) => {
-  let seq = b.seq || 0;
-  let cols = (b.cols || []).map((c) => ({ ...c, cards: c.cards.map((k) => (k.num ? k : { ...k, num: ++seq })) }));
-  const sprints = b.sprints?.length ? b.sprints : [{ id: "sp1", name: "Sprint 1", ended: null }];
-  const current = b.current && sprints.some((s) => s.id === b.current) ? b.current : sprints[sprints.length - 1].id;
-  const fallback = sprints[0].id;
-  cols = cols.map((c) => ({ ...c, cards: c.cards.map((k) => (k.sprint ? k : { ...k, sprint: fallback })) }));
-  return { ...b, seq, cols, sprints, current };
-});
+ * "Sprint 1" that adopts every existing card. Sprint ids must be unique
+ * ACROSS boards (they're global keys on the backend) — earlier builds used
+ * a fixed "sp1" fallback for every migrated board, so this also heals any
+ * duplicates by reminting ids and remapping current/card references. */
+const ensureKeys = (boards) => {
+  const seen = new Set();
+  return boards.map((b) => {
+    let seq = b.seq || 0;
+    let cols = (b.cols || []).map((c) => ({ ...c, cards: c.cards.map((k) => (k.num ? k : { ...k, num: ++seq })) }));
+    const remap = {};
+    let sprints = (b.sprints?.length ? b.sprints : [{ id: uid(), name: "Sprint 1", ended: null }]).map((s) => {
+      if (seen.has(s.id)) { const nid = uid(); remap[s.id] = nid; return { ...s, id: nid }; }
+      seen.add(s.id);
+      return s;
+    });
+    sprints.forEach((s) => seen.add(s.id));
+    const mapped = remap[b.current] || b.current;
+    const current = mapped && sprints.some((s) => s.id === mapped) ? mapped : sprints[sprints.length - 1].id;
+    const fallback = sprints[0].id;
+    cols = cols.map((c) => ({
+      ...c,
+      cards: c.cards.map((k) => {
+        const sid = remap[k.sprint] || k.sprint;
+        return sid && sprints.some((s) => s.id === sid) ? { ...k, sprint: sid } : { ...k, sprint: fallback };
+      }),
+    }));
+    return { ...b, seq, cols, sprints, current };
+  });
+};
 
 export default function CustomBoards({ itemsBoard }) {
   const [store, setStore] = useState({ version: 1, seeded: true, boards: seedBoards() });

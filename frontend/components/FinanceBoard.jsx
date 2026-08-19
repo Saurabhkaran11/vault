@@ -51,40 +51,40 @@ const dRel = (days) => { const t = new Date(); t.setDate(t.getDate() + days); re
 const monthStart = (offset) => { const t = new Date(); return new Date(t.getFullYear(), t.getMonth() + offset, 1).toISOString().slice(0, 10); };
 const sampleFinance = () => ({
   expenses: [
-    { id: "se1", desc: "Groceries — weekly run", amount: 82.4, cat: "Food", date: dRel(-1) },
-    { id: "se2", desc: "Coffee", amount: 4.5, cat: "Food", date: dRel(0) },
-    { id: "se3", desc: "Metro card top-up", amount: 25, cat: "Transport", date: dRel(-3) },
-    { id: "se4", desc: "Gym membership", amount: 45, cat: "Health", date: dRel(-6) },
-    { id: "se5", desc: "Movie night", amount: 28, cat: "Fun", date: dRel(-8) },
-    { id: "se6", desc: "Headphones", amount: 129, cat: "Shopping", date: dRel(-5) },
-    { id: "se7", desc: "Electricity bill", amount: 60, cat: "Bills", date: dRel(-12) },
-    { id: "se8", desc: "Groceries", amount: 76.1, cat: "Food", date: dRel(-27) },
-    { id: "se9", desc: "Fuel", amount: 40, cat: "Transport", date: dRel(-33) },
-    { id: "se10", desc: "Pharmacy", amount: 22, cat: "Health", date: dRel(-40) },
-    { id: "se11", desc: "Dinner out", amount: 54, cat: "Fun", date: dRel(-24) },
-    { id: "se12", desc: "T-shirt", amount: 30, cat: "Shopping", date: dRel(-36) },
-    { id: "se13", desc: "Groceries", amount: 68, cat: "Food", date: dRel(-60) },
-    { id: "se14", desc: "Taxi", amount: 18, cat: "Transport", date: dRel(-69) },
-    { id: "se15", desc: "Books", amount: 42, cat: "Shopping", date: dRel(-55) },
+    { id: uid(), desc: "Groceries — weekly run", amount: 82.4, cat: "Food", date: dRel(-1) },
+    { id: uid(), desc: "Coffee", amount: 4.5, cat: "Food", date: dRel(0) },
+    { id: uid(), desc: "Metro card top-up", amount: 25, cat: "Transport", date: dRel(-3) },
+    { id: uid(), desc: "Gym membership", amount: 45, cat: "Health", date: dRel(-6) },
+    { id: uid(), desc: "Movie night", amount: 28, cat: "Fun", date: dRel(-8) },
+    { id: uid(), desc: "Headphones", amount: 129, cat: "Shopping", date: dRel(-5) },
+    { id: uid(), desc: "Electricity bill", amount: 60, cat: "Bills", date: dRel(-12) },
+    { id: uid(), desc: "Groceries", amount: 76.1, cat: "Food", date: dRel(-27) },
+    { id: uid(), desc: "Fuel", amount: 40, cat: "Transport", date: dRel(-33) },
+    { id: uid(), desc: "Pharmacy", amount: 22, cat: "Health", date: dRel(-40) },
+    { id: uid(), desc: "Dinner out", amount: 54, cat: "Fun", date: dRel(-24) },
+    { id: uid(), desc: "T-shirt", amount: 30, cat: "Shopping", date: dRel(-36) },
+    { id: uid(), desc: "Groceries", amount: 68, cat: "Food", date: dRel(-60) },
+    { id: uid(), desc: "Taxi", amount: 18, cat: "Transport", date: dRel(-69) },
+    { id: uid(), desc: "Books", amount: 42, cat: "Shopping", date: dRel(-55) },
   ],
   bills: [
-    { id: "sb1", title: "Rent", amount: 1200, due: monthStart(1), paid: false, recur: "monthly" },
-    { id: "sb2", title: "Netflix", amount: 15.99, due: dRel(3), paid: false, recur: "monthly" },
-    { id: "sb3", title: "Credit card statement", amount: 430, due: dRel(2), paid: false, recur: null },
-    { id: "sb4", title: "Water bill", amount: 32, due: dRel(-4), paid: false, recur: null },
-    { id: "sb5", title: "Internet", amount: 39.99, due: dRel(-10), paid: true, paidOn: dRel(-10), recur: "monthly" },
-    { id: "sb6", title: "Internet", amount: 39.99, due: dRel(20), paid: false, recur: "monthly" },
+    { id: uid(), title: "Rent", amount: 1200, due: monthStart(1), paid: false, recur: "monthly" },
+    { id: uid(), title: "Netflix", amount: 15.99, due: dRel(3), paid: false, recur: "monthly" },
+    { id: uid(), title: "Credit card statement", amount: 430, due: dRel(2), paid: false, recur: null },
+    { id: uid(), title: "Water bill", amount: 32, due: dRel(-4), paid: false, recur: null },
+    { id: uid(), title: "Internet", amount: 39.99, due: dRel(-10), paid: true, paidOn: dRel(-10), recur: "monthly" },
+    { id: uid(), title: "Internet", amount: 39.99, due: dRel(20), paid: false, recur: "monthly" },
   ],
   incomes: [
-    { id: "si1", source: "Salary", amount: 4200, date: monthStart(0) },
-    { id: "si2", source: "Freelance — landing page", amount: 350, date: dRel(-7) },
-    { id: "si3", source: "Salary", amount: 4200, date: monthStart(-1) },
-    { id: "si4", source: "Salary", amount: 4200, date: monthStart(-2) },
+    { id: uid(), source: "Salary", amount: 4200, date: monthStart(0) },
+    { id: uid(), source: "Freelance — landing page", amount: 350, date: dRel(-7) },
+    { id: uid(), source: "Salary", amount: 4200, date: monthStart(-1) },
+    { id: uid(), source: "Salary", amount: 4200, date: monthStart(-2) },
   ],
   budgets: { overall: 2500, byCat: { Food: 300, Shopping: 150, Fun: 100, Transport: 80 } },
   goals: [
-    { id: "sg1", name: "MacBook Pro", target: 2000, saved: 750 },
-    { id: "sg2", name: "Emergency fund", target: 5000, saved: 3200 },
+    { id: uid(), name: "MacBook Pro", target: 2000, saved: 750 },
+    { id: uid(), name: "Emergency fund", target: 5000, saved: 3200 },
   ],
 });
 
@@ -97,8 +97,8 @@ export const PAY_KINDS = [
   ["wallet", "Wallet / UPI"], ["bank", "Bank transfer"],
 ];
 const DEFAULT_PAY_METHODS = [
-  { id: "pm-cash", name: "Cash", kind: "cash" },
-  { id: "pm-visa", name: "Visa ···· 4242", kind: "credit" },
+  { id: "pm-" + uid(), name: "Cash", kind: "cash" },
+  { id: "pm-" + uid(), name: "Visa ···· 4242", kind: "credit" },
 ];
 
 /* migrate any stored shape (v1 or partial) up to schema v2.

@@ -26,6 +26,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+@app.exception_handler(Exception)
+async def unhandled(request, exc):
+    """Unhandled errors must still produce a JSON response INSIDE the
+    middleware stack — Starlette's bare 500 fallback skips CORSMiddleware,
+    so browsers see an unreadable response and report 'Failed to fetch'
+    instead of the real error."""
+    from fastapi.responses import JSONResponse
+
+    return JSONResponse(status_code=500, content={"detail": f"{type(exc).__name__}: {str(exc)[:300]}"})
+
 for r in (items.router, todos.router, boards.router, finance.router, tags.router, ai.router, sync.router):
     app.include_router(r)
 
