@@ -7,6 +7,7 @@ import FinanceBudgets from "./FinanceBudgets";
 import FinanceGoals from "./FinanceGoals";
 import { askJSON, aiEnabled } from "@/lib/ai";
 import { mirror, toCents } from "@/lib/api";
+import { uid } from "@/lib/id";
 
 /* Finance — expenses, bills (with recurrence), income, budgets and goals.
  *
@@ -15,7 +16,6 @@ import { mirror, toCents } from "@/lib/api";
  * and the entities (expense, bill, income, budget, goal) map 1:1 onto the
  * future backend's API models. */
 
-const uid = () => Math.random().toString(36).slice(2, 9);
 
 export const CATEGORIES = ["Food", "Transport", "Shopping", "Bills", "Health", "Fun", "Other"];
 const CURRENCIES = [

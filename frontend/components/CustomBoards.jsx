@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { mirror } from "@/lib/api";
+import { uid } from "@/lib/id";
 
 /* Custom kanban boards — make a board for anything: a feature, a sprint,
  * this week's chores. Custom columns, cards with inline editing, drag &
@@ -11,7 +12,6 @@ import { mirror } from "@/lib/api";
  * "Vault items" board (passed in as itemsBoard); every other tab is a
  * user-created board. */
 
-const uid = () => Math.random().toString(36).slice(2, 9);
 const KEY = "vault.boards.v1";
 
 const seedBoards = () => {

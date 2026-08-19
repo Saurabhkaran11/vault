@@ -6,6 +6,7 @@ import { WeekView, MonthView, YearView, startOfWeek } from "./TodoCalendar";
 import { MiniBars, weekSeries, weekLabels } from "./Charts";
 import { importICSFile, getCalendarEvents } from "@/lib/ics";
 import { mirror } from "@/lib/api";
+import { uid } from "@/lib/id";
 
 /* To-dos, redesigned for simplicity: ONE quick-add bar, and the app sorts
  * everything into smart sections — Overdue, Today, Upcoming, Someday — by
@@ -14,7 +15,6 @@ import { mirror } from "@/lib/api";
  * Storage is versioned (schema v2, flat tasks). v1 multi-list data migrates
  * automatically: list names become labels, "Today"/"This week" become dates. */
 
-const uid = () => Math.random().toString(36).slice(2, 9);
 const KEY = "vault.todos.v1";
 
 /* Local task → backend TaskIn payload (POST /todos is an idempotent upsert).
