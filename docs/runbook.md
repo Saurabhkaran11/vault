@@ -86,7 +86,7 @@ can't overwrite your real vault with its sample data.
 ### 1.5 Run the tests
 
 ```bash
-cd backend && VIRTUAL_ENV=.venv uv run pytest -q     # 46 passing
+cd backend && VIRTUAL_ENV=.venv uv run pytest -q     # 61 passing
 ```
 
 ---
