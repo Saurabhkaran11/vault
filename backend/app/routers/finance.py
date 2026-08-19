@@ -66,7 +66,7 @@ async def expenses(month: str | None = None, session: AsyncSession = Depends(get
 @router.post("/expenses", response_model=ExpenseOut, status_code=201)
 async def add_expense(body: ExpenseIn, session: AsyncSession = Depends(get_session), user: str = Depends(current_user_id)):
     return await _upsert(Expense, body, session, user,
-                         insert_event=("expense.logged", {"amount": body.amount, "cat": body.cat}))
+                         insert_event=("expense.logged", {"amount_cents": body.amount_cents, "cat": body.cat}))
 
 
 @router.put("/expenses/{eid}", response_model=ExpenseOut)
@@ -111,10 +111,10 @@ async def pay_bill(bid: str, session: AsyncSession = Depends(get_session), user:
         if not exists:
             import uuid
             nxt = Bill(id=uuid.uuid4().hex[:12], user_id=user, title=row.title,
-                       amount=row.amount, due=nxt_due, paid=False, recur=row.recur)
+                       amount_cents=row.amount_cents, due=nxt_due, paid=False, recur=row.recur)
             session.add(nxt)
             created.append(nxt)
-    await emit(session, user, "bill.paid", {"title": row.title, "amount": row.amount})
+    await emit(session, user, "bill.paid", {"title": row.title, "amount_cents": row.amount_cents})
     await session.commit()
     return created
 
@@ -159,9 +159,9 @@ async def del_pay_method(pid: str, session: AsyncSession = Depends(get_session),
 async def set_budget(body: BudgetIn, session: AsyncSession = Depends(get_session), user: str = Depends(current_user_id)):
     row = (await session.execute(select(Budget).where(Budget.user_id == user, Budget.scope == body.scope))).scalar_one_or_none()
     if row:
-        row.cap = body.cap
+        row.cap_cents = body.cap_cents
     else:
-        session.add(Budget(user_id=user, scope=body.scope, cap=body.cap))
+        session.add(Budget(user_id=user, scope=body.scope, cap_cents=body.cap_cents))
     await session.commit()
     return {"ok": True}
 
@@ -188,24 +188,26 @@ async def summary(month: str | None = None, session: AsyncSession = Depends(get_
     y, m = int(ym[:4]), int(ym[5:7])
     start, end = date(y, m, 1), date(y, m, 1) + relativedelta(months=1)
 
-    spent = (await session.execute(select(func.coalesce(func.sum(Expense.amount), 0)).where(
+    spent = (await session.execute(select(func.coalesce(func.sum(Expense.amount_cents), 0)).where(
         Expense.user_id == user, Expense.spent_on >= start, Expense.spent_on < end))).scalar_one()
-    by_cat = (await session.execute(select(Expense.cat, func.sum(Expense.amount)).where(
+    by_cat = (await session.execute(select(Expense.cat, func.sum(Expense.amount_cents)).where(
         Expense.user_id == user, Expense.spent_on >= start, Expense.spent_on < end).group_by(Expense.cat))).all()
-    by_pay = (await session.execute(select(Expense.pay_method_id, func.sum(Expense.amount)).where(
+    by_pay = (await session.execute(select(Expense.pay_method_id, func.sum(Expense.amount_cents)).where(
         Expense.user_id == user, Expense.spent_on >= start, Expense.spent_on < end).group_by(Expense.pay_method_id))).all()
-    income = (await session.execute(select(func.coalesce(func.sum(Income.amount), 0)).where(
+    income = (await session.execute(select(func.coalesce(func.sum(Income.amount_cents), 0)).where(
         Income.user_id == user, Income.received_on >= start, Income.received_on < end))).scalar_one()
     pending = (await session.execute(select(Bill).where(Bill.user_id == user, Bill.paid == False))).scalars().all()  # noqa: E712
     budgets = (await session.execute(select(Budget).where(Budget.user_id == user))).scalars().all()
 
+    # Every figure here is integer cents — exact, because SUM over integers
+    # cannot drift. The frontend divides by 100 once, at display time.
     return {
         "month": ym,
-        "spent": float(spent),
-        "income": float(income),
+        "spent_cents": int(spent),
+        "income_cents": int(income),
         "savings_rate": round((income - spent) / income * 100) if income else None,
-        "by_category": {c: float(v) for c, v in by_cat},
-        "by_pay_method": {p or "none": float(v) for p, v in by_pay},
+        "by_category_cents": {c: int(v) for c, v in by_cat},
+        "by_pay_method_cents": {p or "none": int(v) for p, v in by_pay},
         "bills_pending": [BillOut.model_validate(b) for b in pending],
-        "budgets": {b.scope: b.cap for b in budgets},
+        "budgets_cents": {b.scope: b.cap_cents for b in budgets},
     }

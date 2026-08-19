@@ -25,7 +25,7 @@ import FinanceBoard from "./FinanceBoard";
 import AskVault from "./AskVault";
 import { emptyBlock } from "./NoteBlocks";
 import { AI_MODELS, OSS_PRESETS, OSS_MODEL_SUGGESTIONS, getAIConfig, setAIConfig, aiEnabled, askText, askJSON } from "@/lib/ai";
-import { getBackend, setBackend, backendHealthy, fullSync, flushQueue, pendingMirrors } from "@/lib/api";
+import { getBackend, setBackend, backendHealthy, fullSync, flushQueue, pendingMirrors, pullAll, applyPulled, hydrateIfEmpty } from "@/lib/api";
 
 /* flatten a note's blocks to plain text (for AI prompts + similarity) */
 const flatText = (b) => {
@@ -324,8 +324,9 @@ function BackendSyncSection() {
   const [cfg, setCfg] = useState(getBackend);
   const [health, setHealth] = useState(null);     // null = checking, true/false = result
   const [pending, setPending] = useState(pendingMirrors);
-  const [busy, setBusy] = useState(null);         // "sync" | "flush" | null
+  const [busy, setBusy] = useState(null);         // "sync" | "flush" | "pull" | null
   const [msg, setMsg] = useState(null);           // { ok, text } from the last sync/flush
+  const [armPull, setArmPull] = useState(false);  // restore overwrites local — click again to confirm
 
   /* probe /health when the section opens and whenever the target changes
      (debounced so typing a URL doesn't fire a request per keystroke) */
@@ -355,10 +356,47 @@ function BackendSyncSection() {
     setPending(pendingMirrors());
   };
 
+  /* First enable has two very different meanings, and guessing wrong loses
+     data. On the browser that owns the vault it means "upload this". On a
+     new device it means "get my stuff" — and pushing there would send the
+     sample vault over the real one. So ask the server first: if the account
+     already holds data, restore instead of push. */
   const toggle = async () => {
     const next = saveCfg({ enabled: !cfg.enabled });
     setMsg(null);
-    if (next.enabled && !next.syncedAt) await runFullSync();   // first enable → push the whole vault
+    if (!next.enabled || next.syncedAt || next.pulledAt) return;
+    setBusy("sync");
+    try {
+      const remote = await pullAll();
+      if (remote.items.length || remote.todos.tasks.length || remote.boards.boards.length) {
+        const c = applyPulled(remote);
+        setMsg({ ok: true, text: `This account already has a vault — restored ${c.items} items · ${c.tasks} tasks · ${c.boards} boards instead of overwriting it. Reloading…` });
+        setTimeout(() => window.location.reload(), 1400);
+        return;
+      }
+    } catch {
+      /* unreachable backend — fall through to the push attempt, which
+         reports the failure properly */
+    }
+    setBusy(null);
+    await runFullSync();
+  };
+
+  /* Restore replaces this browser's working copy with the server's state,
+     so it is armed-then-confirmed like every other destructive action. The
+     page reloads afterwards: every store hydrates from localStorage at
+     mount, so a reload is the honest way to show what actually landed. */
+  const restore = async () => {
+    if (!armPull) { setArmPull(true); setTimeout(() => setArmPull(false), 4000); return; }
+    setArmPull(false); setBusy("pull"); setMsg(null);
+    try {
+      const c = applyPulled(await pullAll());
+      setMsg({ ok: true, text: `Restored ${c.items} items · ${c.tasks} tasks · ${c.finance} finance rows · ${c.boards} boards — reloading…` });
+      setTimeout(() => window.location.reload(), 1200);
+    } catch (e) {
+      setMsg({ ok: false, text: `Restore failed (${e?.message || "network error"}). Nothing local was changed.` });
+      setBusy(null);
+    }
   };
 
   const retryNow = async () => {
@@ -387,6 +425,12 @@ function BackendSyncSection() {
         <span>{health === null ? "◌ Checking backend…" : health ? "● Backend reachable" : "○ Backend unreachable"}</span>
         <span className="mono">{cfg.syncedAt ? `synced ${new Date(cfg.syncedAt).toLocaleString()}` : "never synced"}</span>
       </div>
+      {cfg.pulledAt && (
+        <div className="conn-row">
+          <span>⬇ Last restored from backend</span>
+          <span className="mono">{new Date(cfg.pulledAt).toLocaleString()}</span>
+        </div>
+      )}
       <div className="conn-row">
         <span>⟳ Pending retry queue</span>
         <span className="mono">{pending} change{pending === 1 ? "" : "s"}</span>
@@ -399,15 +443,21 @@ function BackendSyncSection() {
       )}
       {cfg.enabled && (
         <button className="btn ghost sm" style={{ marginTop: 6 }} disabled={busy !== null} onClick={runFullSync}
-          title="Re-runs the full import. Warning: on a successful re-run, items and budgets get fresh server rows (duplicates); rows the server already has under the same ids make the whole import fail without writing. Fine pre-launch — wipe the dev database to start clean.">
+          title="Pushes this browser's whole vault to the backend. Safe to re-run: the import upserts, so rows are updated in place rather than duplicated.">
           {busy === "sync" ? "Syncing…" : "⟲ Sync everything again"}
+        </button>
+      )}
+      {cfg.enabled && (
+        <button className={`btn ghost sm ${armPull ? "danger" : ""}`} style={{ marginTop: 6 }} disabled={busy !== null} onClick={restore}
+          title="Pulls your vault down from the backend and replaces what this browser holds. Use it on a new device, or after clearing browser data.">
+          {busy === "pull" ? "Restoring…" : armPull ? "⚠ Click again — this replaces local data" : "⬇ Restore this browser from the backend"}
         </button>
       )}
       {msg && (msg.ok
         ? <div style={{ padding: "6px 8px 0" }}><span className="keystate mono">{msg.text}</span></div>
         : <div className="kmerr">{msg.text}</div>)}
       <div className="menu-foot" style={{ border: "none", marginTop: 4, paddingTop: 0 }}>
-        Local-first: this browser keeps the working copy and stays fully usable offline. With sync on, every change also writes through to your backend; failures queue and retry — nothing is lost. Re-syncing an already-imported vault duplicates items and budgets (no stable server ids yet) or fails on ids the server already has — acceptable pre-launch. See docs/integration.md.
+        Local-first: this browser keeps the working copy and stays fully usable offline. With sync on, every change also writes through to your backend; failures queue and retry, so nothing is lost. Sync runs both ways — a browser with no data pulls your vault down automatically, and you can restore this one at any time. Uploaded file contents stay in the browser that saved them until cloud file storage ships, so restored documents show their details but can&rsquo;t be opened. See docs/integration.md.
       </div>
     </div>
   );
@@ -421,6 +471,19 @@ export default function App() {
      render turns those effects into an infinite setState→render cycle. */
   const items = useMemo(() => allItems.filter((i) => !i.deleted), [allItems]);
   const trashed = useMemo(() => allItems.filter((i) => i.deleted), [allItems]);
+
+  /* New device, or a browser whose data was cleared: sync is on and the
+     server has the vault, but this browser has nothing. Pull it down once,
+     then reload so every store re-reads localStorage at mount. Guarded on
+     an empty local store, so it can never overwrite real local work. */
+  useEffect(() => {
+    if (!hydrated) return;
+    let live = true;
+    hydrateIfEmpty()
+      .then((res) => { if (live && res) window.location.reload(); })
+      .catch(() => {});   // offline or backend down — stay local-only, as designed
+    return () => { live = false; };
+  }, [hydrated]);
 
   /* purge items that have sat in the trash for more than 30 days */
   useEffect(() => {

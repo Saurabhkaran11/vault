@@ -38,6 +38,16 @@ def _d(v, fallback=None):
         return fallback
 
 
+def _cents(v) -> int:
+    """The snapshot is a raw localStorage dump, so money arrives as dollars
+    here — the ONLY place in the API that accepts them. Round once, on the
+    way in; everything downstream is integer cents."""
+    try:
+        return int(round(float(v or 0) * 100))
+    except (TypeError, ValueError):
+        return 0
+
+
 async def _upsert(session: AsyncSession, model, pk: str, user: str, values: dict, conflicts: list):
     """Insert-or-update by string PK, refusing to touch another user's row."""
     row = await session.get(model, pk)
@@ -94,17 +104,17 @@ async def import_snapshot(snap: Snapshot, session: AsyncSession = Depends(get_se
     fin = snap.finance
     for e in fin.get("expenses", []):
         await _upsert(session, Expense, str(e["id"]), user, dict(
-            desc=e.get("desc", ""), amount=e.get("amount", 0), cat=e.get("cat", "Other"),
+            desc=e.get("desc", ""), amount_cents=_cents(e.get("amount")), cat=e.get("cat", "Other"),
             pay_method_id=e.get("pay"), spent_on=_d(e.get("date"), date.today()),
         ), conflicts)
     for b in fin.get("bills", []):
         await _upsert(session, Bill, str(b["id"]), user, dict(
-            title=b.get("title", ""), amount=b.get("amount", 0), due=_d(b.get("due"), date.today()),
+            title=b.get("title", ""), amount_cents=_cents(b.get("amount")), due=_d(b.get("due"), date.today()),
             paid=bool(b.get("paid")), paid_on=_d(b.get("paidOn")), recur=b.get("recur"),
         ), conflicts)
     for i in fin.get("incomes", []):
         await _upsert(session, Income, str(i["id"]), user, dict(
-            source=i.get("source", ""), amount=i.get("amount", 0),
+            source=i.get("source", ""), amount_cents=_cents(i.get("amount")),
             received_on=_d(i.get("date"), date.today()),
         ), conflicts)
     for m in fin.get("payMethods", []):
@@ -113,7 +123,7 @@ async def import_snapshot(snap: Snapshot, session: AsyncSession = Depends(get_se
         ), conflicts)
     for g in fin.get("goals", []):
         await _upsert(session, Goal, str(g["id"]), user, dict(
-            name=g.get("name", ""), target=g.get("target", 0), saved=g.get("saved", 0),
+            name=g.get("name", ""), target_cents=_cents(g.get("target")), saved_cents=_cents(g.get("saved")),
         ), conflicts)
     budgets = fin.get("budgets", {})
     caps = {"overall": budgets.get("overall"), **(budgets.get("byCat") or {})}
@@ -124,9 +134,9 @@ async def import_snapshot(snap: Snapshot, session: AsyncSession = Depends(get_se
         if not cap:
             continue
         if scope in existing_budgets:
-            existing_budgets[scope].cap = cap
+            existing_budgets[scope].cap_cents = _cents(cap)
         else:
-            session.add(Budget(user_id=user, scope=scope, cap=cap))
+            session.add(Budget(user_id=user, scope=scope, cap_cents=_cents(cap)))
     counts["finance"] = sum(len(fin.get(k, [])) for k in ("expenses", "bills", "incomes", "payMethods", "goals"))
 
     # ---- boards: same replace-children semantics as PUT /boards/{id}/snapshot ----

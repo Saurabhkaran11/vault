@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { today } from "@/lib/seed";
 import { detectCloud, cloudTitle } from "@/lib/cloud";
-import { mirror } from "@/lib/api";
+import { mirror, toCents } from "@/lib/api";
 
 /* Universal quick capture — one box that accepts anything and routes it:
  *   · YouTube link                → YouTube item
@@ -155,7 +155,7 @@ export default function QuickCapture({ open, onClose, onAddItem, onSaved }) {
         expenses.unshift(exp);
         localStorage.setItem("vault.finance.v1", JSON.stringify({ ...st, expenses }));
         /* write-through mirror (fire-and-forget; POST /finance/expenses upserts by id) */
-        mirror("/finance/expenses", { method: "POST", body: { id: exp.id, desc: exp.desc, amount: exp.amount, cat: exp.cat, pay_method_id: null, spent_on: exp.date } });
+        mirror("/finance/expenses", { method: "POST", body: { id: exp.id, desc: exp.desc, amount_cents: toCents(exp.amount), cat: exp.cat, pay_method_id: null, spent_on: exp.date } });
       } catch { return; }
     }
     onSaved?.(k);

@@ -34,6 +34,12 @@ export const backendOn = () => {
   return !!(b.enabled && b.url);
 };
 
+/* Money crosses this API as INTEGER CENTS. The local working copy still
+ * holds dollars (that is what the UI edits and displays), so every mapper
+ * converts at the boundary and rounds exactly once, here — never mid-sum. */
+export const toCents = (v) => Math.round((Number(v) || 0) * 100);
+export const fromCents = (c) => (Number(c) || 0) / 100;
+
 export async function api(path, { method = "GET", body } = {}) {
   const b = getBackend();
   const res = await fetch(`${b.url.replace(/\/$/, "")}${path}`, {
@@ -131,4 +137,130 @@ export async function fullSync() {
   await api("/ai/reindex", { method: "POST" }).catch(() => {});
   setBackend({ syncedAt: new Date().toISOString() });
   return res;
+}
+
+/* ---------------------------------------------------------------- READ PATH
+ *
+ * Until now sync only went one way: the browser pushed, and nothing ever
+ * came back. That made the backend a write-only mirror — a second device
+ * showed an empty vault even though every row was sitting in Postgres.
+ *
+ * pullAll() reverses it, translating the API's shapes back into the exact
+ * localStorage shapes the stores expect: server `client_id` becomes the
+ * item id, `*_cents` become dollars, board columns/cards nest the way
+ * CustomBoards reads them.
+ */
+export async function pullAll() {
+  const [items, tasks, boards, expenses, bills, incomes, payMethods, goals, summary, tagDir] = await Promise.all([
+    api("/items?include_deleted=true"),   // the trash is part of the vault
+    api("/todos"),
+    api("/boards"),
+    api("/finance/expenses"),
+    api("/finance/bills"),
+    api("/finance/incomes"),
+    api("/finance/pay-methods"),
+    api("/finance/goals"),
+    api("/finance/summary"),
+    api("/tags"),
+  ]);
+
+  const budgets = { overall: null, byCat: {} };
+  for (const [scope, cents] of Object.entries(summary?.budgets_cents || {})) {
+    if (scope === "overall") budgets.overall = fromCents(cents);
+    else budgets.byCat[scope] = fromCents(cents);
+  }
+
+  return {
+    items: items.map((i) => {
+      /* client_id is the frontend's own id; numeric ids were Date.now(), so
+         restore them as numbers or ordering and `+i.id > 1e12` checks break. */
+      const cid = i.client_id ?? String(i.id);
+      const out = {
+        id: /^\d+$/.test(cid) ? Number(cid) : cid,
+        type: i.type, title: i.title, meta: i.meta, url: i.url ?? undefined,
+        cloud: i.cloud ?? undefined, status: i.status, tags: i.tags || [],
+        folder: i.folder ?? undefined, alias: i.alias ?? undefined,
+        pinned: !!i.pinned, progress: i.progress ?? undefined,
+        blocks: i.blocks ?? undefined, links: i.links ?? undefined,
+        date: i.added_on,
+      };
+      if (i.deleted_on) out.deleted = i.deleted_on;
+      /* File BYTES never left the browser (metadata-only until the S3
+         phase), so a pulled document knows its name and size but cannot be
+         opened. Flag it so the UI can say so instead of showing a broken
+         viewer. */
+      if (i.file_meta) out.file = { ...i.file_meta, bodyMissing: true };
+      return out;
+    }),
+    todos: {
+      version: 2,
+      tasks: tasks.map((t) => ({
+        id: t.id, text: t.text, done: !!t.done, doneAt: t.done_at ?? undefined,
+        due: t.due ?? undefined, high: !!t.high, label: t.label ?? undefined,
+        created: t.created_on,
+      })),
+    },
+    finance: {
+      version: 2, seeded: true,
+      expenses: expenses.map((e) => ({ id: e.id, desc: e.desc, amount: fromCents(e.amount_cents), cat: e.cat, pay: e.pay_method_id ?? undefined, date: e.spent_on })),
+      bills: bills.map((b) => ({ id: b.id, title: b.title, amount: fromCents(b.amount_cents), due: b.due, paid: !!b.paid, paidOn: b.paid_on ?? undefined, recur: b.recur ?? null })),
+      incomes: incomes.map((i) => ({ id: i.id, source: i.source, amount: fromCents(i.amount_cents), date: i.received_on })),
+      payMethods: payMethods.map((m) => ({ id: m.id, name: m.name, kind: m.kind })),
+      goals: goals.map((g) => ({ id: g.id, name: g.name, target: fromCents(g.target_cents), saved: fromCents(g.saved_cents) })),
+      budgets,
+    },
+    boards: {
+      boards: boards.map((b) => ({
+        id: b.id, name: b.name, seq: b.seq, current: b.current_sprint,
+        sprints: (b.sprints || []).map((s) => ({ id: s.id, name: s.name, ended: s.ended_on ?? null })),
+        cols: (b.columns || []).map((c) => ({
+          id: c.id, title: c.title,
+          cards: (c.cards || []).map((k) => ({
+            id: k.id, num: k.num, text: k.text, desc: k.desc ?? undefined,
+            hours: k.hours ?? undefined, labels: k.labels || [], sprint: k.sprint_id ?? undefined,
+          })),
+        })),
+      })),
+    },
+    /* /tags returns a directory keyed by tag name; the user-created ones
+       carry `custom: true`, in use or not. */
+    tags: { custom: Object.entries(tagDir || {}).filter(([, v]) => v?.custom).map(([t]) => t) },
+  };
+}
+
+/* Overwrite the local working copy with the server's state. This is a
+ * deliberate, destructive restore — the caller confirms first. Returns
+ * what landed so the UI can report it. */
+export function applyPulled(data) {
+  localStorage.setItem("vault.items.v1", JSON.stringify(data.items));
+  localStorage.setItem("vault.todos.v1", JSON.stringify(data.todos));
+  localStorage.setItem("vault.finance.v1", JSON.stringify(data.finance));
+  localStorage.setItem("vault.boards.v1", JSON.stringify(data.boards));
+  localStorage.setItem("vault.tags.v1", JSON.stringify(data.tags));
+  setBackend({ pulledAt: new Date().toISOString() });
+  return {
+    items: data.items.length,
+    tasks: data.todos.tasks.length,
+    finance: data.finance.expenses.length + data.finance.bills.length + data.finance.incomes.length,
+    boards: data.boards.boards.length,
+  };
+}
+
+/* The new-device case: sync is on, the server has data, and this browser
+ * has none. There is nothing local to lose, so hydrating is safe without
+ * asking — it is what the user expects when they sign in somewhere new.
+ * Any browser that already holds data is left alone and must restore
+ * explicitly from Settings. */
+export async function hydrateIfEmpty() {
+  if (!backendOn()) return null;
+  const localEmpty = (() => {
+    try {
+      const items = JSON.parse(localStorage.getItem("vault.items.v1") || "null");
+      return !Array.isArray(items) || items.length === 0;
+    } catch { return false; }
+  })();
+  if (!localEmpty) return null;
+  const data = await pullAll();
+  if (!data.items.length && !data.todos.tasks.length && !data.boards.boards.length) return null;
+  return applyPulled(data);
 }

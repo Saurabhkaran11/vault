@@ -6,7 +6,7 @@ import FinanceAnalytics from "./FinanceAnalytics";
 import FinanceBudgets from "./FinanceBudgets";
 import FinanceGoals from "./FinanceGoals";
 import { askJSON, aiEnabled } from "@/lib/ai";
-import { mirror } from "@/lib/api";
+import { mirror, toCents } from "@/lib/api";
 
 /* Finance — expenses, bills (with recurrence), income, budgets and goals.
  *
@@ -159,11 +159,11 @@ const parseAmount = (v) => {
  * mappers rename fields per the backend-integration skill (pay →
  * pay_method_id, date → spent_on/received_on, paidOn → paid_on) and
  * normalize undefined → null so the JSON body is explicit. */
-const expToApi = (e) => ({ id: e.id, desc: e.desc, amount: e.amount, cat: e.cat, pay_method_id: e.pay ?? null, spent_on: e.date });
-const billToApi = (b) => ({ id: b.id, title: b.title, amount: b.amount, due: b.due, paid: !!b.paid, paid_on: b.paidOn ?? null, recur: b.recur ?? null });
-const incToApi = (i) => ({ id: i.id, source: i.source, amount: i.amount, received_on: i.date });
+const expToApi = (e) => ({ id: e.id, desc: e.desc, amount_cents: toCents(e.amount), cat: e.cat, pay_method_id: e.pay ?? null, spent_on: e.date });
+const billToApi = (b) => ({ id: b.id, title: b.title, amount_cents: toCents(b.amount), due: b.due, paid: !!b.paid, paid_on: b.paidOn ?? null, recur: b.recur ?? null });
+const incToApi = (i) => ({ id: i.id, source: i.source, amount_cents: toCents(i.amount), received_on: i.date });
 const pmToApi = (m) => ({ id: m.id, name: m.name, kind: m.kind });
-const goalToApi = (g) => ({ id: g.id, name: g.name, target: g.target, saved: g.saved ?? 0 });
+const goalToApi = (g) => ({ id: g.id, name: g.name, target_cents: toCents(g.target), saved_cents: toCents(g.saved ?? 0) });
 
 export default function FinanceBoard() {
   const [fin, setFin] = useState(seedFinance);
@@ -389,14 +389,14 @@ export default function FinanceBoard() {
   const changeBudgets = (budgets) => {
     const prev = fin.budgets || { overall: null, byCat: {} };
     setFin((f) => ({ ...f, budgets }));
-    /* PUT per changed scope; a cleared cap mirrors as 0 (BudgetIn.cap is a
-     * required float — the UI already treats a 0/absent cap as "no cap"). */
+    /* PUT per changed scope; a cleared cap mirrors as 0 (BudgetIn.cap_cents
+     * is required — the UI already treats a 0/absent cap as "no cap"). */
     if ((prev.overall ?? null) !== (budgets.overall ?? null))
-      mirror("/finance/budgets", { method: "PUT", body: { scope: "overall", cap: budgets.overall ?? 0 } });
+      mirror("/finance/budgets", { method: "PUT", body: { scope: "overall", cap_cents: toCents(budgets.overall ?? 0) } });
     const cats = new Set([...Object.keys(prev.byCat || {}), ...Object.keys(budgets.byCat || {})]);
     cats.forEach((c) => {
       if ((prev.byCat?.[c] ?? null) !== (budgets.byCat?.[c] ?? null))
-        mirror("/finance/budgets", { method: "PUT", body: { scope: c, cap: budgets.byCat?.[c] ?? 0 } });
+        mirror("/finance/budgets", { method: "PUT", body: { scope: c, cap_cents: toCents(budgets.byCat?.[c] ?? 0) } });
     });
   };
   const changeGoals = (goals) => {

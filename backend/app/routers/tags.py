@@ -22,7 +22,10 @@ async def directory(session: AsyncSession = Depends(get_session), user: str = De
             entry["by_type"][it.type] = entry["by_type"].get(it.type, 0) + 1
     custom = (await session.execute(select(CustomTag).where(CustomTag.user_id == user))).scalars().all()
     for c in custom:
-        counts.setdefault(c.tag, {"total": 0, "by_type": {}, "custom": True})
+        # `custom` means "the user created this deliberately" — true whether
+        # or not anything currently carries it. Marking only the unused ones
+        # would drop in-use custom tags from a restore (see pullAll).
+        counts.setdefault(c.tag, {"total": 0, "by_type": {}})["custom"] = True
     return dict(sorted(counts.items(), key=lambda kv: -kv[1]["total"]))
 
 

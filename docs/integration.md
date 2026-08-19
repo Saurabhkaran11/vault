@@ -107,13 +107,20 @@ cd frontend && npm run dev
 Then in the app: avatar menu → **Settings** → **☁ BACKEND SYNC** →
 check the URL (`http://localhost:8000`) and user id → **Enable sync**.
 
-- **First enable** runs `fullSync()`: the whole local vault is pushed via
-  `POST /sync/import` (the import format *is* the existing JSON export shape),
-  the RAG index is rebuilt, imported counts are shown inline, and `syncedAt`
-  is stamped.
+- **First enable asks the server what it holds**, because the same click
+  means two opposite things. On the browser that owns the vault it means
+  "upload this" → `fullSync()` pushes via `POST /sync/import` (the import
+  format *is* the existing JSON export shape), rebuilds the RAG index and
+  stamps `syncedAt`. On a new device it means "get my stuff" → the account
+  already has data, so it **restores instead**, and the sample vault never
+  overwrites the real one.
 - The status lines show backend reachability (`GET /health`), last synced
-  time, and the pending retry-queue count with a **Retry now** button.
-- **Sync everything again** re-runs the full import — read the warning below.
+  and last restored time, and the pending retry-queue count with a
+  **Retry now** button.
+- **Sync everything again** re-pushes the whole vault. Safe to repeat: the
+  import upserts, so rows are updated in place rather than duplicated.
+- **Restore this browser from the backend** pulls the vault down and replaces
+  what this browser holds (armed → click again to confirm, then reload).
 
 Spot-check from the outside:
 
@@ -122,38 +129,60 @@ curl -s -H 'X-User-Id: demo' http://localhost:8000/tags
 docker exec backend-db-1 psql -U vault -c "select id, text from tasks where user_id='demo';"
 ```
 
+## Money is integer cents
+
+Every monetary column is `*_cents` (`INTEGER`), and the API speaks cents in
+both directions. Floats drift under `SUM` — 100 mixed expenses that should
+total `928.50` add up to `928.4999999999999` as floats, which is enough to
+trip a budget comparison and print the wrong total. Integers cannot drift.
+
+The browser's working copy still holds dollars because that is what the UI
+edits and displays; `toCents()` / `fromCents()` in `lib/api.js` convert at
+the boundary and round exactly once. `POST /sync/import` is the single
+endpoint that accepts dollars, since it takes a raw localStorage dump.
+
+## Schema is owned by Alembic
+
+`alembic upgrade head` creates and migrates the schema; the app no longer
+calls `create_all` at boot. Starting the API against an unmigrated database
+raises instead of improvising a schema, so a missed migration stops a deploy
+rather than silently half-working. The container runs the upgrade before
+uvicorn (see `backend/Dockerfile`).
+
 ## Current limitations (deliberate, pre-launch)
 
-- **Reads never come from the server.** The UI renders localStorage only;
-  the backend is write-only shadow state until the server-authoritative phase.
-- **Full sync is one-shot, not reconciliation.** `/sync/import` inserts
-  blindly: re-importing duplicates rows that get server-generated ids (items,
-  budgets), and rows whose string ids already exist make the import fail
-  wholesale (transaction rolls back, nothing written — verified 2026-08-18).
-  Acceptable while the dev database is disposable; the Settings button says so.
+- **Reads are whole-vault, not per-record merge.** A pull replaces the local
+  working copy wholesale. That covers the cases that matter (new device,
+  cleared browser, restore) but it is not field-level reconciliation — two
+  devices editing the same note concurrently still resolve last-writer-wins
+  at whole-record granularity. Real merge needs `updated_at` compared per
+  record on both sides.
 - **File bytes stay in the browser.** Only `file_meta` {name, type, size} is
-  mirrored; upload moves to S3 pre-signed URLs in the storage phase.
+  mirrored, so a restored document shows its details but cannot be opened —
+  `pullAll()` marks those with `bodyMissing` so the UI can say so honestly.
+  Upload moves to S3 pre-signed URLs in the storage phase.
 - **Bill recurrence can diverge offline.** Paying a recurring bill server-side
   creates the next bill with a server-generated id; the frontend generates its
-  own next-bill id when offline — the two rows won't match up. Harmless
-  pre-launch (reads are local); reconciliation lands with server-authoritative
-  reads.
+  own next-bill id when offline — the two rows won't match up until a restore
+  reconciles them from the server copy.
 - **Header auth is trust-the-client.** `X-User-Id` is a single-user demo seam,
-  not security.
+  not security. Anyone can claim any user id. This is the launch blocker.
+- **Global string primary keys.** Every entity except items keys on the
+  frontend's own id, so two accounts can collide; a colliding import 409s
+  with the offending ids rather than corrupting either vault.
 - **No background flush.** The retry queue drains via the Settings button (or
   future call-site hooks), not on a timer or on `online` events yet.
-- **Cross-device merge is undefined.** Two browsers mirroring to one user id
-  last-write-wins per row; real multi-device sync needs the realtime phase.
 
 ## Upgrade path
 
 1. **Clerk auth** — swap `X-User-Id` for a verified JWT in `deps.py` +
    `api.js`; enable per-user rate limits. Nothing else moves.
-2. **Server-authoritative reads** — `useStore` and the feature boards hydrate
-   from `GET` endpoints (localStorage demotes to cache), which unlocks real
-   reconciliation, cross-device consistency, and killing `fullSync()`
-   duplicates for good.
-3. **Realtime** — SSE/WebSocket fan-out of the existing `events` outbox so a
+2. **Per-user keys** — move every string-PK table to `(user_id, client_id)`
+   like items, removing cross-account collisions for good.
+3. **Per-record merge** — expose `updated_at` on the Out schemas and reconcile
+   record by record instead of replacing the store, so two active devices
+   converge instead of one winning.
+4. **Realtime** — SSE/WebSocket fan-out of the existing `events` outbox so a
    change on one device appears on another without refresh; the retry queue
    becomes an offline outbox with server-side conflict handling.
 
