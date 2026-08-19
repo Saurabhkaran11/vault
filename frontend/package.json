@@ -2,17 +2,17 @@
   "name": "vault-frontend",
   "version": "1.0.0",
   "private": true,
-  "description": "Vault — personal knowledge hub. Next.js frontend (Notes, YouTube, Library, Documents, To-dos, Graph, Dashboard).",
+  "description": "Vault \u2014 personal knowledge hub. Next.js frontend (Notes, YouTube, Library, Documents, To-dos, Graph, Dashboard).",
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
+    "dev": "next dev --webpack",
+    "build": "next build --webpack",
     "start": "next start",
     "lint": "next lint"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.117.1",
-    "next": "14.2.15",
-    "react": "18.3.1",
-    "react-dom": "18.3.1"
+    "next": "^16.3.1",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
   }
 }
