@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
+import { mirror } from "@/lib/api";
 
 /* Custom kanban boards — make a board for anything: a feature, a sprint,
  * this week's chores. Custom columns, cards with inline editing, drag &
@@ -80,6 +81,29 @@ export default function CustomBoards({ itemsBoard }) {
     if (!hydrated) return;
     try { localStorage.setItem(KEY, JSON.stringify(store)); }
     catch (e) { console.error(e); }
+  }, [store, hydrated]);
+
+  /* ---------- backend mirror (boards-sync skill). Boards are deeply nested,
+   * so sync is whole-board snapshots: after any change, debounce ~800ms and
+   * PUT every board to its idempotent snapshot endpoint. Deletion is the one
+   * thing a snapshot can't express — diff the previous board ids (ref) and
+   * mirror a DELETE for each id that vanished. mirror() is fire-and-forget
+   * and a no-op while backend sync is off, so local behavior is unchanged. */
+  const mirrorTimer = useRef(null);
+  const prevBoardIds = useRef(null);
+  useEffect(() => {
+    if (!hydrated) return;
+    const ids = store.boards.map((b) => b.id);
+    if (prevBoardIds.current) {
+      prevBoardIds.current
+        .filter((id) => !ids.includes(id))
+        .forEach((id) => mirror(`/boards/${id}`, { method: "DELETE" }));
+    }
+    prevBoardIds.current = ids;
+    mirrorTimer.current = setTimeout(() => {
+      store.boards.forEach((b) => mirror(`/boards/${b.id}/snapshot`, { method: "PUT", body: b }));
+    }, 800);
+    return () => clearTimeout(mirrorTimer.current);
   }, [store, hydrated]);
 
   const boards = store.boards;

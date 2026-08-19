@@ -3,7 +3,8 @@ import uuid
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from pydantic import BaseModel
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -48,6 +49,96 @@ async def create_board(body: BoardCreate, session: AsyncSession = Depends(get_se
     session.add(board)
     await session.commit()
     return await _board(board.id, session, user)
+
+
+# ---------- snapshot sync (see .claude/skills/boards-sync) ----------
+# Boards are deeply nested and mutate in many small ways, so the frontend
+# mirrors the ENTIRE board after any change. The body is the exact frontend
+# store shape; children are replaced wholesale, which keeps the endpoint
+# idempotent — debounced and retried mirrors are always safe.
+
+
+class SnapshotCard(BaseModel):
+    id: str
+    num: int | None = None             # Jira-style number; backfilled if absent
+    sprint: str | None = None          # -> Card.sprint_id
+    text: str = ""
+    desc: str | None = None
+    hours: float | None = None
+    labels: list[str] = []
+
+
+class SnapshotColumn(BaseModel):
+    id: str
+    title: str = ""
+    cards: list[SnapshotCard] = []
+
+
+class SnapshotSprint(BaseModel):
+    id: str
+    name: str = ""
+    ended: date | None = None          # -> Sprint.ended_on
+
+
+class BoardSnapshot(BaseModel):
+    id: str | None = None              # ignored — the path param is authoritative
+    name: str = ""
+    seq: int = 0
+    current: str | None = None         # -> Board.current_sprint
+    sprints: list[SnapshotSprint] = []
+    cols: list[SnapshotColumn] = []
+
+
+@router.put("/{board_id}/snapshot", response_model=BoardOut)
+async def put_snapshot(board_id: str, body: BoardSnapshot,
+                       session: AsyncSession = Depends(get_session), user: str = Depends(current_user_id)):
+    board = await session.get(Board, board_id)
+    if board and board.user_id != user:
+        raise HTTPException(404, "Board not found")
+    if not board:
+        board = Board(id=board_id, user_id=user)
+        session.add(board)
+    board.name = body.name
+    board.seq = body.seq
+    board.current_sprint = body.current
+
+    # replace children — leaf-first deletes so no FK ever dangles
+    col_ids = select(BoardColumn.id).where(BoardColumn.board_id == board_id).scalar_subquery()
+    await session.execute(delete(Card).where(Card.column_id.in_(col_ids)))
+    await session.execute(delete(BoardColumn).where(BoardColumn.board_id == board_id))
+    await session.execute(delete(Sprint).where(Sprint.board_id == board_id))
+
+    # …and parent-first inserts: sprints, columns, then cards
+    session.add_all([Sprint(id=s.id, board_id=board_id, name=s.name, ended_on=s.ended, position=i)
+                     for i, s in enumerate(body.sprints)])
+    session.add_all([BoardColumn(id=c.id, board_id=board_id, title=c.title, position=i)
+                     for i, c in enumerate(body.cols)])
+    await session.flush()
+    session.add_all([Card(id=k.id, column_id=c.id, sprint_id=k.sprint,
+                          num=k.num if k.num is not None else j + 1,
+                          text=k.text, desc=k.desc, hours=k.hours, labels=k.labels, position=j)
+                     for c in body.cols for j, k in enumerate(c.cards)])
+    await session.commit()
+    return await _board(board_id, session, user)
+
+
+@router.delete("/{board_id}")
+async def delete_board(board_id: str, session: AsyncSession = Depends(get_session), user: str = Depends(current_user_id)):
+    """Idempotent on purpose: a mirror retried after success (or a board that
+    lived and died entirely offline) must get an ok, not a 404 — a permanent
+    404 would wedge the frontend's ordered retry queue forever."""
+    owned = (await session.execute(
+        select(Board.id).where(Board.id == board_id, Board.user_id == user)
+    )).scalar_one_or_none()
+    if not owned:
+        return {"ok": True, "deleted": False}
+    col_ids = select(BoardColumn.id).where(BoardColumn.board_id == board_id).scalar_subquery()
+    await session.execute(delete(Card).where(Card.column_id.in_(col_ids)))
+    await session.execute(delete(BoardColumn).where(BoardColumn.board_id == board_id))
+    await session.execute(delete(Sprint).where(Sprint.board_id == board_id))
+    await session.execute(delete(Board).where(Board.id == board_id))
+    await session.commit()
+    return {"ok": True, "deleted": True}
 
 
 @router.post("/{board_id}/cards", response_model=CardOut, status_code=201)
