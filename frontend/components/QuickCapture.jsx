@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { today } from "@/lib/seed";
 import { detectCloud, cloudTitle } from "@/lib/cloud";
+import { mirror } from "@/lib/api";
 
 /* Universal quick capture — one box that accepts anything and routes it:
  *   · YouTube link                → YouTube item
@@ -140,15 +141,21 @@ export default function QuickCapture({ open, onClose, onAddItem, onSaved }) {
       try {
         const st = JSON.parse(localStorage.getItem("vault.todos.v1") || "{}");
         const tasks = Array.isArray(st.tasks) ? st.tasks : [];
-        tasks.unshift({ id: uid(), text: decision.text || s, done: false, due: decision.due || today(), high: !!decision.high, label: (decision.tags || [])[0], created: today() });
+        const task = { id: uid(), text: decision.text || s, done: false, due: decision.due || today(), high: !!decision.high, label: (decision.tags || [])[0], created: today() };
+        tasks.unshift(task);
         localStorage.setItem("vault.todos.v1", JSON.stringify({ version: 2, ...st, tasks }));
+        /* write-through mirror (fire-and-forget; POST /todos upserts by id) */
+        mirror("/todos", { method: "POST", body: { id: task.id, text: task.text, done: false, done_at: null, due: task.due, high: task.high, label: task.label ?? null, created_on: task.created } });
       } catch { return; }
     } else if (k === "expense") {
       try {
         const st = JSON.parse(localStorage.getItem("vault.finance.v1") || "{}");
         const expenses = Array.isArray(st.expenses) ? st.expenses : [];
-        expenses.unshift({ id: uid(), desc: decision.desc, amount: decision.amount, cat: decision.cat, date: today() });
+        const exp = { id: uid(), desc: decision.desc, amount: decision.amount, cat: decision.cat, date: today() };
+        expenses.unshift(exp);
         localStorage.setItem("vault.finance.v1", JSON.stringify({ ...st, expenses }));
+        /* write-through mirror (fire-and-forget; POST /finance/expenses upserts by id) */
+        mirror("/finance/expenses", { method: "POST", body: { id: exp.id, desc: exp.desc, amount: exp.amount, cat: exp.cat, pay_method_id: null, spent_on: exp.date } });
       } catch { return; }
     }
     onSaved?.(k);

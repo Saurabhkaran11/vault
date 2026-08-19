@@ -25,6 +25,7 @@ import FinanceBoard from "./FinanceBoard";
 import AskVault from "./AskVault";
 import { emptyBlock } from "./NoteBlocks";
 import { AI_MODELS, OSS_PRESETS, OSS_MODEL_SUGGESTIONS, getAIConfig, setAIConfig, aiEnabled, askText, askJSON } from "@/lib/ai";
+import { getBackend, setBackend, backendHealthy, fullSync, flushQueue, pendingMirrors } from "@/lib/api";
 
 /* flatten a note's blocks to plain text (for AI prompts + similarity) */
 const flatText = (b) => {
@@ -311,6 +312,103 @@ function NotePage({ it, onBack, onUpdate, onTag, folders = [], allItems = [], on
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+/* Settings → "☁ BACKEND SYNC": the only UI over lib/api.js. All state is
+ * local to this section (it mounts only inside the Settings dialog).
+ * localStorage stays the working copy; enabling sync write-through-mirrors
+ * every mutation and the first enable pushes the whole vault via fullSync(). */
+function BackendSyncSection() {
+  const [cfg, setCfg] = useState(getBackend);
+  const [health, setHealth] = useState(null);     // null = checking, true/false = result
+  const [pending, setPending] = useState(pendingMirrors);
+  const [busy, setBusy] = useState(null);         // "sync" | "flush" | null
+  const [msg, setMsg] = useState(null);           // { ok, text } from the last sync/flush
+
+  /* probe /health when the section opens and whenever the target changes
+     (debounced so typing a URL doesn't fire a request per keystroke) */
+  useEffect(() => {
+    let live = true;
+    setHealth(null);
+    const t = setTimeout(() => {
+      backendHealthy().then((ok) => { if (live) setHealth(ok); });
+      setPending(pendingMirrors());
+    }, 350);
+    return () => { live = false; clearTimeout(t); };
+  }, [cfg.url, cfg.userId, cfg.enabled]);
+
+  const saveCfg = (patch) => { const next = setBackend(patch); setCfg(next); return next; };
+
+  const runFullSync = async () => {
+    setBusy("sync"); setMsg(null);
+    try {
+      const res = await fullSync();               // POST /sync/import + /ai/reindex, stamps syncedAt
+      const c = res?.imported || {};
+      setCfg(getBackend());
+      setMsg({ ok: true, text: `Imported ${c.items ?? 0} items · ${c.tasks ?? 0} tasks · ${c.finance ?? 0} finance rows · ${c.boards ?? 0} boards` });
+    } catch (e) {
+      setMsg({ ok: false, text: `Full sync failed (${e?.message || "network error"}). Either the backend is unreachable, or it already holds rows with these ids — a re-import then writes nothing. Pre-launch fix: wipe the dev database and sync again.` });
+    }
+    setBusy(null);
+    setPending(pendingMirrors());
+  };
+
+  const toggle = async () => {
+    const next = saveCfg({ enabled: !cfg.enabled });
+    setMsg(null);
+    if (next.enabled && !next.syncedAt) await runFullSync();   // first enable → push the whole vault
+  };
+
+  const retryNow = async () => {
+    setBusy("flush");
+    const r = await flushQueue();
+    setPending(pendingMirrors());
+    setMsg(r.left
+      ? { ok: false, text: `Retried — ${r.flushed} sent, ${r.left} still queued (backend unreachable?)` }
+      : { ok: true, text: `Queue flushed — ${r.flushed} change${r.flushed === 1 ? "" : "s"} mirrored.` });
+    setBusy(null);
+  };
+
+  return (
+    <div className="set-sec">
+      <div className="menu-sec">☁ BACKEND SYNC</div>
+      <input className="menu-input" value={cfg.url} aria-label="Backend URL"
+        placeholder="Backend URL, e.g. http://localhost:8000"
+        onChange={(e) => saveCfg({ url: e.target.value.trim() })} />
+      <input className="menu-input" style={{ marginTop: 6 }} value={cfg.userId || ""} aria-label="Backend user ID"
+        placeholder="User ID (demo until accounts launch)"
+        onChange={(e) => saveCfg({ userId: e.target.value.trim() })} />
+      <button className="menu-item" style={{ marginTop: 6 }} disabled={busy !== null} onClick={toggle}>
+        {cfg.enabled ? "⏻ Disable sync — keep changes local-only" : "▶ Enable sync — mirror every change to the backend"}
+      </button>
+      <div className="conn-row">
+        <span>{health === null ? "◌ Checking backend…" : health ? "● Backend reachable" : "○ Backend unreachable"}</span>
+        <span className="mono">{cfg.syncedAt ? `synced ${new Date(cfg.syncedAt).toLocaleString()}` : "never synced"}</span>
+      </div>
+      <div className="conn-row">
+        <span>⟳ Pending retry queue</span>
+        <span className="mono">{pending} change{pending === 1 ? "" : "s"}</span>
+      </div>
+      {pending > 0 && (
+        <button className="btn ghost sm" disabled={busy !== null} onClick={retryNow}
+          title="Failed mirrors wait here and re-send in order once the backend is reachable">
+          {busy === "flush" ? "Retrying…" : "⟳ Retry now"}
+        </button>
+      )}
+      {cfg.enabled && (
+        <button className="btn ghost sm" style={{ marginTop: 6 }} disabled={busy !== null} onClick={runFullSync}
+          title="Re-runs the full import. Warning: on a successful re-run, items and budgets get fresh server rows (duplicates); rows the server already has under the same ids make the whole import fail without writing. Fine pre-launch — wipe the dev database to start clean.">
+          {busy === "sync" ? "Syncing…" : "⟲ Sync everything again"}
+        </button>
+      )}
+      {msg && (msg.ok
+        ? <div style={{ padding: "6px 8px 0" }}><span className="keystate mono">{msg.text}</span></div>
+        : <div className="kmerr">{msg.text}</div>)}
+      <div className="menu-foot" style={{ border: "none", marginTop: 4, paddingTop: 0 }}>
+        Local-first: this browser keeps the working copy and stays fully usable offline. With sync on, every change also writes through to your backend; failures queue and retry — nothing is lost. Re-syncing an already-imported vault duplicates items and budgets (no stable server ids yet) or fails on ids the server already has — acceptable pre-launch. See docs/integration.md.
+      </div>
     </div>
   );
 }
@@ -982,6 +1080,8 @@ export default function App() {
                   Links open in their own app; calendar imports show beside your to-dos. Live two-way sync (OAuth) arrives with the cloud release.
                 </div>
               </div>
+
+              <BackendSyncSection />
 
               <div className="set-sec">
                 <div className="menu-sec">🗄 YOUR DATA</div>
