@@ -5,6 +5,7 @@ import { today, daysAgo, fmtStamp } from "@/lib/seed";
 import { WeekView, MonthView, YearView, startOfWeek } from "./TodoCalendar";
 import { MiniBars, weekSeries, weekLabels } from "./Charts";
 import { importICSFile, getCalendarEvents } from "@/lib/ics";
+import { mirror } from "@/lib/api";
 
 /* To-dos, redesigned for simplicity: ONE quick-add bar, and the app sorts
  * everything into smart sections — Overdue, Today, Upcoming, Someday — by
@@ -15,6 +16,14 @@ import { importICSFile, getCalendarEvents } from "@/lib/ics";
 
 const uid = () => Math.random().toString(36).slice(2, 9);
 const KEY = "vault.todos.v1";
+
+/* Local task → backend TaskIn payload (POST /todos is an idempotent upsert).
+ * Dates are already ISO YYYY-MM-DD strings — pass through, undefined→null. */
+const toApi = (t) => ({
+  id: t.id, text: t.text, done: t.done,
+  done_at: t.doneAt ?? null, due: t.due ?? null,
+  high: t.high, label: t.label ?? null, created_on: t.created,
+});
 
 const dRel = (days) => { const t = new Date(); t.setDate(t.getDate() + days); return t.toISOString().slice(0, 10); };
 
@@ -92,15 +101,29 @@ export default function TodoBoard() {
   const add = () => {
     if (!text.trim()) return;
     const due = customDue || chipToDate(dueChip);
-    setTasks((ts) => [{ id: uid(), text: text.trim(), done: false, due, high, created: today() }, ...ts]);
+    const task = { id: uid(), text: text.trim(), done: false, due, high, created: today() };
+    setTasks((ts) => [task, ...ts]);
+    mirror("/todos", { method: "POST", body: toApi(task) });
     setText(""); setHigh(false);
   };
 
-  /* ---------- task ops */
-  const patch = (id, p) => setTasks((ts) => ts.map((t) => (t.id === id ? { ...t, ...p } : t)));
-  const del = (id) => setTasks((ts) => ts.filter((t) => t.id !== id));
+  /* ---------- task ops — every mutation also mirrors to the backend when
+   * sync is on (mirror() is a no-op otherwise). Mirrors live at the call
+   * sites, never inside setTasks: updater functions must stay pure. */
+  const patch = (id, p) => {
+    setTasks((ts) => ts.map((t) => (t.id === id ? { ...t, ...p } : t)));
+    const cur = tasks.find((t) => t.id === id);
+    if (cur) mirror("/todos", { method: "POST", body: toApi({ ...cur, ...p }) });
+  };
+  const del = (id) => {
+    setTasks((ts) => ts.filter((t) => t.id !== id));
+    mirror("/todos/" + id, { method: "DELETE" });
+  };
   const toggle = (t) => patch(t.id, { done: !t.done, doneAt: !t.done ? today() : undefined });
-  const clearDone = () => setTasks((ts) => ts.filter((t) => !t.done));
+  const clearDone = () => {
+    for (const t of tasks) if (t.done) mirror("/todos/" + t.id, { method: "DELETE" });
+    setTasks((ts) => ts.filter((t) => !t.done));
+  };
 
   const [resched, setResched] = useState(null); // task id with the date editor open
 
