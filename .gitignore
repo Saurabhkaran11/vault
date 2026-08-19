@@ -19,4 +19,6 @@ venv/
 .vscode/
 
 # local claude session config (keep launch.json out of the product repo)
-.claude/
+# — but the per-feature skill files ARE part of the repo's documentation
+.claude/*
+!.claude/skills
