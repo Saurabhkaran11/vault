@@ -83,13 +83,27 @@ key, and their POST endpoints are insert-or-update — so mirrors and queue
 replays are idempotent. Items upsert by `client_id`. Custom tags are
 upsert-safe by `(user_id, tag)` and their DELETE is idempotent.
 
-## Auth (demo seam)
+## Auth
 
-Every request carries `X-User-Id` (Settings → User ID, default `demo`). It is
-a placeholder with the exact shape of the future auth: when Clerk lands, only
-`backend/app/deps.py` (verify a JWT instead of trusting a header) and the
-header block in `lib/api.js` change. No route, model, or component changes —
-every row already carries `user_id`.
+Two modes, set by `AUTH_MODE` on the backend.
+
+**`dev`** — every request carries `X-User-Id` (Settings → User ID, default
+`demo`) and it is trusted as sent. This is the local loop, and it is what the
+frontend still speaks today. Because that header is unverifiable, the API
+**refuses to start in dev mode once `CORS_ORIGINS` names a non-localhost
+origin** — an unauthenticated backend cannot reach the internet by way of a
+forgotten environment variable.
+
+**`jwt`** — the request must carry `Authorization: Bearer <token>`. The
+backend verifies signature, issuer, audience and expiry against the issuer's
+JWKS and takes the `sub` claim as the user id. Any OIDC provider works
+(Clerk, Auth0, Cognito, Supabase, Firebase); switching is three environment
+variables, not a refactor.
+
+The remaining work to go live is on the **frontend**: send the provider's
+session token instead of the header in `lib/api.js`. No route, model, or
+component changes — every row already carries `user_id`, and
+`backend/app/auth.py` is the only place identity is resolved.
 
 ## Running it
 
