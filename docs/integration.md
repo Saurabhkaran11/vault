@@ -83,13 +83,27 @@ key, and their POST endpoints are insert-or-update — so mirrors and queue
 replays are idempotent. Items upsert by `client_id`. Custom tags are
 upsert-safe by `(user_id, tag)` and their DELETE is idempotent.
 
-## Auth (demo seam)
+## Auth
 
-Every request carries `X-User-Id` (Settings → User ID, default `demo`). It is
-a placeholder with the exact shape of the future auth: when Clerk lands, only
-`backend/app/deps.py` (verify a JWT instead of trusting a header) and the
-header block in `lib/api.js` change. No route, model, or component changes —
-every row already carries `user_id`.
+Two modes, set by `AUTH_MODE` on the backend.
+
+**`dev`** — every request carries `X-User-Id` (Settings → User ID, default
+`demo`) and it is trusted as sent. This is the local loop, and it is what the
+frontend still speaks today. Because that header is unverifiable, the API
+**refuses to start in dev mode once `CORS_ORIGINS` names a non-localhost
+origin** — an unauthenticated backend cannot reach the internet by way of a
+forgotten environment variable.
+
+**`jwt`** — the request must carry `Authorization: Bearer <token>`. The
+backend verifies signature, issuer, audience and expiry against the issuer's
+JWKS and takes the `sub` claim as the user id. Any OIDC provider works
+(Clerk, Auth0, Cognito, Supabase, Firebase); switching is three environment
+variables, not a refactor.
+
+The remaining work to go live is on the **frontend**: send the provider's
+session token instead of the header in `lib/api.js`. No route, model, or
+component changes — every row already carries `user_id`, and
+`backend/app/auth.py` is the only place identity is resolved.
 
 ## Running it
 
@@ -165,20 +179,31 @@ uvicorn (see `backend/Dockerfile`).
   creates the next bill with a server-generated id; the frontend generates its
   own next-bill id when offline — the two rows won't match up until a restore
   reconciles them from the server copy.
-- **Header auth is trust-the-client.** `X-User-Id` is a single-user demo seam,
-  not security. Anyone can claim any user id. This is the launch blocker.
+- **Auth is configurable, and unsafe-by-default is impossible.** `AUTH_MODE=jwt`
+  verifies a real OIDC token (signature, issuer, audience, expiry) against the
+  provider's JWKS and takes `sub` as the user id. `AUTH_MODE=dev` still trusts
+  `X-User-Id` for the local loop, but the app refuses to boot in dev mode once
+  `CORS_ORIGINS` names a non-localhost origin — the frontend must send
+  `Authorization: Bearer <token>` once you switch.
 - **Global string primary keys.** Every entity except items keys on the
-  frontend's own id, so two accounts can collide; a colliding import 409s
-  with the offending ids rather than corrupting either vault.
+  frontend's own id, so the id space is shared across accounts. The API
+  refuses any id already owned by someone else (409) rather than handing
+  the row over, so this is an availability concern, not a security one —
+  and `lib/id.js` now mints UUIDv4, which makes a collision practically
+  impossible (the previous 7-character generator made one near-certain
+  by ~1M rows). Normalizing to surrogate keys with `(user_id, client_id)`
+  uniqueness, as items already does, remains the clean long-term shape.
 - **No background flush.** The retry queue drains via the Settings button (or
   future call-site hooks), not on a timer or on `online` events yet.
 
 ## Upgrade path
 
-1. **Clerk auth** — swap `X-User-Id` for a verified JWT in `deps.py` +
-   `api.js`; enable per-user rate limits. Nothing else moves.
+1. **Frontend auth wiring** — the backend verifies tokens already; the
+   frontend still sends `X-User-Id`. Point it at your provider's session
+   token and set `AUTH_MODE=jwt`.
 2. **Per-user keys** — move every string-PK table to `(user_id, client_id)`
-   like items, removing cross-account collisions for good.
+   like items. No longer urgent now that ids are UUIDs, but it is the
+   correct normalization.
 3. **Per-record merge** — expose `updated_at` on the Out schemas and reconcile
    record by record instead of replacing the store, so two active devices
    converge instead of one winning.

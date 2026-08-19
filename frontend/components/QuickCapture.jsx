@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { today } from "@/lib/seed";
 import { detectCloud, cloudTitle } from "@/lib/cloud";
 import { mirror, toCents } from "@/lib/api";
+import { uid } from "@/lib/id";
 
 /* Universal quick capture — one box that accepts anything and routes it:
  *   · YouTube link                → YouTube item
@@ -14,7 +15,6 @@ import { mirror, toCents } from "@/lib/api";
  * The routing decision is previewed live and can be overridden before
  * saving. Heuristics only — works with AI off. */
 
-const uid = () => Math.random().toString(36).slice(2, 9);
 const WD = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
 const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 

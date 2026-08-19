@@ -1,0 +1,109 @@
+name: backend
+
+on:
+  push:
+    branches: [main]
+    paths: ["backend/**", ".github/workflows/backend.yml"]
+  pull_request:
+    paths: ["backend/**", ".github/workflows/backend.yml"]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    services:
+      # The real thing, not a stand-in: the schema uses JSONB, a pgvector
+      # column and an HNSW index, so SQLite would pass while production broke.
+      db:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: vault
+          POSTGRES_PASSWORD: vault
+          POSTGRES_DB: vault
+        ports: ["5433:5432"]
+        options: >-
+          --health-cmd "pg_isready -U vault"
+          --health-interval 3s
+          --health-timeout 5s
+          --health-retries 15
+      redis:
+        image: redis:7-alpine
+        ports: ["6380:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 3s
+          --health-timeout 5s
+          --health-retries 15
+
+    env:
+      DATABASE_URL: postgresql+asyncpg://vault:vault@localhost:5433/vault
+      REDIS_URL: redis://localhost:6380
+      AUTH_MODE: dev
+      RATE_LIMIT_PER_MINUTE: "0"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: |
+          uv venv --python 3.12 .venv
+          uv pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Apply migrations
+        # Also proves the migrations themselves work from an empty database —
+        # the app refuses to boot without them, so a broken migration must
+        # fail here rather than in a deploy.
+        run: VIRTUAL_ENV=.venv uv run alembic upgrade head
+
+      - name: Check migrations match the models
+        # Catches a model edited without a matching revision, which would
+        # otherwise only surface as a runtime error in production.
+        run: |
+          VIRTUAL_ENV=.venv uv run alembic check
+
+      - name: Run tests
+        run: VIRTUAL_ENV=.venv uv run pytest -q
+
+      - name: Verify the API boots and serves
+        run: |
+          VIRTUAL_ENV=.venv uv run uvicorn app.main:app --port 8000 &
+          for i in $(seq 1 30); do
+            if curl -sf localhost:8000/health/ready > /dev/null; then
+              echo "API ready"; curl -s localhost:8000/health/ready; exit 0
+            fi
+            sleep 1
+          done
+          echo "API never became ready"; exit 1
+
+  guard-unauthenticated-deploy:
+    # A standalone check that the safety interlock still holds: dev auth must
+    # refuse to start once a public origin is configured. If someone weakens
+    # that guard, this job goes red rather than the hole shipping quietly.
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: |
+          uv venv --python 3.12 .venv
+          uv pip install -r requirements.txt -r requirements-dev.txt
+      - name: dev auth on a public origin must fail
+        run: |
+          VIRTUAL_ENV=.venv AUTH_MODE=dev CORS_ORIGINS=https://vault.example.com \
+            uv run python -c "
+          from app.auth import assert_safe_auth_config, AuthConfigError
+          try:
+              assert_safe_auth_config()
+          except AuthConfigError as e:
+              print('correctly refused:', e); raise SystemExit(0)
+          raise SystemExit('SECURITY: dev auth was allowed on a public origin')
+          "

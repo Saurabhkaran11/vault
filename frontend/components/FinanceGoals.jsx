@@ -1,11 +1,11 @@
 "use client";
 
 import React, { useState } from "react";
+import { uid } from "@/lib/id";
 
 /* Savings goals: name + target, with contributions added over time.
  * Stored in fin.goals = [{id, name, target, saved}]. */
 
-const uid = () => Math.random().toString(36).slice(2, 9);
 
 export default function FinanceGoals({ goals, fmt, onChange }) {
   const [name, setName] = useState("");

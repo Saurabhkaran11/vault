@@ -28,8 +28,20 @@ class Settings(BaseSettings):
     embeddings_model: str = "nomic-embed-text"
     embedding_dim: int = 768
 
-    # v0 single-user mode; replaced by Clerk-verified JWTs in the auth phase.
-    demo_user: str = "demo"
+    # ---- auth ----
+    # "dev"  → trust X-User-Id (local only; refuses to boot on a public origin)
+    # "jwt"  → verify a bearer token against the issuer's JWKS
+    auth_mode: str = "dev"
+    jwt_issuer: str | None = None        # e.g. https://your-app.clerk.accounts.dev
+    jwt_jwks_url: str | None = None      # e.g. <issuer>/.well-known/jwks.json
+    jwt_audience: str | None = None      # optional; some providers omit it
+    demo_user: str = "demo"              # the identity used in dev mode
+
+    # ---- limits ----
+    # Requests per window, per identity. Generous: a sync flush legitimately
+    # fires a burst of mirrors. Set RATE_LIMIT_PER_MINUTE=0 to disable.
+    rate_limit_per_minute: int = 300
+    log_level: str = "INFO"
 
     class Config:
         env_file = ".env"

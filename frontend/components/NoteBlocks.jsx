@@ -1,12 +1,12 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
+import { uid } from "@/lib/id";
 
 /* Notion-style blocks: text, to-do, bullet, table, and PAGE (a nested
    sub-page with its own blocks — pages can contain pages, recursively).
    To-dos, bullets and text can be indented (‹ ›) for nested outlines. */
 
-const uid = () => Math.random().toString(36).slice(2, 9);
 
 export const emptyBlock = (kind) => {
   if (kind === "table") return { id: uid(), kind, rows: [["", ""], ["", ""]] };

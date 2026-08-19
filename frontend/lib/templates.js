@@ -1,6 +1,7 @@
 /* Note templates — structured starters, matching the Tessera gallery. */
 
-const uid = () => Math.random().toString(36).slice(2, 9);
+
+import { uid } from "./id";
 
 export const TEMPLATES = [
   { cat: "RECURRING", title: "Meeting notes", desc: "Attendees, agenda, decisions and action items.",
