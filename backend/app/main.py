@@ -10,7 +10,7 @@ from .config import settings
 from .db import engine
 from .observability import configure_logging, log, request_context, unhandled_exception_handler
 from .ratelimit import close_redis, get_redis, rate_limit
-from .routers import ai, boards, finance, items, sync, tags, todos
+from .routers import ai, boards, files, finance, items, sync, tags, todos
 
 
 @asynccontextmanager
@@ -62,7 +62,10 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["X-Request-Id"],
+    # A browser cannot read a response header unless it is exposed. Without
+    # X-Total-Count here, the frontend's paging loop sees `null`, assumes one
+    # page is the whole set, and a restore silently truncates the vault.
+    expose_headers=["X-Request-Id", "X-Total-Count", "X-Page-Limit", "X-Page-Offset"],
 )
 
 # Unhandled errors are logged in full and answered generically — see
@@ -70,7 +73,8 @@ app.add_middleware(
 # than re-raise.
 app.add_exception_handler(Exception, unhandled_exception_handler)
 
-for r in (items.router, todos.router, boards.router, finance.router, tags.router, ai.router, sync.router):
+for r in (items.router, todos.router, boards.router, finance.router,
+          tags.router, ai.router, sync.router, files.router):
     app.include_router(r)
 
 

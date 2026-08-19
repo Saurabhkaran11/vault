@@ -1,4 +1,7 @@
-/* Clerk's middleware, but only when Clerk is configured.
+/* Clerk's request interceptor, but only when Clerk is configured.
+ *
+ * Named proxy.js: Next 16 deprecated the `middleware` file convention in
+ * favour of `proxy`, and the old name warns on every dev boot.
  *
  * clerkMiddleware() throws without a secret key, which would break every
  * request for anyone running Vault locally with no account. So when the key
@@ -14,7 +17,7 @@ const hasClerk = Boolean(process.env.CLERK_SECRET_KEY && process.env.NEXT_PUBLIC
 
 let clerkHandler = null;
 
-export default async function middleware(request, event) {
+export default async function proxy(request, event) {
   if (!hasClerk) return NextResponse.next();
   if (!clerkHandler) {
     const { clerkMiddleware } = await import("@clerk/nextjs/server");

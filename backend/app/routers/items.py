@@ -1,11 +1,12 @@
 from datetime import date, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_session
 from ..deps import current_user_id
+from ..pagination import Page, page_params, paginate
 from ..events import emit, enqueue
 from ..models import Item
 from ..schemas import ItemIn, ItemOut
@@ -24,25 +25,37 @@ class ItemUpsert(ItemIn):
 
 @router.get("", response_model=list[ItemOut])
 async def list_items(
+    response: Response,
     type: str | None = None,
     tag: str | None = None,
     q: str | None = None,
     include_deleted: bool = False,
+    page: Page = Depends(page_params),
     session: AsyncSession = Depends(get_session),
     user: str = Depends(current_user_id),
 ):
+    """Filters that SQL can express are pushed into the statement so paging
+    is applied to the real result set. `tag` and `q` are still refined in
+    Python (tags live in JSON, and `q` spans several columns), so those are
+    narrowed before paging rather than after — otherwise page 2 of a search
+    would skip rows that were filtered out of page 1."""
     stmt = select(Item).where(Item.user_id == user).order_by(Item.added_on.desc(), Item.id.desc())
     if type:
         stmt = stmt.where(Item.type == type)
-    rows = (await session.execute(stmt)).scalars().all()
     if not include_deleted:
-        rows = [r for r in rows if r.deleted_on is None]
-    if tag:
-        rows = [r for r in rows if tag in (r.tags or [])]
-    if q:
-        needle = q.lower()
-        rows = [r for r in rows if needle in f"{r.title} {r.meta} {' '.join(r.tags or [])}".lower()]
-    return rows
+        stmt = stmt.where(Item.deleted_on.is_(None))
+
+    if tag or q:
+        rows = (await session.execute(stmt)).scalars().all()
+        if tag:
+            rows = [r for r in rows if tag in (r.tags or [])]
+        if q:
+            needle = q.lower()
+            rows = [r for r in rows if needle in f"{r.title} {r.meta} {' '.join(r.tags or [])}".lower()]
+        response.headers["X-Total-Count"] = str(len(rows))
+        return rows[page.offset:page.offset + page.limit]
+
+    return await paginate(session, stmt, page, response)
 
 
 @router.post("", response_model=ItemOut, status_code=201)

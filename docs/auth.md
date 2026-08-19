@@ -100,7 +100,8 @@ refreshes it.
 - **Clerk Core 3** (March 2026) removed `<SignedIn>` / `<SignedOut>` in favour
   of `<Show when="signed-in">`. This code uses the current API.
 - The sign-in page uses `routing="hash"`, so no extra routes are needed.
-- `middleware.js` imports Clerk dynamically. Importing it at module scope
-  would run Clerk's key assertions at boot and break the no-key path.
+- `proxy.js` (Next 16 renamed the `middleware` convention) imports Clerk
+  dynamically. Importing it at module scope would run Clerk's key assertions
+  at boot and break the no-key path.
 - Rate limiting keys off the token when one is present, so limits are
   per-account rather than per-IP.

@@ -95,6 +95,50 @@ export async function api(path, { method = "GET", body } = {}) {
   return ct.includes("json") ? res.json() : res.text();
 }
 
+/* Same request, but the caller also needs the response headers — used by
+ * the paging helper below to read X-Total-Count. */
+async function apiWithHeaders(path) {
+  const b = getBackend();
+  const res = await fetch(`${b.url.replace(/\/$/, "")}${path}`, {
+    headers: { "Content-Type": "application/json", ...(await authHeaders()) },
+  });
+  if (!res.ok) {
+    const err = new Error(`API ${res.status} on GET ${path}`);
+    err.status = res.status;
+    throw err;
+  }
+  return { rows: await res.json(), total: Number(res.headers.get("X-Total-Count")) };
+}
+
+/* Walk every page of a list endpoint.
+ *
+ * The list endpoints cap a page at 1000 rows, which means a single GET can
+ * silently return a fraction of a large vault. Restoring from a truncated
+ * read would overwrite a complete local copy with an incomplete one — data
+ * loss dressed up as a successful sync — so the restore path must never
+ * assume one request is the whole set.
+ *
+ * X-Total-Count is the server's statement of how many rows exist; we keep
+ * asking until we hold that many, and refuse to continue if the numbers do
+ * not add up rather than returning a partial vault to the caller.
+ */
+async function fetchAllPages(path, { pageSize = 1000 } = {}) {
+  const join = path.includes("?") ? "&" : "?";
+  const first = await apiWithHeaders(`${path}${join}limit=${pageSize}&offset=0`);
+  const total = Number.isFinite(first.total) ? first.total : first.rows.length;
+  const out = [...first.rows];
+
+  while (out.length < total) {
+    const next = await apiWithHeaders(`${path}${join}limit=${pageSize}&offset=${out.length}`);
+    if (!next.rows.length) break;          // server disagrees with its own count
+    out.push(...next.rows);
+  }
+  if (out.length < total) {
+    throw new Error(`Incomplete read of ${path}: got ${out.length} of ${total} rows`);
+  }
+  return out;
+}
+
 /* mirror(): fire-and-forget write-through. UI never waits, failures queue. */
 export async function mirror(path, opts = {}) {
   if (!backendOn()) return false;
@@ -190,13 +234,16 @@ export async function fullSync() {
  * CustomBoards reads them.
  */
 export async function pullAll() {
+  /* Paged endpoints go through fetchAllPages so a large vault cannot be
+     restored from a truncated read. The rest are bounded by nature (a
+     handful of boards, pay methods, goals) and stay single requests. */
   const [items, tasks, boards, expenses, bills, incomes, payMethods, goals, summary, tagDir] = await Promise.all([
-    api("/items?include_deleted=true"),   // the trash is part of the vault
-    api("/todos"),
+    fetchAllPages("/items?include_deleted=true"),   // the trash is part of the vault
+    fetchAllPages("/todos"),
     api("/boards"),
-    api("/finance/expenses"),
-    api("/finance/bills"),
-    api("/finance/incomes"),
+    fetchAllPages("/finance/expenses"),
+    fetchAllPages("/finance/bills"),
+    fetchAllPages("/finance/incomes"),
     api("/finance/pay-methods"),
     api("/finance/goals"),
     api("/finance/summary"),
