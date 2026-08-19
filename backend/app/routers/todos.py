@@ -1,11 +1,12 @@
 from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_session
 from ..deps import current_user_id
+from ..pagination import Page, page_params, paginate
 from ..events import emit
 from ..models import Task
 from ..schemas import TaskIn, TaskOut
@@ -14,10 +15,10 @@ router = APIRouter(prefix="/todos", tags=["todos"])
 
 
 @router.get("", response_model=list[TaskOut])
-async def list_tasks(session: AsyncSession = Depends(get_session), user: str = Depends(current_user_id)):
-    return (await session.execute(
-        select(Task).where(Task.user_id == user).order_by(Task.created_on.desc())
-    )).scalars().all()
+async def list_tasks(response: Response, page: Page = Depends(page_params),
+                     session: AsyncSession = Depends(get_session), user: str = Depends(current_user_id)):
+    stmt = select(Task).where(Task.user_id == user).order_by(Task.created_on.desc(), Task.id)
+    return await paginate(session, stmt, page, response)
 
 
 @router.post("", response_model=TaskOut, status_code=201)

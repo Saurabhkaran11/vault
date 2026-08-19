@@ -25,7 +25,8 @@ import FinanceBoard from "./FinanceBoard";
 import AskVault from "./AskVault";
 import { emptyBlock } from "./NoteBlocks";
 import { AI_MODELS, OSS_PRESETS, OSS_MODEL_SUGGESTIONS, getAIConfig, setAIConfig, aiEnabled, askText, askJSON } from "@/lib/ai";
-import { getBackend, setBackend, backendHealthy, fullSync, flushQueue, pendingMirrors, pullAll, applyPulled, hydrateIfEmpty } from "@/lib/api";
+import { getBackend, setBackend, backendHealthy, fullSync, flushQueue, pendingMirrors, pullAll, applyPulled, hydrateIfEmpty, hasVerifiedIdentity } from "@/lib/api";
+import AccountSection from "./AccountSection";
 
 /* flatten a note's blocks to plain text (for AI prompts + similarity) */
 const flatText = (b) => {
@@ -415,9 +416,16 @@ function BackendSyncSection() {
       <input className="menu-input" value={cfg.url} aria-label="Backend URL"
         placeholder="Backend URL, e.g. http://localhost:8000"
         onChange={(e) => saveCfg({ url: e.target.value.trim() })} />
-      <input className="menu-input" style={{ marginTop: 6 }} value={cfg.userId || ""} aria-label="Backend user ID"
-        placeholder="User ID (demo until accounts launch)"
-        onChange={(e) => saveCfg({ userId: e.target.value.trim() })} />
+      {hasVerifiedIdentity() ? (
+        <div className="conn-row">
+          <span>Identified by your signed-in account</span>
+          <span className="mono">verified token</span>
+        </div>
+      ) : (
+        <input className="menu-input" style={{ marginTop: 6 }} value={cfg.userId || ""} aria-label="Backend user ID"
+          placeholder="User ID (unverified — anyone could type it)"
+          onChange={(e) => saveCfg({ userId: e.target.value.trim() })} />
+      )}
       <button className="menu-item" style={{ marginTop: 6 }} disabled={busy !== null} onClick={toggle}>
         {cfg.enabled ? "⏻ Disable sync — keep changes local-only" : "▶ Enable sync — mirror every change to the backend"}
       </button>
@@ -980,6 +988,8 @@ export default function App() {
                 onClick={() => { setSettingsOpen(false); setKeyEdit(false); }}>✕</button>
             </div>
             <div className="cd-body">
+              <AccountSection />
+
               <div className="set-sec">
                 <div className="menu-sec">👤 PROFILE</div>
                 <input className="menu-input" value={profile.name} aria-label="Your name"

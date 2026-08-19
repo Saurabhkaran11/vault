@@ -37,6 +37,16 @@ class Settings(BaseSettings):
     jwt_audience: str | None = None      # optional; some providers omit it
     demo_user: str = "demo"              # the identity used in dev mode
 
+    # ---- file storage (optional) ----
+    # Unset S3_BUCKET keeps file bodies in the browser, exactly as before.
+    s3_bucket: str | None = None
+    s3_region: str = "us-east-1"
+    s3_endpoint_url: str | None = None      # set for MinIO / R2 / LocalStack
+    aws_access_key_id: str | None = None    # omit on AWS to use the instance role
+    aws_secret_access_key: str | None = None
+    s3_max_upload_bytes: int = 25 * 1024 * 1024
+    s3_url_ttl_seconds: int = 900           # presigned links are short-lived by design
+
     # ---- limits ----
     # Requests per window, per identity. Generous: a sync flush legitimately
     # fires a burst of mirrors. Set RATE_LIMIT_PER_MINUTE=0 to disable.

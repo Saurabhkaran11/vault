@@ -1,12 +1,13 @@
 from datetime import date
 from dateutil.relativedelta import relativedelta
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_session
 from ..deps import current_user_id
+from ..pagination import Page, page_params, paginate
 from ..events import emit
 from ..models import Bill, Budget, Expense, Goal, Income, PayMethod
 from ..schemas import BillIn, BillOut, BudgetIn, ExpenseIn, ExpenseOut, GoalIn, GoalOut, IncomeIn, IncomeOut, PayMethodIn, PayMethodOut
@@ -55,12 +56,15 @@ async def _delete(model, id_, session, user):
 
 # ---------- expenses ----------
 @router.get("/expenses", response_model=list[ExpenseOut])
-async def expenses(month: str | None = None, session: AsyncSession = Depends(get_session), user: str = Depends(current_user_id)):
-    stmt = select(Expense).where(Expense.user_id == user).order_by(Expense.spent_on.desc())
-    rows = (await session.execute(stmt)).scalars().all()
+async def expenses(response: Response, month: str | None = None, page: Page = Depends(page_params),
+                   session: AsyncSession = Depends(get_session), user: str = Depends(current_user_id)):
+    stmt = select(Expense).where(Expense.user_id == user).order_by(Expense.spent_on.desc(), Expense.id)
     if month:
-        rows = [r for r in rows if r.spent_on.isoformat().startswith(month)]
-    return rows
+        # Pushed into SQL rather than filtered afterwards so the page and the
+        # X-Total-Count both describe the month, not the whole history.
+        start = date(int(month[:4]), int(month[5:7]), 1)
+        stmt = stmt.where(Expense.spent_on >= start, Expense.spent_on < start + relativedelta(months=1))
+    return await paginate(session, stmt, page, response)
 
 
 @router.post("/expenses", response_model=ExpenseOut, status_code=201)
@@ -89,8 +93,10 @@ def _advance(due: date, recur: str) -> date:
 
 
 @router.get("/bills", response_model=list[BillOut])
-async def bills(session: AsyncSession = Depends(get_session), user: str = Depends(current_user_id)):
-    return (await session.execute(select(Bill).where(Bill.user_id == user).order_by(Bill.due))).scalars().all()
+async def bills(response: Response, page: Page = Depends(page_params),
+                session: AsyncSession = Depends(get_session), user: str = Depends(current_user_id)):
+    stmt = select(Bill).where(Bill.user_id == user).order_by(Bill.due, Bill.id)
+    return await paginate(session, stmt, page, response)
 
 
 @router.post("/bills", response_model=BillOut, status_code=201)
@@ -126,8 +132,10 @@ async def del_bill(bid: str, session: AsyncSession = Depends(get_session), user:
 
 # ---------- income / pay methods / budgets / goals ----------
 @router.get("/incomes", response_model=list[IncomeOut])
-async def incomes(session: AsyncSession = Depends(get_session), user: str = Depends(current_user_id)):
-    return (await session.execute(select(Income).where(Income.user_id == user))).scalars().all()
+async def incomes(response: Response, page: Page = Depends(page_params),
+                  session: AsyncSession = Depends(get_session), user: str = Depends(current_user_id)):
+    stmt = select(Income).where(Income.user_id == user).order_by(Income.received_on.desc(), Income.id)
+    return await paginate(session, stmt, page, response)
 
 
 @router.post("/incomes", response_model=IncomeOut, status_code=201)

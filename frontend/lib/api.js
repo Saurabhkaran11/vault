@@ -40,11 +40,50 @@ export const backendOn = () => {
 export const toCents = (v) => Math.round((Number(v) || 0) * 100);
 export const fromCents = (c) => (Number(c) || 0) / 100;
 
+/* ---------------------------------------------------------------- IDENTITY
+ *
+ * Two ways to say who you are, matching the backend's two AUTH_MODEs:
+ *
+ *   Bearer token  — the real one. The backend verifies it against the
+ *                   provider's JWKS and takes `sub` as the user id.
+ *   X-User-Id     — the dev seam. Unverifiable, so the backend refuses to
+ *                   run this way on a public origin.
+ *
+ * lib/api.js is not a React component, so it cannot call Clerk's useAuth()
+ * hook itself. <AuthBridge> (components/AuthBridge.jsx) hands the getter
+ * down once on mount; until something does, we fall back to the header and
+ * the app behaves exactly as it did before auth existed. That fallback is
+ * what keeps local development working with no Clerk keys at all.
+ */
+let tokenGetter = null;
+
+export function setTokenGetter(fn) {
+  tokenGetter = fn;
+}
+
+export function hasVerifiedIdentity() {
+  return typeof tokenGetter === "function";
+}
+
+async function authHeaders() {
+  if (tokenGetter) {
+    try {
+      const token = await tokenGetter();
+      if (token) return { Authorization: `Bearer ${token}` };
+    } catch {
+      /* Signed out, or the token refresh failed. Fall through to the dev
+         header rather than firing an un-authenticated request that the
+         backend would reject anyway. */
+    }
+  }
+  return { "X-User-Id": getBackend().userId || "demo" };
+}
+
 export async function api(path, { method = "GET", body } = {}) {
   const b = getBackend();
   const res = await fetch(`${b.url.replace(/\/$/, "")}${path}`, {
     method,
-    headers: { "Content-Type": "application/json", "X-User-Id": b.userId || "demo" },
+    headers: { "Content-Type": "application/json", ...(await authHeaders()) },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   if (!res.ok) {
@@ -54,6 +93,50 @@ export async function api(path, { method = "GET", body } = {}) {
   }
   const ct = res.headers.get("content-type") || "";
   return ct.includes("json") ? res.json() : res.text();
+}
+
+/* Same request, but the caller also needs the response headers — used by
+ * the paging helper below to read X-Total-Count. */
+async function apiWithHeaders(path) {
+  const b = getBackend();
+  const res = await fetch(`${b.url.replace(/\/$/, "")}${path}`, {
+    headers: { "Content-Type": "application/json", ...(await authHeaders()) },
+  });
+  if (!res.ok) {
+    const err = new Error(`API ${res.status} on GET ${path}`);
+    err.status = res.status;
+    throw err;
+  }
+  return { rows: await res.json(), total: Number(res.headers.get("X-Total-Count")) };
+}
+
+/* Walk every page of a list endpoint.
+ *
+ * The list endpoints cap a page at 1000 rows, which means a single GET can
+ * silently return a fraction of a large vault. Restoring from a truncated
+ * read would overwrite a complete local copy with an incomplete one — data
+ * loss dressed up as a successful sync — so the restore path must never
+ * assume one request is the whole set.
+ *
+ * X-Total-Count is the server's statement of how many rows exist; we keep
+ * asking until we hold that many, and refuse to continue if the numbers do
+ * not add up rather than returning a partial vault to the caller.
+ */
+async function fetchAllPages(path, { pageSize = 1000 } = {}) {
+  const join = path.includes("?") ? "&" : "?";
+  const first = await apiWithHeaders(`${path}${join}limit=${pageSize}&offset=0`);
+  const total = Number.isFinite(first.total) ? first.total : first.rows.length;
+  const out = [...first.rows];
+
+  while (out.length < total) {
+    const next = await apiWithHeaders(`${path}${join}limit=${pageSize}&offset=${out.length}`);
+    if (!next.rows.length) break;          // server disagrees with its own count
+    out.push(...next.rows);
+  }
+  if (out.length < total) {
+    throw new Error(`Incomplete read of ${path}: got ${out.length} of ${total} rows`);
+  }
+  return out;
 }
 
 /* mirror(): fire-and-forget write-through. UI never waits, failures queue. */
@@ -151,13 +234,16 @@ export async function fullSync() {
  * CustomBoards reads them.
  */
 export async function pullAll() {
+  /* Paged endpoints go through fetchAllPages so a large vault cannot be
+     restored from a truncated read. The rest are bounded by nature (a
+     handful of boards, pay methods, goals) and stay single requests. */
   const [items, tasks, boards, expenses, bills, incomes, payMethods, goals, summary, tagDir] = await Promise.all([
-    api("/items?include_deleted=true"),   // the trash is part of the vault
-    api("/todos"),
+    fetchAllPages("/items?include_deleted=true"),   // the trash is part of the vault
+    fetchAllPages("/todos"),
     api("/boards"),
-    api("/finance/expenses"),
-    api("/finance/bills"),
-    api("/finance/incomes"),
+    fetchAllPages("/finance/expenses"),
+    fetchAllPages("/finance/bills"),
+    fetchAllPages("/finance/incomes"),
     api("/finance/pay-methods"),
     api("/finance/goals"),
     api("/finance/summary"),
