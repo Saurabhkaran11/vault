@@ -15,6 +15,23 @@ services:
   redis:
     image: redis:7-alpine
     ports: ["6380:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      retries: 15
+
+  # Migrations run once, as their own service, before anything that touches
+  # the schema. The API refuses to boot against an unmigrated database, and
+  # the worker queries the same tables — so both wait for this to succeed
+  # rather than racing it. Two API replicas would otherwise both try to
+  # migrate on startup.
+  migrate:
+    build: .
+    command: alembic upgrade head
+    environment:
+      DATABASE_URL: postgresql+asyncpg://vault:vault@db:5432/vault
+    depends_on:
+      db: { condition: service_healthy }
 
   api:
     build: .
@@ -22,10 +39,15 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://vault:vault@db:5432/vault
       REDIS_URL: redis://redis:6379
+      CORS_ORIGINS: http://localhost:3100,http://localhost:3000
     ports: ["8000:8000"]
     depends_on:
-      db: { condition: service_healthy }
-      redis: { condition: service_started }
+      migrate: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health/live').status==200 else 1)\""]
+      interval: 10s
+      retries: 5
 
   worker:
     build: .
@@ -34,8 +56,8 @@ services:
       DATABASE_URL: postgresql+asyncpg://vault:vault@db:5432/vault
       REDIS_URL: redis://redis:6379
     depends_on:
-      db: { condition: service_healthy }
-      redis: { condition: service_started }
+      migrate: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
 
 volumes:
   pgdata:

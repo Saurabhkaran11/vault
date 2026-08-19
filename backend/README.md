@@ -35,12 +35,46 @@ Review generated migrations before committing: autogenerate does not detect
 `CREATE EXTENSION`, and it emits pgvector column types without importing
 pgvector (the script template adds that import for you).
 
+## Tests
+
+```bash
+docker compose up -d db redis
+VIRTUAL_ENV=.venv uv run alembic upgrade head
+VIRTUAL_ENV=.venv uv run pytest -q
+```
+
+They run against a real Postgres with pgvector, not a stand-in: the schema
+uses JSONB, a vector column and an HNSW index, so SQLite would pass while
+production broke. Coverage is deliberately weighted to the things that are
+expensive to get wrong — tenant isolation per feature, replay-safety of every
+mirror call, exact money arithmetic, JWT verification against forged tokens,
+and the guards that stop an unauthenticated backend from booting.
+
+CI runs the same suite plus `alembic check`, which fails the build if a model
+was edited without a matching migration.
+
 ## Configuration
 
-Every value is an environment variable (see `app/config.py`):
-`DATABASE_URL`, `REDIS_URL`, `CORS_ORIGINS` (comma-separated origins allowed
-to call the API — set this to your deployed frontend), `MAX_BODY_BYTES`,
-and the embeddings/AI keys.
+Every value is an environment variable (see `app/config.py`).
+
+| Variable | Purpose |
+|---|---|
+| `DATABASE_URL` / `REDIS_URL` | Backing services |
+| `CORS_ORIGINS` | Comma-separated browser origins allowed to call the API |
+| `AUTH_MODE` | `dev` (trusts `X-User-Id`, local only) or `jwt` |
+| `JWT_ISSUER` / `JWT_JWKS_URL` / `JWT_AUDIENCE` | Your OIDC provider — Clerk, Auth0, Cognito, Supabase all publish a JWKS |
+| `RATE_LIMIT_PER_MINUTE` | Per-identity cap; `0` disables |
+| `MAX_BODY_BYTES` | Request body ceiling |
+| `LOG_LEVEL` | Defaults to `INFO`; logs are JSON, one object per line |
+
+### Going live
+
+`AUTH_MODE=dev` trusts the `X-User-Id` header, so anyone can read any
+account. The app therefore **refuses to start in dev mode once
+`CORS_ORIGINS` contains a non-localhost origin** — an unauthenticated
+backend cannot be deployed by forgetting a variable. To go live, point
+`JWT_ISSUER`/`JWT_JWKS_URL` at your provider and set `AUTH_MODE=jwt`; the
+frontend then sends `Authorization: Bearer <token>` instead of the header.
 
 ## Try it
 

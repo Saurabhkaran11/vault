@@ -15,7 +15,7 @@ dump in /sync/import speaks dollars, and it converts on the way in.
 from datetime import date, datetime
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import JSON, Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Text, func
+from sqlalchemy import JSON, Boolean, Date, DateTime, Float, ForeignKey, Index, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .config import settings
@@ -69,6 +69,19 @@ class Embedding(Base):
     """pgvector chunks for Ask-your-Vault RAG (one row per item chunk)."""
 
     __tablename__ = "embeddings"
+    # Declared here, not just in the migration, so `alembic check` can prove
+    # the models and the live schema still agree. The operator class must
+    # match routers/ai.py's cosine_distance — an index built for a different
+    # one is silently ignored by the planner, and the scan stays sequential.
+    __table_args__ = (
+        Index(
+            "ix_embeddings_vector_hnsw", "vector",
+            postgresql_using="hnsw",
+            postgresql_with={"m": 16, "ef_construction": 64},
+            postgresql_ops={"vector": "vector_cosine_ops"},
+        ),
+        Index("ix_embeddings_user_item", "user_id", "item_id"),
+    )
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[str] = mapped_column(String(64), index=True)
     item_id: Mapped[int] = mapped_column(ForeignKey("items.id", ondelete="CASCADE"), index=True)
