@@ -25,10 +25,20 @@ async def lifespan(app: FastAPI):
     configure_logging(settings.log_level)
     assert_safe_auth_config()
 
+    # to_regclass returns NULL instead of raising when the table is absent.
+    # A plain SELECT would throw asyncpg's UndefinedTableError on a fresh
+    # database — which is the *common* case — burying the one instruction
+    # the operator actually needs under a driver traceback.
     async with engine.connect() as conn:
-        current = (await conn.execute(text("SELECT version_num FROM alembic_version"))).scalar_one_or_none()
+        has_table = (await conn.execute(text("SELECT to_regclass('public.alembic_version')"))).scalar_one()
+        current = (
+            (await conn.execute(text("SELECT version_num FROM alembic_version"))).scalar_one_or_none()
+            if has_table else None
+        )
     if not current:
-        raise RuntimeError("Database has no Alembic revision — run `alembic upgrade head` before starting the API.")
+        raise RuntimeError(
+            "Database has no Alembic revision — run `alembic upgrade head` before starting the API."
+        )
     log.info(f"Vault API ready (schema {current}, auth={settings.auth_mode})")
     yield
     await close_redis()

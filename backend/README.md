@@ -2,6 +2,9 @@
 
 Per-feature APIs mirroring the frontend's stores. Design docs with diagrams: [`../docs/`](../docs/).
 
+**Setting this up for the first time, or deploying it? Start with the
+[runbook](../docs/runbook.md)** — every step from a fresh clone to production.
+
 ## Run everything (Docker)
 
 ```bash

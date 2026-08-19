@@ -139,3 +139,40 @@ async def test_access_log_line_carries_the_request_id(client, caplog):
     access_lines = [msg for msg in seen if "/health" in msg]
     assert access_lines, "the request should have produced an access log line"
     assert seen[access_lines[0]] == rid, "log line and response header must share the id"
+
+
+@pytest.mark.asyncio
+async def test_boot_guard_explains_itself_on_a_fresh_database(monkeypatch):
+    """A database that has never been migrated is the COMMON first-run case,
+    and the operator needs one instruction, not a driver traceback.
+
+    Regression guard: querying alembic_version directly raises asyncpg's
+    UndefinedTableError when the table is absent, which buried the message.
+    """
+    import app.main as main
+    from sqlalchemy import text
+
+    class FakeResult:
+        def __init__(self, value): self._value = value
+        def scalar_one(self): return self._value
+        def scalar_one_or_none(self): return self._value
+
+    class FakeConn:
+        async def execute(self, stmt):
+            sql = str(stmt)
+            if "to_regclass" in sql:
+                return FakeResult(None)          # table does not exist
+            raise AssertionError("must not query alembic_version when it is absent")
+        async def __aenter__(self): return self
+        async def __aexit__(self, *a): return False
+
+    class FakeEngine:
+        def connect(self): return FakeConn()
+        async def dispose(self): pass
+
+    monkeypatch.setattr(main, "engine", FakeEngine())
+    monkeypatch.setattr(main, "assert_safe_auth_config", lambda: None)
+
+    with pytest.raises(RuntimeError, match="alembic upgrade head"):
+        async with main.lifespan(main.app):
+            pass
