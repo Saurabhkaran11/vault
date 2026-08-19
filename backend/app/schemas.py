@@ -94,10 +94,12 @@ class BoardCreate(BaseModel):
 
 
 # ---------- finance ----------
+# Money crosses this API as INTEGER CENTS (`*_cents`) — see models.py.
+# The frontend converts at its mapper boundary; nothing here takes dollars.
 class ExpenseIn(BaseModel):
     id: str
     desc: str
-    amount: float
+    amount_cents: int
     cat: str = "Other"
     pay_method_id: str | None = None
     spent_on: date
@@ -110,7 +112,7 @@ class ExpenseOut(ExpenseIn, ORM):
 class BillIn(BaseModel):
     id: str
     title: str
-    amount: float
+    amount_cents: int
     due: date
     paid: bool = False
     paid_on: date | None = None
@@ -124,7 +126,7 @@ class BillOut(BillIn, ORM):
 class IncomeIn(BaseModel):
     id: str
     source: str
-    amount: float
+    amount_cents: int
     received_on: date
 
 
@@ -145,8 +147,8 @@ class PayMethodOut(PayMethodIn, ORM):
 class GoalIn(BaseModel):
     id: str
     name: str
-    target: float
-    saved: float = 0
+    target_cents: int
+    saved_cents: int = 0
 
 
 class GoalOut(GoalIn, ORM):
@@ -155,7 +157,7 @@ class GoalOut(GoalIn, ORM):
 
 class BudgetIn(BaseModel):
     scope: str = "overall"
-    cap: float
+    cap_cents: int
 
 
 # ---------- AI ----------

@@ -14,11 +14,33 @@ docker compose up --build          # api :8000 · worker · pgvector db :5433 ·
 ```bash
 docker compose up -d db redis
 uv venv --python 3.12 .venv && uv pip install -r requirements.txt --python .venv/bin/python
+VIRTUAL_ENV=.venv uv run alembic upgrade head     # required — the API refuses to boot without it
 .venv/bin/uvicorn app.main:app --reload --port 8000
 .venv/bin/arq worker.tasks.WorkerSettings          # second terminal
 ```
 
 Interactive docs: http://localhost:8000/docs
+
+## Schema changes
+
+Alembic owns the schema — the app never creates tables, so an unmigrated
+database fails the API's startup check instead of being silently improvised.
+
+```bash
+VIRTUAL_ENV=.venv uv run alembic revision --autogenerate -m "what changed"
+VIRTUAL_ENV=.venv uv run alembic upgrade head
+```
+
+Review generated migrations before committing: autogenerate does not detect
+`CREATE EXTENSION`, and it emits pgvector column types without importing
+pgvector (the script template adds that import for you).
+
+## Configuration
+
+Every value is an environment variable (see `app/config.py`):
+`DATABASE_URL`, `REDIS_URL`, `CORS_ORIGINS` (comma-separated origins allowed
+to call the API — set this to your deployed frontend), `MAX_BODY_BYTES`,
+and the embeddings/AI keys.
 
 ## Try it
 

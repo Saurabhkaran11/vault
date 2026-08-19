@@ -1,5 +1,7 @@
 "use client";
 
+import { mirror } from "@/lib/api";
+
 /* Standalone custom tags (vault.tags.v1): tags the user creates in the Tags
  * section before any item carries them. They show in the tag directory and
  * every tag picker; once an item adopts one it behaves like any other tag.
@@ -20,11 +22,13 @@ export function addCustomTag(raw) {
   if (!t) return getCustomTags();
   const next = [...new Set([...getCustomTags(), t])];
   localStorage.setItem(KEY, JSON.stringify({ version: 1, custom: next }));
+  mirror("/tags?tag=" + encodeURIComponent(t), { method: "POST" }); // upsert-safe server-side
   return next;
 }
 
 export function removeCustomTag(t) {
   const next = getCustomTags().filter((x) => x !== t);
   localStorage.setItem(KEY, JSON.stringify({ version: 1, custom: next }));
+  mirror("/tags/" + encodeURIComponent(t), { method: "DELETE" });
   return next;
 }

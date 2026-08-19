@@ -46,3 +46,19 @@ files; do NOT run the dev server or browser.
 ## Status log
 
 - 2026-08-18: skill created; work pending.
+- 2026-08-18: DONE. `lib/tags.js` mirrors add/remove (`POST /tags?tag=…`, `DELETE /tags/{tag}`);
+  `QuickCapture.jsx` mirrors its two direct localStorage writes (todo → `POST /todos` with
+  `done_at:null/created_on/due/high/label`, expense → `POST /finance/expenses` with
+  `pay_method_id:null/spent_on`) — items untouched (they flow through onAddItem → useStore).
+  `App.jsx`: new self-contained `BackendSyncSection` rendered between CONNECTED APPS and YOUR
+  DATA (URL + user-id inputs, enable toggle with first-enable `fullSync()` + inline imported
+  counts, health/last-synced/pending-queue rows, Retry now → `flushQueue()`, re-sync button
+  with honest warning). `docs/integration.md` written (write-through model, queue semantics,
+  field-map table, run steps, limitations, upgrade path). `routers/tags.py` needed no change —
+  verified upsert-safe live. Verified on :8100 under `qa-tags`: double `POST /tags?tag=focus`
+  → one row [201,201]; `DELETE` twice → `{"ok":true}` both [200]; exact QuickCapture bodies
+  accepted by `/todos` + `/finance/expenses` [201] and rows confirmed in Postgres; probe also
+  showed `/sync/import` re-run with overlapping string ids 500s + rolls back (nothing written)
+  — re-sync warning copy documents both outcomes. All qa-tags rows cleaned to 0. Syntax:
+  `node --check` (ESM) OK on tags.js; Next's own SWC parse OK on tags.js, QuickCapture.jsx,
+  App.jsx.

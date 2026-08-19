@@ -4,6 +4,12 @@ Shapes mirror the frontend's versioned localStorage stores 1:1, so the
 frontend's JSON export imports losslessly (see routers/sync.py). Flexible
 sub-structures (note blocks, board card extras) are JSONB — the same
 freedom localStorage gave us, now with indexes and constraints around it.
+
+MONEY IS INTEGER CENTS everywhere (`*_cents`). Floats accumulate rounding
+error under SUM, which is exactly what /finance/summary does; the suffix
+keeps the unit unmistakable at every call site. Only the raw localStorage
+dump in /sync/import speaks dollars, and it converts on the way in.
+`Card.hours` stays a float — it is a duration, not money.
 """
 
 from datetime import date, datetime
@@ -143,7 +149,7 @@ class Expense(Base, TimestampMixin):
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     user_id: Mapped[str] = mapped_column(String(64), ForeignKey("users.id"), index=True)
     desc: Mapped[str] = mapped_column(Text)
-    amount: Mapped[float] = mapped_column(Float)
+    amount_cents: Mapped[int] = mapped_column(Integer)
     cat: Mapped[str] = mapped_column(String(40), index=True)
     pay_method_id: Mapped[str | None] = mapped_column(String(64))
     spent_on: Mapped[date] = mapped_column(Date, index=True)
@@ -154,7 +160,7 @@ class Bill(Base, TimestampMixin):
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     user_id: Mapped[str] = mapped_column(String(64), ForeignKey("users.id"), index=True)
     title: Mapped[str] = mapped_column(Text)
-    amount: Mapped[float] = mapped_column(Float)
+    amount_cents: Mapped[int] = mapped_column(Integer)
     due: Mapped[date] = mapped_column(Date, index=True)
     paid: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     paid_on: Mapped[date | None] = mapped_column(Date)
@@ -166,7 +172,7 @@ class Income(Base, TimestampMixin):
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     user_id: Mapped[str] = mapped_column(String(64), ForeignKey("users.id"), index=True)
     source: Mapped[str] = mapped_column(Text)
-    amount: Mapped[float] = mapped_column(Float)
+    amount_cents: Mapped[int] = mapped_column(Integer)
     received_on: Mapped[date] = mapped_column(Date, index=True)
 
 
@@ -175,7 +181,7 @@ class Budget(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[str] = mapped_column(String(64), ForeignKey("users.id"), index=True)
     scope: Mapped[str] = mapped_column(String(40), default="overall")  # overall | category name
-    cap: Mapped[float] = mapped_column(Float)
+    cap_cents: Mapped[int] = mapped_column(Integer)
 
 
 class Goal(Base, TimestampMixin):
@@ -183,8 +189,8 @@ class Goal(Base, TimestampMixin):
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     user_id: Mapped[str] = mapped_column(String(64), ForeignKey("users.id"), index=True)
     name: Mapped[str] = mapped_column(Text)
-    target: Mapped[float] = mapped_column(Float)
-    saved: Mapped[float] = mapped_column(Float, default=0)
+    target_cents: Mapped[int] = mapped_column(Integer)
+    saved_cents: Mapped[int] = mapped_column(Integer, default=0)
 
 
 class CustomTag(Base):

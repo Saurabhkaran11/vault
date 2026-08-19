@@ -22,3 +22,4 @@ venv/
 # — but the per-feature skill files ARE part of the repo's documentation
 .claude/*
 !.claude/skills
+frontend/.claude/

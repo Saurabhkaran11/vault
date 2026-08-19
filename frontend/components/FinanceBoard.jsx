@@ -6,6 +6,7 @@ import FinanceAnalytics from "./FinanceAnalytics";
 import FinanceBudgets from "./FinanceBudgets";
 import FinanceGoals from "./FinanceGoals";
 import { askJSON, aiEnabled } from "@/lib/ai";
+import { mirror, toCents } from "@/lib/api";
 
 /* Finance — expenses, bills (with recurrence), income, budgets and goals.
  *
@@ -50,40 +51,40 @@ const dRel = (days) => { const t = new Date(); t.setDate(t.getDate() + days); re
 const monthStart = (offset) => { const t = new Date(); return new Date(t.getFullYear(), t.getMonth() + offset, 1).toISOString().slice(0, 10); };
 const sampleFinance = () => ({
   expenses: [
-    { id: "se1", desc: "Groceries — weekly run", amount: 82.4, cat: "Food", date: dRel(-1) },
-    { id: "se2", desc: "Coffee", amount: 4.5, cat: "Food", date: dRel(0) },
-    { id: "se3", desc: "Metro card top-up", amount: 25, cat: "Transport", date: dRel(-3) },
-    { id: "se4", desc: "Gym membership", amount: 45, cat: "Health", date: dRel(-6) },
-    { id: "se5", desc: "Movie night", amount: 28, cat: "Fun", date: dRel(-8) },
-    { id: "se6", desc: "Headphones", amount: 129, cat: "Shopping", date: dRel(-5) },
-    { id: "se7", desc: "Electricity bill", amount: 60, cat: "Bills", date: dRel(-12) },
-    { id: "se8", desc: "Groceries", amount: 76.1, cat: "Food", date: dRel(-27) },
-    { id: "se9", desc: "Fuel", amount: 40, cat: "Transport", date: dRel(-33) },
-    { id: "se10", desc: "Pharmacy", amount: 22, cat: "Health", date: dRel(-40) },
-    { id: "se11", desc: "Dinner out", amount: 54, cat: "Fun", date: dRel(-24) },
-    { id: "se12", desc: "T-shirt", amount: 30, cat: "Shopping", date: dRel(-36) },
-    { id: "se13", desc: "Groceries", amount: 68, cat: "Food", date: dRel(-60) },
-    { id: "se14", desc: "Taxi", amount: 18, cat: "Transport", date: dRel(-69) },
-    { id: "se15", desc: "Books", amount: 42, cat: "Shopping", date: dRel(-55) },
+    { id: uid(), desc: "Groceries — weekly run", amount: 82.4, cat: "Food", date: dRel(-1) },
+    { id: uid(), desc: "Coffee", amount: 4.5, cat: "Food", date: dRel(0) },
+    { id: uid(), desc: "Metro card top-up", amount: 25, cat: "Transport", date: dRel(-3) },
+    { id: uid(), desc: "Gym membership", amount: 45, cat: "Health", date: dRel(-6) },
+    { id: uid(), desc: "Movie night", amount: 28, cat: "Fun", date: dRel(-8) },
+    { id: uid(), desc: "Headphones", amount: 129, cat: "Shopping", date: dRel(-5) },
+    { id: uid(), desc: "Electricity bill", amount: 60, cat: "Bills", date: dRel(-12) },
+    { id: uid(), desc: "Groceries", amount: 76.1, cat: "Food", date: dRel(-27) },
+    { id: uid(), desc: "Fuel", amount: 40, cat: "Transport", date: dRel(-33) },
+    { id: uid(), desc: "Pharmacy", amount: 22, cat: "Health", date: dRel(-40) },
+    { id: uid(), desc: "Dinner out", amount: 54, cat: "Fun", date: dRel(-24) },
+    { id: uid(), desc: "T-shirt", amount: 30, cat: "Shopping", date: dRel(-36) },
+    { id: uid(), desc: "Groceries", amount: 68, cat: "Food", date: dRel(-60) },
+    { id: uid(), desc: "Taxi", amount: 18, cat: "Transport", date: dRel(-69) },
+    { id: uid(), desc: "Books", amount: 42, cat: "Shopping", date: dRel(-55) },
   ],
   bills: [
-    { id: "sb1", title: "Rent", amount: 1200, due: monthStart(1), paid: false, recur: "monthly" },
-    { id: "sb2", title: "Netflix", amount: 15.99, due: dRel(3), paid: false, recur: "monthly" },
-    { id: "sb3", title: "Credit card statement", amount: 430, due: dRel(2), paid: false, recur: null },
-    { id: "sb4", title: "Water bill", amount: 32, due: dRel(-4), paid: false, recur: null },
-    { id: "sb5", title: "Internet", amount: 39.99, due: dRel(-10), paid: true, paidOn: dRel(-10), recur: "monthly" },
-    { id: "sb6", title: "Internet", amount: 39.99, due: dRel(20), paid: false, recur: "monthly" },
+    { id: uid(), title: "Rent", amount: 1200, due: monthStart(1), paid: false, recur: "monthly" },
+    { id: uid(), title: "Netflix", amount: 15.99, due: dRel(3), paid: false, recur: "monthly" },
+    { id: uid(), title: "Credit card statement", amount: 430, due: dRel(2), paid: false, recur: null },
+    { id: uid(), title: "Water bill", amount: 32, due: dRel(-4), paid: false, recur: null },
+    { id: uid(), title: "Internet", amount: 39.99, due: dRel(-10), paid: true, paidOn: dRel(-10), recur: "monthly" },
+    { id: uid(), title: "Internet", amount: 39.99, due: dRel(20), paid: false, recur: "monthly" },
   ],
   incomes: [
-    { id: "si1", source: "Salary", amount: 4200, date: monthStart(0) },
-    { id: "si2", source: "Freelance — landing page", amount: 350, date: dRel(-7) },
-    { id: "si3", source: "Salary", amount: 4200, date: monthStart(-1) },
-    { id: "si4", source: "Salary", amount: 4200, date: monthStart(-2) },
+    { id: uid(), source: "Salary", amount: 4200, date: monthStart(0) },
+    { id: uid(), source: "Freelance — landing page", amount: 350, date: dRel(-7) },
+    { id: uid(), source: "Salary", amount: 4200, date: monthStart(-1) },
+    { id: uid(), source: "Salary", amount: 4200, date: monthStart(-2) },
   ],
   budgets: { overall: 2500, byCat: { Food: 300, Shopping: 150, Fun: 100, Transport: 80 } },
   goals: [
-    { id: "sg1", name: "MacBook Pro", target: 2000, saved: 750 },
-    { id: "sg2", name: "Emergency fund", target: 5000, saved: 3200 },
+    { id: uid(), name: "MacBook Pro", target: 2000, saved: 750 },
+    { id: uid(), name: "Emergency fund", target: 5000, saved: 3200 },
   ],
 });
 
@@ -96,8 +97,8 @@ export const PAY_KINDS = [
   ["wallet", "Wallet / UPI"], ["bank", "Bank transfer"],
 ];
 const DEFAULT_PAY_METHODS = [
-  { id: "pm-cash", name: "Cash", kind: "cash" },
-  { id: "pm-visa", name: "Visa ···· 4242", kind: "credit" },
+  { id: "pm-" + uid(), name: "Cash", kind: "cash" },
+  { id: "pm-" + uid(), name: "Visa ···· 4242", kind: "credit" },
 ];
 
 /* migrate any stored shape (v1 or partial) up to schema v2.
@@ -152,6 +153,18 @@ const parseAmount = (v) => {
   return Number.isFinite(a) && a > 0 ? Math.round(a * 100) / 100 : null;
 };
 
+/* ---------- backend mirroring (write-through; .claude/skills/finance-sync) ----------
+ * localStorage stays the working copy; when Settings → Backend sync is on,
+ * every handler below also fires a fire-and-forget mirror() call. These
+ * mappers rename fields per the backend-integration skill (pay →
+ * pay_method_id, date → spent_on/received_on, paidOn → paid_on) and
+ * normalize undefined → null so the JSON body is explicit. */
+const expToApi = (e) => ({ id: e.id, desc: e.desc, amount_cents: toCents(e.amount), cat: e.cat, pay_method_id: e.pay ?? null, spent_on: e.date });
+const billToApi = (b) => ({ id: b.id, title: b.title, amount_cents: toCents(b.amount), due: b.due, paid: !!b.paid, paid_on: b.paidOn ?? null, recur: b.recur ?? null });
+const incToApi = (i) => ({ id: i.id, source: i.source, amount_cents: toCents(i.amount), received_on: i.date });
+const pmToApi = (m) => ({ id: m.id, name: m.name, kind: m.kind });
+const goalToApi = (g) => ({ id: g.id, name: g.name, target_cents: toCents(g.target), saved_cents: toCents(g.saved ?? 0) });
+
 export default function FinanceBoard() {
   const [fin, setFin] = useState(seedFinance);
   const [hydrated, setHydrated] = useState(false);
@@ -197,7 +210,9 @@ export default function FinanceBoard() {
     const a = parseAmount(amount);
     if (!desc.trim() || !a) return;
     const payId = pay || methods[0]?.id;
-    setFin((f) => ({ ...f, expenses: [{ id: uid(), desc: desc.trim(), amount: a, cat, pay: payId, date: today() }, ...f.expenses] }));
+    const exp = { id: uid(), desc: desc.trim(), amount: a, cat, pay: payId, date: today() };
+    setFin((f) => ({ ...f, expenses: [exp, ...f.expenses] }));
+    mirror("/finance/expenses", { method: "POST", body: expToApi(exp) });
     setDesc(""); setAmount("");
   };
 
@@ -213,23 +228,32 @@ export default function FinanceBoard() {
   const addMethod = () => {
     const name = pmName.trim();
     if (!name) return;
-    setFin((f) => ({ ...f, payMethods: [...(f.payMethods || []), { id: uid(), name, kind: pmKind }] }));
+    const m = { id: uid(), name, kind: pmKind };
+    setFin((f) => ({ ...f, payMethods: [...(f.payMethods || []), m] }));
+    mirror("/finance/pay-methods", { method: "POST", body: pmToApi(m) });
     setPmName("");
   };
   const delMethod = (id) => {
     if (pmArm !== id) { setPmArm(id); return; }   // expenses keep their record; they just show "—" afterwards
     setFin((f) => ({ ...f, payMethods: f.payMethods.filter((m) => m.id !== id) }));
+    mirror(`/finance/pay-methods/${id}`, { method: "DELETE" });
     if (pay === id) setPay("");
     setPmArm(null);
   };
-  const delExpense = (id) => setFin((f) => ({ ...f, expenses: f.expenses.filter((e) => e.id !== id) }));
+  const delExpense = (id) => {
+    setFin((f) => ({ ...f, expenses: f.expenses.filter((e) => e.id !== id) }));
+    mirror(`/finance/expenses/${id}`, { method: "DELETE" });
+  };
   const saveExpEdit = () => {
     const a = parseAmount(editExp.amount);
     if (!editExp.desc.trim() || !a || !editExp.date) return;
+    const patch = { desc: editExp.desc.trim(), amount: a, cat: editExp.cat, date: editExp.date };
     setFin((f) => ({
       ...f,
-      expenses: f.expenses.map((e) => (e.id === editExp.id ? { ...e, desc: editExp.desc.trim(), amount: a, cat: editExp.cat, date: editExp.date } : e)),
+      expenses: f.expenses.map((e) => (e.id === editExp.id ? { ...e, ...patch } : e)),
     }));
+    const prev = fin.expenses.find((e) => e.id === editExp.id);
+    if (prev) mirror("/finance/expenses", { method: "POST", body: expToApi({ ...prev, ...patch }) });
     setEditExp(null);
   };
 
@@ -262,10 +286,15 @@ export default function FinanceBoard() {
   const addIncome = () => {
     const a = parseAmount(incAmount);
     if (!incSource.trim() || !a) return;
-    setFin((f) => ({ ...f, incomes: [{ id: uid(), source: incSource.trim(), amount: a, date: today() }, ...f.incomes] }));
+    const inc = { id: uid(), source: incSource.trim(), amount: a, date: today() };
+    setFin((f) => ({ ...f, incomes: [inc, ...f.incomes] }));
+    mirror("/finance/incomes", { method: "POST", body: incToApi(inc) });
     setIncSource(""); setIncAmount("");
   };
-  const delIncome = (id) => setFin((f) => ({ ...f, incomes: f.incomes.filter((i) => i.id !== id) }));
+  const delIncome = (id) => {
+    setFin((f) => ({ ...f, incomes: f.incomes.filter((i) => i.id !== id) }));
+    mirror(`/finance/incomes/${id}`, { method: "DELETE" });
+  };
   const incomeMonth = fin.incomes.filter((i) => i.date.startsWith(thisMonth)).reduce((a, i) => a + i.amount, 0);
   const incomesShown = fin.incomes.filter((i) => i.date.startsWith(month));
 
@@ -281,12 +310,15 @@ export default function FinanceBoard() {
   const addBill = () => {
     const a = parseAmount(bAmount);
     if (!bTitle.trim() || !a || !bDue) return;
-    setFin((f) => ({ ...f, bills: [...f.bills, { id: uid(), title: bTitle.trim(), amount: a, due: bDue, paid: false, recur: bRecur || null }] }));
+    const bill = { id: uid(), title: bTitle.trim(), amount: a, due: bDue, paid: false, recur: bRecur || null };
+    setFin((f) => ({ ...f, bills: [...f.bills, bill] }));
+    mirror("/finance/bills", { method: "POST", body: billToApi(bill) });
     setBTitle(""); setBAmount(""); setBDue(""); setBRecur("");
   };
 
   /* paying a recurring bill auto-schedules the next occurrence */
-  const setPaid = (id, paid) =>
+  const setPaid = (id, paid) => {
+    const bill = fin.bills.find((b) => b.id === id);
     setFin((f) => {
       const bill = f.bills.find((b) => b.id === id);
       if (!bill) return f;
@@ -298,6 +330,17 @@ export default function FinanceBoard() {
       }
       return { ...f, bills };
     });
+    if (!bill) return;
+    if (paid) {
+      /* the server owns recurrence: /pay marks the bill paid AND schedules
+       * the next occurrence itself — do NOT also upsert the local next bill
+       * (local/server next-occurrence ids differ this phase; the local copy
+       * above keeps offline mode working). */
+      mirror(`/finance/bills/${id}/pay`, { method: "POST" });
+    } else {
+      mirror("/finance/bills", { method: "POST", body: billToApi({ ...bill, paid: false, paidOn: undefined }) });
+    }
+  };
 
   const [armBill, setArmBill] = useState(null);   // bill id awaiting click-again delete confirm
   useEffect(() => {
@@ -308,15 +351,19 @@ export default function FinanceBoard() {
   const delBill = (id) => {
     if (armBill !== id) { setArmBill(id); return; }   // no window.confirm — blocked in embedded browsers
     setFin((f) => ({ ...f, bills: f.bills.filter((b) => b.id !== id) }));
+    mirror(`/finance/bills/${id}`, { method: "DELETE" });
     setArmBill(null);
   };
   const saveBillEdit = () => {
     const a = parseAmount(editBill.amount);
     if (!editBill.title.trim() || !a || !editBill.due) return;
+    const patch = { title: editBill.title.trim(), amount: a, due: editBill.due, recur: editBill.recur || null };
     setFin((f) => ({
       ...f,
-      bills: f.bills.map((b) => (b.id === editBill.id ? { ...b, title: editBill.title.trim(), amount: a, due: editBill.due, recur: editBill.recur || null } : b)),
+      bills: f.bills.map((b) => (b.id === editBill.id ? { ...b, ...patch } : b)),
     }));
+    const prev = fin.bills.find((b) => b.id === editBill.id);
+    if (prev) mirror("/finance/bills", { method: "POST", body: billToApi({ ...prev, ...patch }) });
     setEditBill(null);
   };
 
@@ -337,6 +384,34 @@ export default function FinanceBoard() {
   const outMonth = spentMonth + paidMonth;
   const savedMonth = incomeMonth - outMonth;
   const savingsRate = incomeMonth > 0 ? Math.round((savedMonth / incomeMonth) * 100) : null;
+
+  /* ---------- budgets + goals (children own the UI; persistence + mirroring live here) */
+  const changeBudgets = (budgets) => {
+    const prev = fin.budgets || { overall: null, byCat: {} };
+    setFin((f) => ({ ...f, budgets }));
+    /* PUT per changed scope; a cleared cap mirrors as 0 (BudgetIn.cap_cents
+     * is required — the UI already treats a 0/absent cap as "no cap"). */
+    if ((prev.overall ?? null) !== (budgets.overall ?? null))
+      mirror("/finance/budgets", { method: "PUT", body: { scope: "overall", cap_cents: toCents(budgets.overall ?? 0) } });
+    const cats = new Set([...Object.keys(prev.byCat || {}), ...Object.keys(budgets.byCat || {})]);
+    cats.forEach((c) => {
+      if ((prev.byCat?.[c] ?? null) !== (budgets.byCat?.[c] ?? null))
+        mirror("/finance/budgets", { method: "PUT", body: { scope: c, cap_cents: toCents(budgets.byCat?.[c] ?? 0) } });
+    });
+  };
+  const changeGoals = (goals) => {
+    const prev = fin.goals || [];
+    setFin((f) => ({ ...f, goals }));
+    /* FinanceGoals hands back the whole next array — diff by id */
+    const prevById = new Map(prev.map((g) => [g.id, g]));
+    goals.forEach((g) => {
+      const p = prevById.get(g.id);
+      if (!p || p.name !== g.name || p.target !== g.target || p.saved !== g.saved)
+        mirror("/finance/goals", { method: "POST", body: goalToApi(g) });
+    });
+    const kept = new Set(goals.map((g) => g.id));
+    prev.forEach((g) => { if (!kept.has(g.id)) mirror(`/finance/goals/${g.id}`, { method: "DELETE" }); });
+  };
 
   /* ---------- CSV export (spreadsheet-friendly backup) */
   const exportCSV = () => {
@@ -387,15 +462,21 @@ export default function FinanceBoard() {
       if (!(out.amount > 0)) throw new Error("Couldn't find an amount in that.");
       if (out.kind === "bill") {
         const due = out.due || out.date || today();
-        setFin((f) => ({ ...f, bills: [...f.bills, { id: uid(), title: out.description, amount: out.amount, due, paid: false, recur: out.recurrence || null }] }));
+        const bill = { id: uid(), title: out.description, amount: out.amount, due, paid: false, recur: out.recurrence || null };
+        setFin((f) => ({ ...f, bills: [...f.bills, bill] }));
+        mirror("/finance/bills", { method: "POST", body: billToApi(bill) });
         setSmartMsg({ ok: true, text: `Added ${out.recurrence ? out.recurrence + " " : ""}bill: ${out.description} — ${fmt(out.amount)} due ${fmtStamp(due)}` });
       } else if (out.kind === "income") {
         const date = out.date || today();
-        setFin((f) => ({ ...f, incomes: [{ id: uid(), source: out.description, amount: out.amount, date }, ...f.incomes] }));
+        const inc = { id: uid(), source: out.description, amount: out.amount, date };
+        setFin((f) => ({ ...f, incomes: [inc, ...f.incomes] }));
+        mirror("/finance/incomes", { method: "POST", body: incToApi(inc) });
         setSmartMsg({ ok: true, text: `Added income: ${out.description} — ${fmt(out.amount)} (${fmtStamp(date)})` });
       } else {
         const date = out.date || today();
-        setFin((f) => ({ ...f, expenses: [{ id: uid(), desc: out.description, amount: out.amount, cat: out.category || "Other", date }, ...f.expenses] }));
+        const exp = { id: uid(), desc: out.description, amount: out.amount, cat: out.category || "Other", date };
+        setFin((f) => ({ ...f, expenses: [exp, ...f.expenses] }));
+        mirror("/finance/expenses", { method: "POST", body: expToApi(exp) });
         setSmartMsg({ ok: true, text: `Added expense: ${out.description} — ${fmt(out.amount)} (${out.category || "Other"}, ${fmtStamp(date)})` });
       }
       setSmartQ("");
@@ -588,9 +669,9 @@ export default function FinanceBoard() {
       {/* budgets + savings goals — all forward planning lives on this tab */}
       <FinanceBudgets budgets={fin.budgets} spentByCat={spentByCat} spentMonth={spentMonth} fmt={fmt}
         categories={CATEGORIES}
-        onChange={(budgets) => setFin((f) => ({ ...f, budgets }))} />
+        onChange={changeBudgets} />
       <FinanceGoals goals={fin.goals} fmt={fmt}
-        onChange={(goals) => setFin((f) => ({ ...f, goals }))} />
+        onChange={changeGoals} />
       </>)}
 
       {tab === "board" && (<>
