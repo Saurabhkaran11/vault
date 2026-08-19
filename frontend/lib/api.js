@@ -40,11 +40,50 @@ export const backendOn = () => {
 export const toCents = (v) => Math.round((Number(v) || 0) * 100);
 export const fromCents = (c) => (Number(c) || 0) / 100;
 
+/* ---------------------------------------------------------------- IDENTITY
+ *
+ * Two ways to say who you are, matching the backend's two AUTH_MODEs:
+ *
+ *   Bearer token  — the real one. The backend verifies it against the
+ *                   provider's JWKS and takes `sub` as the user id.
+ *   X-User-Id     — the dev seam. Unverifiable, so the backend refuses to
+ *                   run this way on a public origin.
+ *
+ * lib/api.js is not a React component, so it cannot call Clerk's useAuth()
+ * hook itself. <AuthBridge> (components/AuthBridge.jsx) hands the getter
+ * down once on mount; until something does, we fall back to the header and
+ * the app behaves exactly as it did before auth existed. That fallback is
+ * what keeps local development working with no Clerk keys at all.
+ */
+let tokenGetter = null;
+
+export function setTokenGetter(fn) {
+  tokenGetter = fn;
+}
+
+export function hasVerifiedIdentity() {
+  return typeof tokenGetter === "function";
+}
+
+async function authHeaders() {
+  if (tokenGetter) {
+    try {
+      const token = await tokenGetter();
+      if (token) return { Authorization: `Bearer ${token}` };
+    } catch {
+      /* Signed out, or the token refresh failed. Fall through to the dev
+         header rather than firing an un-authenticated request that the
+         backend would reject anyway. */
+    }
+  }
+  return { "X-User-Id": getBackend().userId || "demo" };
+}
+
 export async function api(path, { method = "GET", body } = {}) {
   const b = getBackend();
   const res = await fetch(`${b.url.replace(/\/$/, "")}${path}`, {
     method,
-    headers: { "Content-Type": "application/json", "X-User-Id": b.userId || "demo" },
+    headers: { "Content-Type": "application/json", ...(await authHeaders()) },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   if (!res.ok) {

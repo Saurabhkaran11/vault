@@ -1,4 +1,6 @@
 import "./globals.css";
+import { authEnabled } from "@/lib/authConfig";
+import AuthGate from "@/components/AuthGate";
 
 export const metadata = {
   title: "Vault — everything, one place",
@@ -14,10 +16,28 @@ export const viewport = {
   themeColor: "#0F2237",
 };
 
-export default function RootLayout({ children }) {
+/* Clerk is imported lazily and only mounted when a publishable key exists.
+ * Vault is local-first: with no key the app runs exactly as it always has,
+ * signed into nothing, storing everything in this browser. Importing
+ * ClerkProvider unconditionally would make the whole app depend on an
+ * account existing, which is the opposite of that promise. */
+export default async function RootLayout({ children }) {
+  if (!authEnabled()) {
+    return (
+      <html lang="en">
+        <body>{children}</body>
+      </html>
+    );
+  }
+
+  const { ClerkProvider } = await import("@clerk/nextjs");
   return (
-    <html lang="en">
-      <body>{children}</body>
-    </html>
+    <ClerkProvider>
+      <html lang="en">
+        <body>
+          <AuthGate>{children}</AuthGate>
+        </body>
+      </html>
+    </ClerkProvider>
   );
 }
