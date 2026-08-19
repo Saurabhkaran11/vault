@@ -1,0 +1,291 @@
+"use client";
+
+import React, { useMemo, useState } from "react";
+import { today } from "@/lib/seed";
+import { askText, aiEnabled } from "@/lib/ai";
+
+/* Finance analytics: spending reports over daily / weekly / monthly / yearly
+   periods, rendered as the chart type the user picks — bar, line, area, or
+   donut (share by category). Pure SVG, consistent with the dashboard charts. */
+
+const PERIODS = [
+  { key: "daily", label: "Daily" },
+  { key: "weekly", label: "Weekly" },
+  { key: "monthly", label: "Monthly" },
+  { key: "yearly", label: "Yearly" },
+];
+
+const CHARTS = [
+  ["bar", "▮ Bar"],
+  ["line", "∿ Line"],
+  ["area", "◢ Area"],
+  ["donut", "◔ Donut"],
+];
+
+/* colors cycled across categories in the donut + legend */
+const CAT_COLORS = ["var(--moss)", "var(--azure)", "var(--gold)", "var(--blue)", "var(--violet)", "var(--ink-soft)", "#5B8DC9"];
+
+const iso = (d) => d.toISOString().slice(0, 10);
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/* aggregate expenses into time buckets for the chosen period */
+function makeBuckets(expenses, period) {
+  const now = new Date(today() + "T00:00:00");
+  const buckets = [];
+  const push = (label, from, to) => buckets.push({ label, from, to, total: 0 });
+
+  if (period === "daily") {
+    for (let i = 13; i >= 0; i--) {
+      const d = new Date(now); d.setDate(now.getDate() - i);
+      push(`${d.getDate()}/${d.getMonth() + 1}`, iso(d), iso(d));
+    }
+  } else if (period === "weekly") {
+    for (let i = 7; i >= 0; i--) {
+      const end = new Date(now); end.setDate(now.getDate() - i * 7);
+      const start = new Date(end); start.setDate(end.getDate() - 6);
+      push(`${start.getDate()}/${start.getMonth() + 1}`, iso(start), iso(end));
+    }
+  } else if (period === "monthly") {
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const end = new Date(now.getFullYear(), now.getMonth() - i + 1, 0);
+      push(`${MONTHS[d.getMonth()]}${d.getMonth() === 0 ? ` '${String(d.getFullYear()).slice(2)}` : ""}`, iso(d), iso(end));
+    }
+  } else { // yearly — every year that has data, ending this year
+    const years = [...new Set([...expenses.map((e) => +e.date.slice(0, 4)), now.getFullYear()])].sort();
+    years.forEach((y) => push(String(y), `${y}-01-01`, `${y}-12-31`));
+  }
+
+  expenses.forEach((e) => {
+    const b = buckets.find((x) => e.date >= x.from && e.date <= x.to);
+    if (b) b.total += e.amount;
+  });
+  return buckets;
+}
+
+function TimeChart({ buckets, type, fmt }) {
+  const W = 720, H = 240, padX = 34, padT = 26, padB = 34;
+  const n = buckets.length;
+  const max = Math.max(1, ...buckets.map((b) => b.total));
+  const innerW = W - padX * 2, innerH = H - padT - padB;
+  const x = (i) => padX + (n === 1 ? innerW / 2 : (i * innerW) / (n - 1));
+  const y = (v) => padT + innerH - (v / max) * innerH;
+  const labelEvery = n > 10 ? 2 : 1;
+
+  const pts = buckets.map((b, i) => `${x(i)},${y(b.total)}`).join(" ");
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" role="img" aria-label="Spending over time">
+      {/* baseline + max gridline */}
+      <line x1={padX} y1={padT + innerH} x2={W - padX} y2={padT + innerH} stroke="var(--line)" strokeWidth="1" />
+      <line x1={padX} y1={padT} x2={W - padX} y2={padT} stroke="var(--line)" strokeWidth="1" strokeDasharray="4 5" />
+      <text x={padX - 4} y={padT + 4} textAnchor="end" fontSize="9.5" fontFamily="IBM Plex Mono" fill="var(--ink-soft)">{fmt(max)}</text>
+
+      {type === "bar" && buckets.map((b, i) => {
+        const bw = Math.min(44, (innerW / n) * 0.62);
+        return (
+          <g key={i}>
+            <rect x={x(i) - bw / 2} y={y(b.total)} width={bw} height={Math.max(padT + innerH - y(b.total), b.total ? 2 : 1)} rx="4"
+              fill={i === n - 1 ? "var(--stamp)" : "var(--moss)"} opacity={b.total ? 1 : 0.22} />
+            {b.total > 0 && <text x={x(i)} y={y(b.total) - 5} textAnchor="middle" fontSize="9.5" fontFamily="IBM Plex Mono" fill="var(--ink)">{fmt(b.total)}</text>}
+          </g>
+        );
+      })}
+
+      {type === "area" && (
+        <polygon points={`${x(0)},${padT + innerH} ${pts} ${x(n - 1)},${padT + innerH}`}
+          fill="var(--moss)" opacity="0.18" />
+      )}
+      {(type === "line" || type === "area") && (
+        <>
+          <polyline points={pts} fill="none" stroke="var(--moss)" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+          {buckets.map((b, i) => (
+            <g key={i}>
+              <circle cx={x(i)} cy={y(b.total)} r={b.total ? 4 : 2.5} fill={i === n - 1 ? "var(--stamp)" : "var(--moss)"} stroke="var(--panel)" strokeWidth="1.5" />
+              {b.total > 0 && <text x={x(i)} y={y(b.total) - 9} textAnchor="middle" fontSize="9.5" fontFamily="IBM Plex Mono" fill="var(--ink)">{fmt(b.total)}</text>}
+            </g>
+          ))}
+        </>
+      )}
+
+      {buckets.map((b, i) => (
+        i % labelEvery === 0
+          ? <text key={`l${i}`} x={x(i)} y={H - 10} textAnchor="middle" fontSize="9.5" fontFamily="IBM Plex Mono" fill="var(--ink-soft)">{b.label}</text>
+          : null
+      ))}
+    </svg>
+  );
+}
+
+function CategoryDonut({ slices, total, fmt }) {
+  let acc = 0;
+  const R = 54, C = 2 * Math.PI * R;
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 26, flexWrap: "wrap" }}>
+      <svg viewBox="0 0 150 150" width="170" role="img" aria-label="Spending share by category">
+        {slices.map(([cat, v], i) => {
+          const frac = v / Math.max(1, total), off = acc; acc += frac;
+          return (
+            <circle key={cat} cx="75" cy="75" r={R} fill="none" stroke={CAT_COLORS[i % CAT_COLORS.length]} strokeWidth="20"
+              strokeDasharray={`${frac * C} ${C}`} strokeDashoffset={-off * C} transform="rotate(-90 75 75)" />
+          );
+        })}
+        <text x="75" y="72" textAnchor="middle" fontFamily="Fraunces" fontSize="20" fontWeight="650" fill="var(--ink)">{fmt(total)}</text>
+        <text x="75" y="90" textAnchor="middle" fontFamily="IBM Plex Mono" fontSize="8.5" letterSpacing="1.5" fill="var(--ink-soft)">TOTAL</text>
+      </svg>
+      <div style={{ fontSize: 13, lineHeight: 2.1, flex: 1, minWidth: 220 }}>
+        {slices.map(([cat, v], i) => (
+          <div key={cat} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ width: 10, height: 10, borderRadius: 3, background: CAT_COLORS[i % CAT_COLORS.length], flexShrink: 0 }} />
+            <span style={{ color: "var(--ink-soft)" }}>{cat}</span>
+            <span className="mono" style={{ marginLeft: "auto", fontSize: 12 }}>{fmt(v)} · {Math.round((v / Math.max(1, total)) * 100)}%</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export default function FinanceAnalytics({ fin, fmt, spentByCat = {}, savingsRate = null, recurringMonthly = 0 }) {
+  const expenses = fin.expenses;
+  const budgets = fin.budgets || { overall: null, byCat: {} };
+  const [period, setPeriod] = useState("daily");
+  const [chart, setChart] = useState("bar");
+
+  /* ✦ AI monthly review */
+  const [review, setReview] = useState(null);
+  const [reviewBusy, setReviewBusy] = useState(false);
+  const genReview = async () => {
+    if (reviewBusy) return;
+    setReviewBusy(true); setReview(null);
+    const m = today().slice(0, 7);
+    const spent = expenses.filter((e) => e.date.startsWith(m)).reduce((a, e) => a + e.amount, 0);
+    const income = (fin.incomes || []).filter((i) => i.date.startsWith(m)).reduce((a, i) => a + i.amount, 0);
+    const paidBills = (fin.bills || []).filter((b) => b.paid && (b.paidOn || "").startsWith(m));
+    const pendingBills = (fin.bills || []).filter((b) => !b.paid);
+    const catLines = Object.entries(spentByCat).map(([c, v]) => {
+      const cap = budgets.byCat?.[c];
+      return `${c}: ${fmt(v)}${cap ? ` (budget ${fmt(cap)}${v > cap ? " — OVER" : ""})` : ""}`;
+    }).join("; ");
+    const stats =
+      `Month: ${m}. Income: ${fmt(income)}. Expenses: ${fmt(spent)}. Bills paid: ${paidBills.length} totaling ${fmt(paidBills.reduce((a, b) => a + b.amount, 0))}. ` +
+      `Pending bills: ${pendingBills.map((b) => `${b.title} ${fmt(b.amount)} due ${b.due}`).join("; ") || "none"}. ` +
+      `Recurring commitments ≈ ${fmt(Math.round(recurringMonthly))}/month. ` +
+      `Overall budget: ${budgets.overall ? fmt(budgets.overall) : "not set"}. By category: ${catLines || "no expenses"}. ` +
+      `Savings rate: ${savingsRate !== null ? savingsRate + "%" : "unknown (no income logged)"}. ` +
+      `Goals: ${(fin.goals || []).map((g) => `${g.name} ${fmt(g.saved)}/${fmt(g.target)}`).join("; ") || "none"}.`;
+    try {
+      setReview(await askText(
+        `Here are my finances for this month:\n\n${stats}\n\nWrite my monthly money review.`,
+        { system: "You are a pragmatic personal-finance coach. Write at most 3 short paragraphs: where the money went this month (name the biggest categories and any budget overruns); the pending/recurring picture and savings rate; one specific, doable change for next month. Plain text, direct, no headings, no generic advice." }
+      ));
+    } catch (e) {
+      setReview(`⚠ ${e.message}`);
+    } finally {
+      setReviewBusy(false);
+    }
+  };
+
+  const buckets = useMemo(() => makeBuckets(expenses, period), [expenses, period]);
+  const rangeFrom = buckets[0]?.from;
+  const inRange = useMemo(() => expenses.filter((e) => rangeFrom && e.date >= rangeFrom), [expenses, rangeFrom]);
+
+  const total = inRange.reduce((a, e) => a + e.amount, 0);
+  const active = buckets.filter((b) => b.total > 0).length;
+  const avg = active ? total / active : 0;
+  const top = buckets.reduce((m, b) => (b.total > m.total ? b : m), { total: 0, label: "—" });
+
+  const slices = useMemo(() => {
+    const map = {};
+    inRange.forEach((e) => { map[e.cat] = (map[e.cat] || 0) + e.amount; });
+    return Object.entries(map).sort((a, b) => b[1] - a[1]);
+  }, [inRange]);
+
+  const periodName = PERIODS.find((p) => p.key === period)?.label;
+
+  /* local insights: this month vs the average of the previous 3 months */
+  const insights = useMemo(() => {
+    const now = new Date(today() + "T00:00:00");
+    const monthKey = (d) => d.toISOString().slice(0, 7);
+    const thisM = monthKey(now);
+    const prev = [1, 2, 3].map((i) => monthKey(new Date(now.getFullYear(), now.getMonth() - i, 15)));
+    const sum = (fil) => expenses.filter(fil).reduce((a, e) => a + e.amount, 0);
+    const out = [];
+    const totalNow = sum((e) => e.date.startsWith(thisM));
+    const totalPrevAvg = prev.reduce((a, m) => a + sum((e) => e.date.startsWith(m)), 0) / 3;
+    if (totalPrevAvg > 0 && totalNow > 0) {
+      const d = Math.round(((totalNow - totalPrevAvg) / totalPrevAvg) * 100);
+      if (Math.abs(d) >= 15) out.push(`Overall spending is ${Math.abs(d)}% ${d > 0 ? "above" : "below"} your 3-month average.`);
+    }
+    const cats = [...new Set(expenses.map((e) => e.cat))];
+    for (const c of cats) {
+      const nowC = sum((e) => e.cat === c && e.date.startsWith(thisM));
+      const avgC = prev.reduce((a, m) => a + sum((e) => e.cat === c && e.date.startsWith(m)), 0) / 3;
+      if (avgC > 0 && nowC > avgC * 1.3 && nowC - avgC > 1) {
+        out.push(`${c} is ${Math.round(((nowC - avgC) / avgC) * 100)}% above its 3-month average (${fmt(nowC)} vs ~${fmt(avgC)}).`);
+      }
+    }
+    /* budget overruns */
+    for (const [c, cap] of Object.entries(budgets.byCat || {})) {
+      const nowC = spentByCat[c] || 0;
+      if (cap > 0 && nowC > cap) out.push(`${c} is over its ${fmt(cap)} budget — ${fmt(nowC)} so far this month.`);
+    }
+    if (budgets.overall > 0 && totalNow > budgets.overall)
+      out.push(`Overall spending (${fmt(totalNow)}) has passed your ${fmt(budgets.overall)} monthly budget.`);
+    if (savingsRate !== null && savingsRate < 0)
+      out.push(`You've spent more than you earned this month (savings rate ${savingsRate}%).`);
+    return out.slice(0, 5);
+  }, [expenses, fmt, budgets, spentByCat, savingsRate]);
+
+  return (
+    <div className="card">
+      <div className="fanal-head">
+        <div className="doctabs" role="tablist" aria-label="Report period">
+          {PERIODS.map((p) => (
+            <button key={p.key} className={period === p.key ? "on" : ""} role="tab"
+              aria-selected={period === p.key} onClick={() => setPeriod(p.key)}>{p.label}</button>
+          ))}
+        </div>
+        <div className="charttabs" role="group" aria-label="Chart type">
+          {CHARTS.map(([k, label]) => (
+            <button key={k} className={chart === k ? "on" : ""}
+              aria-pressed={chart === k} onClick={() => setChart(k)}
+              title={k === "donut" ? "Share of spending by category" : `${label.slice(2)} chart over time`}>
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="fanal-stats">
+        <span><b>{fmt(total)}</b> total in this {periodName.toLowerCase()} range</span>
+        <span><b>{fmt(avg)}</b> avg per active {period === "daily" ? "day" : period === "weekly" ? "week" : period === "monthly" ? "month" : "year"}</span>
+        <span>peak <b>{fmt(top.total)}</b>{top.total > 0 ? ` (${top.label})` : ""}</span>
+      </div>
+
+      {insights.length > 0 && (
+        <div className="finsights">
+          {insights.map((s, i) => <div key={i} className="finsight">◆ {s}</div>)}
+        </div>
+      )}
+
+      <div className="fanal-review">
+        <button className="aibtn" disabled={reviewBusy || !aiEnabled()} onClick={genReview}
+          title={aiEnabled() ? "Claude reviews this month's numbers and suggests one change" : "Needs an API key — Settings → AI"}>
+          {reviewBusy ? "Reviewing…" : review ? "✦ Regenerate monthly review" : "✦ AI monthly review"}
+        </button>
+        {review && <div className="digest" style={{ marginTop: 10 }}>{review}</div>}
+      </div>
+
+      {expenses.length === 0 ? (
+        <div className="empty">No expenses logged yet — add some on the Board tab and your reports light up here.</div>
+      ) : chart === "donut" ? (
+        slices.length
+          ? <CategoryDonut slices={slices} total={total} fmt={fmt} />
+          : <div className="empty">Nothing in this range yet — switch to a longer period.</div>
+      ) : (
+        <TimeChart buckets={buckets} type={chart} fmt={fmt} />
+      )}
+    </div>
+  );
+}

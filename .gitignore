@@ -1,0 +1,22 @@
+# node / next
+node_modules/
+.next/
+dist/
+*.local
+npm-debug.log*
+
+# python / fastapi
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+.pytest_cache/
+
+# os / editor
+.DS_Store
+.idea/
+.vscode/
+
+# local claude session config (keep launch.json out of the product repo)
+.claude/

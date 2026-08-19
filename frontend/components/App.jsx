@@ -1,0 +1,1713 @@
+"use client";
+
+import React, { useEffect, useRef, useState } from "react";
+import { SECTIONS, fmtStamp, daysAgo, today } from "@/lib/seed";
+import { useStore } from "@/hooks/useStore";
+import { WeeklyBars, Donut } from "./Charts";
+import GraphView from "./GraphView";
+import ItemRow, { TagAdder } from "./ItemRow";
+import { Ic } from "./Icons";
+import QuickCapture from "./QuickCapture";
+import { initOnboarding, setOB, startClean, WelcomeModal, ChecklistCard } from "./Onboarding";
+import { KEY_ACTIONS, NAV_ACTIONS, DEFAULT_KEYS, getKeymap, setKeymap, resetKeymap, validateKey } from "@/lib/keymap";
+import { getCustomTags, addCustomTag, removeCustomTag, normalizeTag } from "@/lib/tags";
+import { REPORTS, downloadReport, openReport } from "@/lib/report";
+import { downloadICS } from "@/lib/ics";
+import { detectCloud, cloudTitle } from "@/lib/cloud";
+import AddForm from "./AddForm";
+import CommandPalette from "./CommandPalette";
+import ShortcutsHelp from "./ShortcutsHelp";
+import NoteBlocks from "./NoteBlocks";
+import TodoBoard from "./TodoBoard";
+import ProjectBoard from "./ProjectBoard";
+import CustomBoards from "./CustomBoards";
+import FinanceBoard from "./FinanceBoard";
+import AskVault from "./AskVault";
+import { emptyBlock } from "./NoteBlocks";
+import { AI_MODELS, OSS_PRESETS, OSS_MODEL_SUGGESTIONS, getAIConfig, setAIConfig, aiEnabled, askText, askJSON } from "@/lib/ai";
+
+/* flatten a note's blocks to plain text (for AI prompts + similarity) */
+const flatText = (b) => {
+  if (!b) return "";
+  const parts = [b.text || "", b.title || ""];
+  if (b.kind === "table" && b.rows) parts.push(b.rows.flat().join(" | "));
+  if (b.kind === "page" && b.blocks) parts.push(b.blocks.map(flatText).join("\n"));
+  return parts.filter(Boolean).join("\n");
+};
+const noteToText = (it) =>
+  `${it.title}\n${it.meta || ""}\n${(it.blocks || []).map(flatText).join("\n")}`.slice(0, 6000);
+
+/* Cross-feature insights for the dashboard: one compact card per feature,
+ * each answering a single question ("how far along am I?"). Reads the other
+ * features' stores directly — same seams the backend will replace later. */
+const CUR_SYM = { USD: "$", EUR: "€", GBP: "£", INR: "₹", JPY: "¥", CAD: "C$", AUD: "A$" };
+function buildInsights(items, tasks, fin, t0) {
+  // reading (library)
+  const books = items.filter((i) => i.type === "book");
+  const reading = books.filter((b) => (b.progress || 0) > 0 && (b.progress || 0) < 100);
+  const avgProg = reading.length ? Math.round(reading.reduce((a, b) => a + b.progress, 0) / reading.length) : 0;
+  // watching (youtube)
+  const vids = items.filter((i) => i.type === "video");
+  const vidsDone = vids.filter((v) => v.status === "Done").length;
+  // to-dos
+  const doneWeek = tasks.filter((t) => t.done && t.doneAt && daysAgo(t.doneAt) <= 7).length;
+  const openTasks = tasks.filter((t) => !t.done).length;
+  // money (this month vs overall budget)
+  const ym = t0.slice(0, 7);
+  const monthExp = (fin.expenses || []).filter((e) => (e.date || "").startsWith(ym));
+  const spent = monthExp.reduce((a, e) => a + (+e.amount || 0), 0);
+  const budget = +(fin.budgets?.overall) || 0;
+  const sym = CUR_SYM[fin.currency] || "$";
+  const byCat = {};
+  monthExp.forEach((e) => { const c = e.cat || "Other"; byCat[c] = (byCat[c] || 0) + (+e.amount || 0); });
+  const topCats = Object.entries(byCat).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([cat, amt]) => ({ cat, amt }));
+  // saves this week vs last week (for the weekly chart caption)
+  const savedNow = items.filter((i) => daysAgo(i.date) <= 7).length;
+  const savedPrev = items.filter((i) => { const d = daysAgo(i.date); return d > 7 && d <= 14; }).length;
+  // boards (cards in a Done-ish column vs all cards)
+  let boards = [];
+  try { boards = (JSON.parse(localStorage.getItem("vault.boards.v1") || "{}").boards) || []; } catch {}
+  const cols = boards.flatMap((b) => b.cols || []);
+  const cardsTotal = cols.reduce((a, c) => a + c.cards.length, 0);
+  const cardsDone = cols.filter((c) => /done|complete|shipped|finished/i.test(c.title)).reduce((a, c) => a + c.cards.length, 0);
+  // 7-day activity strip + streak (saves, tasks done, expenses logged)
+  const days = [...Array(7)].map((_, k) => {
+    const d = new Date(); d.setDate(d.getDate() - (6 - k));
+    const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    const n = items.filter((i) => i.date === iso).length
+      + tasks.filter((t) => t.done && t.doneAt === iso).length
+      + (fin.expenses || []).filter((e) => e.date === iso).length;
+    return { iso, n, wd: "SMTWTFS"[d.getDay()] };
+  });
+  let streak = 0;
+  for (let k = days.length - 1; k >= 0 && days[k].n > 0; k--) streak++;
+  return {
+    reading: { count: reading.length, total: books.length, pct: avgProg },
+    watching: { done: vidsDone, total: vids.length, pct: vids.length ? Math.round((vidsDone / vids.length) * 100) : 0 },
+    todos: { doneWeek, open: openTasks, pct: (doneWeek + openTasks) ? Math.round((doneWeek / (doneWeek + openTasks)) * 100) : 0 },
+    money: { spent, budget, sym, topCats, pct: budget ? Math.round((spent / budget) * 100) : 0 },
+    trend: { savedNow, savedPrev },
+    usage: {
+      todoDates: tasks.filter((t) => t.done && t.doneAt).map((t) => t.doneAt),
+      expenseDates: (fin.expenses || []).map((e) => e.date),
+    },
+    boards: { done: cardsDone, total: cardsTotal, count: boards.length, pct: cardsTotal ? Math.round((cardsDone / cardsTotal) * 100) : 0 },
+    days, streak,
+  };
+}
+import { TEMPLATES, templateStats, instantiateTemplate } from "@/lib/templates";
+
+/* Clean read-only rendering of note blocks — the "Read" view. */
+function ReadBlocks({ blocks }) {
+  if (!blocks.length) return <p style={{ color: "var(--ink-soft)" }}>Nothing written yet — switch to ✎ Edit to start.</p>;
+  return (
+    <div className="readblocks">
+      {blocks.map((b) => {
+        const ml = { marginLeft: (b.indent || 0) * 20 };
+        if (b.kind === "heading") return b.text?.trim() ? <h3 key={b.id} className="display">{b.text}</h3> : null;
+        if (b.kind === "todo") return (
+          <div key={b.id} className="rb-todo" style={ml}>
+            <span aria-hidden="true">{b.done ? "☑" : "☐"}</span>
+            <span style={b.done ? { textDecoration: "line-through", opacity: 0.55 } : undefined}>{b.text}</span>
+          </div>
+        );
+        if (b.kind === "bullet") return b.text?.trim() ? <div key={b.id} className="rb-bullet" style={ml}>• {b.text}</div> : null;
+        if (b.kind === "table") return (
+          <table key={b.id} className="btable rb-table"><tbody>
+            {b.rows.map((r, ri) => <tr key={ri}>{r.map((c, ci) => <td key={ci} style={{ padding: "6px 9px" }}>{c}</td>)}</tr>)}
+          </tbody></table>
+        );
+        if (b.kind === "image") return b.src ? <img key={b.id} className="bimg" src={b.src} alt={b.name || "Embedded image"} /> : null;
+        if (b.kind === "page") return (
+          <div key={b.id} className="rb-page">
+            <div className="rb-pagetitle">❐ {b.title || "Untitled page"}</div>
+            <ReadBlocks blocks={b.blocks || []} />
+          </div>
+        );
+        return b.text?.trim() ? <p key={b.id} style={ml}>{b.text}</p> : null;
+      })}
+    </div>
+  );
+}
+
+/* Full-page note/document view — open any note as its own page,
+   Notion-style: big editable title, meta line, and the block editor. */
+function NotePage({ it, onBack, onUpdate, onTag, folders = [], allItems = [], onGoto }) {
+  const s = SECTIONS[it.type];
+  const [aiBusy, setAiBusy] = useState(null);   // "summary" | "todos" | "continue"
+  const [aiErr, setAiErr] = useState(null);
+  const [dateEdit, setDateEdit] = useState(false);
+  const [pageMode, setPageMode] = useState("edit"); // edit | read
+
+  /* related items — local similarity (shared tags + title word overlap), no API needed */
+  const related = allItems
+    .filter((x) => x.id !== it.id)
+    .map((x) => {
+      const shared = x.tags.filter((t) => it.tags.includes(t)).length;
+      const myWords = new Set((it.title.toLowerCase().match(/[a-z0-9]{4,}/g) || []));
+      const overlap = (x.title.toLowerCase().match(/[a-z0-9]{4,}/g) || []).filter((w) => myWords.has(w)).length;
+      return { x, score: shared * 3 + overlap };
+    })
+    .filter((r) => r.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 3);
+
+  const runAI = async (kind) => {
+    if (aiBusy) return;
+    setAiBusy(kind); setAiErr(null);
+    try {
+      if (kind === "summary") {
+        const text = await askText(
+          `Summarize this note in 2-4 tight sentences a future reader will thank you for:\n\n${noteToText(it)}`,
+          { system: "You write crisp summaries. No preamble, no 'this note is about' — just the substance." }
+        );
+        const h = { ...emptyBlock("heading"), text: "Summary" };
+        const t = { ...emptyBlock("text"), text: text.trim() };
+        onUpdate({ ...it, blocks: [h, t, ...(it.blocks || [])] });
+      } else if (kind === "todos") {
+        const out = await askJSON(
+          `Extract every concrete action item / commitment / task from this note. Return only real actions someone must do — no headings, no observations:\n\n${noteToText(it)}`,
+          {
+            type: "object",
+            properties: { items: { type: "array", items: { type: "string" } } },
+            required: ["items"],
+            additionalProperties: false,
+          },
+          { effort: "low" }
+        );
+        if (!out.items.length) { setAiErr({ message: "No action items found in this note." }); return; }
+        const todos = out.items.map((text) => ({ ...emptyBlock("todo"), text }));
+        const h = { ...emptyBlock("heading"), text: "Action items" };
+        onUpdate({ ...it, blocks: [...(it.blocks || []), h, ...todos] });
+      } else if (kind === "continue") {
+        const text = await askText(
+          `Continue writing this note — add the next paragraph or points that naturally follow. Match the note's tone and format. Return only the new content:\n\n${noteToText(it)}`
+        );
+        const t = { ...emptyBlock("text"), text: text.trim() };
+        onUpdate({ ...it, blocks: [...(it.blocks || []), t] });
+      }
+    } catch (e) {
+      setAiErr(e);
+    } finally {
+      setAiBusy(null);
+    }
+  };
+  const [newFolder, setNewFolder] = useState(false);
+  const pickFolder = (v) => {
+    if (v === "__new") { setNewFolder(true); return; }   // inline input, not window.prompt (blocked in embedded browsers)
+    onUpdate({ ...it, folder: v || undefined });
+  };
+  const saveNewFolder = (raw) => {
+    const name = (raw || "").trim();
+    if (name) onUpdate({ ...it, folder: name });
+    setNewFolder(false);
+  };
+  return (
+    <div className="notepage">
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <button className="btn ghost sm" onClick={onBack}>← Back to {s.label} (Esc)</button>
+        <div className="doctabs" role="tablist" aria-label="Page mode" style={{ marginLeft: "auto" }}>
+          <button className={pageMode === "read" ? "on" : ""} role="tab" aria-selected={pageMode === "read"}
+            onClick={() => setPageMode("read")} title="Clean reading view">👁 Read</button>
+          <button className={pageMode === "edit" ? "on" : ""} role="tab" aria-selected={pageMode === "edit"}
+            onClick={() => setPageMode("edit")} title="Full editor">✎ Edit</button>
+        </div>
+      </div>
+      {pageMode === "read" ? (
+        <h1 className="np-title" style={{ border: "none" }}>{it.title || "Untitled"}</h1>
+      ) : (
+      <input className="np-title" value={it.title} aria-label="Title"
+        onChange={(e) => onUpdate({ ...it, title: e.target.value })} placeholder="Untitled" />
+      )}
+      <div className="np-meta">
+        <span className="pill" style={{ background: s.soft, color: s.color, marginTop: 0 }}><Ic name={s.ic} /> {s.label}</span>
+        {pageMode === "edit" && it.type === "note" && (
+          <select className="status" style={{ marginTop: 0 }} value={it.folder || ""} aria-label="Folder"
+            onChange={(e) => pickFolder(e.target.value)} title="Move this note to a folder">
+            <option value="">No folder</option>
+            {folders.map((f) => <option key={f} value={f}>▸ {f}</option>)}
+            <option value="__new">＋ New folder…</option>
+          </select>
+        )}
+        {pageMode === "edit" && newFolder && (
+          <input className="status folder-new" autoFocus placeholder="Folder name… (Enter)" aria-label="New folder name"
+            style={{ marginTop: 0 }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") saveNewFolder(e.target.value);
+              if (e.key === "Escape") setNewFolder(false);
+            }}
+            onBlur={(e) => saveNewFolder(e.target.value)} />
+        )}
+        {it.tags.map((t) => (
+          <span key={t} className="pillwrap">
+            <button className="pill" style={{ background: "var(--violet-soft)", color: "var(--violet)", marginTop: 0, marginRight: 0 }}
+              onClick={() => onTag(t)}>#{t}</button>
+            {pageMode === "edit" && (
+              <button className="pillx" title={`Remove #${t}`} aria-label={`Remove tag ${t}`}
+                onClick={() => onUpdate({ ...it, tags: it.tags.filter((x) => x !== t) })}>✕</button>
+            )}
+          </span>
+        ))}
+        {pageMode === "edit" && <TagAdder it={it} onUpdate={onUpdate} allItems={allItems} />}
+        {pageMode === "read" ? (
+          <span className="stamp" style={{ transform: "none" }}>Added · {fmtStamp(it.date)}</span>
+        ) : dateEdit ? (
+          <input type="date" className="stampedit" autoFocus value={it.date} aria-label="Move this item to another day"
+            onChange={(e) => e.target.value && onUpdate({ ...it, date: e.target.value })}
+            onBlur={() => setDateEdit(false)}
+            onKeyDown={(e) => (e.key === "Enter" || e.key === "Escape") && setDateEdit(false)} />
+        ) : (
+          <button type="button" className="stamp stampbtn" style={{ transform: "none" }}
+            onClick={() => setDateEdit(true)}
+            title="Wrong day? Click to move this item to another date">
+            Added · {fmtStamp(it.date)}
+          </button>
+        )}
+      </div>
+      {pageMode === "read" ? (
+        it.meta ? <p className="np-sub" style={{ border: "none" }}>{it.meta}</p> : null
+      ) : (
+      <input className="np-sub" value={it.meta} aria-label="Description"
+        onChange={(e) => onUpdate({ ...it, meta: e.target.value })}
+        placeholder="Short description / why it matters…" />
+      )}
+
+      {pageMode === "edit" && (
+      <div className="aibar">
+        <span className="aibar-label mono" title={aiEnabled() ? "AI actions for this note" : "Add your API key in Settings (avatar menu) to enable"}>✦ AI</span>
+        <button className="aibtn" disabled={!aiEnabled() || !!aiBusy} onClick={() => runAI("summary")}
+          title={aiEnabled() ? "Add a 2-4 sentence summary to the top of this note" : "Needs an API key — Settings → AI"}>
+          {aiBusy === "summary" ? "Summarizing…" : "Summarize"}
+        </button>
+        <button className="aibtn" disabled={!aiEnabled() || !!aiBusy} onClick={() => runAI("todos")}
+          title={aiEnabled() ? "Pull every action item into a checklist" : "Needs an API key — Settings → AI"}>
+          {aiBusy === "todos" ? "Extracting…" : "☑ Action items"}
+        </button>
+        <button className="aibtn" disabled={!aiEnabled() || !!aiBusy} onClick={() => runAI("continue")}
+          title={aiEnabled() ? "Let Claude write the next block" : "Needs an API key — Settings → AI"}>
+          {aiBusy === "continue" ? "Writing…" : "Continue writing"}
+        </button>
+        {aiErr && <span className="aierr">⚠ {aiErr.message}</span>}
+      </div>
+      )}
+
+      {pageMode === "read"
+        ? <ReadBlocks blocks={it.blocks || []} />
+        : <NoteBlocks blocks={it.blocks || []} onChange={(blocks) => onUpdate({ ...it, blocks })} />}
+
+      {related.length > 0 && onGoto && (
+        <div className="relpanel">
+          <div className="rel-title mono">RELATED IN YOUR VAULT</div>
+          {related.map(({ x }) => {
+            const rs = SECTIONS[x.type];
+            return (
+              <button key={x.id} className="av-src" onClick={() => onGoto(x)} title={`Open in ${rs.label}`}>
+                <Ic name={rs.ic} size={12} /> {(x.alias || x.title).slice(0, 60)}
+                <span className="mono" style={{ marginLeft: "auto", fontSize: 9.5, color: "var(--ink-soft)" }}>
+                  {x.tags.filter((t) => it.tags.includes(t)).map((t) => `#${t}`).join(" ")}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function App() {
+  const { items: allItems, add, update, remove, exportJson, importJson, hydrated } = useStore();
+  /* Apple Notes-style trash: deleting sets a `deleted` stamp instead of
+     removing. Everything below works on live items only. */
+  const items = allItems.filter((i) => !i.deleted);
+  const trashed = allItems.filter((i) => i.deleted);
+
+  /* purge items that have sat in the trash for more than 30 days */
+  useEffect(() => {
+    if (!hydrated) return;
+    const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 30);
+    allItems.forEach((i) => {
+      if (i.deleted && new Date(i.deleted + "T00:00:00") < cutoff) remove(i.id);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hydrated]);
+  const [view, setView] = useState("dash");   // dash | graph | note | video | book | doc | tag
+  const [tag, setTag] = useState(null);
+  const [open, setOpen] = useState(true);
+  const [q, setQ] = useState("");
+  const [adding, setAdding] = useState(false);
+  const [palette, setPalette] = useState(false);
+  const [dq, setDq] = useState("");            // dashboard search
+  const [menuOpen, setMenuOpen] = useState(false); // profile/settings dropdown
+  const [settingsOpen, setSettingsOpen] = useState(false); // full settings dialog
+  const [keyEdit, setKeyEdit] = useState(false);   // replacing the (never-displayed) AI key
+  useEffect(() => {
+    if (!settingsOpen) return;
+    /* bubble phase, so the key input's own Esc (cancel edit) can stopPropagation first */
+    const onKey = (e) => { if (e.key === "Escape") { setSettingsOpen(false); setKeyEdit(false); } };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [settingsOpen]);
+  const [profile, setProfile] = useState({ name: "You" });
+  const [profileLoaded, setProfileLoaded] = useState(false);
+  const importRef = useRef(null);
+
+  /* SSR-safe sidebar default: render open, then collapse on narrow screens. */
+  useEffect(() => {
+    setOpen(window.innerWidth > 860);
+  }, []);
+
+  /* load the saved profile after mount (avoids hydration mismatch) */
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("vault.profile");
+      if (raw) setProfile(JSON.parse(raw) || { name: "You" });
+    } catch (e) { console.error(e); }
+    setProfileLoaded(true);
+  }, []);
+
+  useEffect(() => {
+    if (!profileLoaded) return;
+    try { localStorage.setItem("vault.profile", JSON.stringify(profile)); } catch (e) { console.error(e); }
+  }, [profile, profileLoaded]);
+
+  /* ---- per-feature reports ---- */
+  const [reportsOpen, setReportsOpen] = useState(false);
+  useEffect(() => {
+    if (!reportsOpen) return;
+    const onKey = (e) => { if (e.key === "Escape") setReportsOpen(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [reportsOpen]);
+
+  /* ---- standalone custom tags (created in the Tags section) ---- */
+  const [customTags, setCustomTags] = useState([]);
+  useEffect(() => { setCustomTags(getCustomTags()); }, []);
+
+  /* ---- customizable single-key shortcuts ---- */
+  const [keymap, setKm] = useState(DEFAULT_KEYS);
+  useEffect(() => { setKm(getKeymap()); }, []);
+  const [keyListen, setKeyListen] = useState(null);   // action id waiting for a keypress
+  const [keyErr, setKeyErr] = useState(null);
+  useEffect(() => {
+    if (!keyListen) return;
+    const onKey = (e) => {
+      e.preventDefault(); e.stopPropagation();
+      if (e.key === "Escape") { setKeyListen(null); setKeyErr(null); return; }
+      const err = validateKey(e.key, keyListen, keymap);
+      if (err) { setKeyErr(err); return; }
+      setKm(setKeymap({ [keyListen]: e.key.toLowerCase() }));
+      setKeyListen(null); setKeyErr(null);
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [keyListen, keymap]);
+
+  /* ---- first-run onboarding (returning browsers are grandfathered) ---- */
+  const [ob, setObState] = useState(undefined);   // undefined = not decided yet
+  useEffect(() => { setObState(initOnboarding()); }, []);
+  const doExport = () => { exportJson(); setObState(setOB({ exported: true })); };
+
+  /* ---- universal quick capture + notification bell ---- */
+  const [capOpen, setCapOpen] = useState(false);
+  const [capBump, setCapBump] = useState(0);      // remounts To-dos/Finance so captures show instantly
+  const [bellOpen, setBellOpen] = useState(false);
+  const [alerts, setAlerts] = useState([]);
+  const [notifPerm, setNotifPerm] = useState("default");
+
+  /* close the dropdowns on any outside click */
+  useEffect(() => {
+    if (!menuOpen && !bellOpen) return;
+    const close = () => { setMenuOpen(false); setBellOpen(false); };
+    window.addEventListener("click", close);
+    return () => window.removeEventListener("click", close);
+  }, [menuOpen, bellOpen]);
+
+  const computeAlerts = () => {
+    const out = [];
+    const t0 = today();
+    try {
+      const tasks = (JSON.parse(localStorage.getItem("vault.todos.v1") || "{}").tasks) || [];
+      const od = tasks.filter((t) => !t.done && t.due && t.due < t0);
+      const dt = tasks.filter((t) => !t.done && t.due === t0);
+      if (od.length) out.push({ id: "od", text: `⏰ ${od.length} to-do${od.length === 1 ? " is" : "s are"} overdue`, view: "todos", warn: true });
+      if (dt.length) out.push({ id: "dt", text: `☑ ${dt.length} to-do${dt.length === 1 ? "" : "s"} due today`, view: "todos" });
+    } catch {}
+    try {
+      const fin = JSON.parse(localStorage.getItem("vault.finance.v1") || "{}");
+      const ob = (fin.bills || []).filter((b) => !b.paid && b.due < t0);
+      const soon = (fin.bills || []).filter((b) => !b.paid && b.due >= t0 && daysAgo(b.due) >= -7);
+      if (ob.length) out.push({ id: "ob", text: `💳 ${ob.length} bill${ob.length === 1 ? " is" : "s are"} overdue`, view: "finance", warn: true });
+      if (soon.length) out.push({ id: "sb", text: `💳 ${soon.length} bill${soon.length === 1 ? "" : "s"} due within 7 days`, view: "finance" });
+      const ym = t0.slice(0, 7);
+      const spent = (fin.expenses || []).filter((e) => (e.date || "").startsWith(ym)).reduce((a, e) => a + (+e.amount || 0), 0);
+      const cap = +(fin.budgets?.overall) || 0;
+      if (cap && spent > cap) out.push({ id: "bu", text: `⚠ You're over this month's budget`, view: "finance", warn: true });
+    } catch {}
+    return out;
+  };
+
+  useEffect(() => {
+    if (!hydrated) return;
+    const refresh = () => setAlerts(computeAlerts());
+    refresh();
+    const iv = setInterval(refresh, 60000);
+    return () => clearInterval(iv);
+  }, [hydrated, capBump, view]);
+
+  /* desktop alerts: opt-in, then a once-a-day summary when something's due */
+  useEffect(() => {
+    if (typeof Notification === "undefined") return;
+    setNotifPerm(Notification.permission);
+    if (!hydrated || Notification.permission !== "granted") return;
+    const t0 = today();
+    if (localStorage.getItem("vault.notify.last") === t0) return;
+    const a = computeAlerts();
+    if (!a.length) return;
+    try {
+      new Notification("Vault — needs your attention", { body: a.map((x) => x.text).join("\n"), tag: "vault-daily" });
+      localStorage.setItem("vault.notify.last", t0);
+    } catch {}
+  }, [hydrated]);
+
+  /* dark mode (top-requested PKM feature) */
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", profile.theme === "dark" ? "dark" : "light");
+  }, [profile.theme]);
+
+  /* autosave indicator */
+  const [saveState, setSaveState] = useState("Saved ✓");
+  const firstRun = useRef(true);
+  useEffect(() => {
+    if (firstRun.current) { firstRun.current = false; return; }
+    setSaveState("Saving…");
+    const t = setTimeout(() => setSaveState("Saved ✓"), 700);
+    return () => clearTimeout(t);
+  }, [items]);
+
+  /* undo for deletes (forgiveness beats confirmation) */
+  const [undoItem, setUndoItem] = useState(null);
+  const undoTimer = useRef(null);
+  const removeWithUndo = (id) => {
+    const it = items.find((x) => x.id === id);
+    update({ ...it, deleted: today() }); // soft delete → Recently deleted
+    setUndoItem(it);
+    clearTimeout(undoTimer.current);
+    undoTimer.current = setTimeout(() => setUndoItem(null), 6000);
+  };
+
+  /* every edit stamps an `edited` date for "edited Xd ago" labels */
+  const updateStamped = (it) => update({ ...it, edited: today() });
+
+  const allTags = [...new Set(items.flatMap((i) => i.tags))];
+  const [focusId, setFocusId] = useState(null);
+  const [pageId, setPageId] = useState(null);          // full-page note view
+  const [notesLayout, setNotesLayout] = useState("list"); // list | grid
+  const [showTemplates, setShowTemplates] = useState(false);
+  const [docFilter, setDocFilter] = useState("All"); // All | PDF | Word | Sheet | Image
+  const [helpOpen, setHelpOpen] = useState(false);     // "?" shortcuts sheet
+  const [chord, setChord] = useState(false);           // "G then …" pending indicator
+  const [askOpen, setAskOpen] = useState(false);       // ✦ Ask your Vault
+  const [aiCfg, setAiCfg] = useState({ model: "claude-opus-5" });
+  useEffect(() => { setAiCfg(getAIConfig()); }, []);
+  const updateAI = (patch) => setAiCfg(setAIConfig(patch));
+
+  /* ✦ weekly digest (dashboard) */
+  const [digest, setDigest] = useState(null);
+  const [digestBusy, setDigestBusy] = useState(false);
+  const genDigest = async () => {
+    if (digestBusy) return;
+    setDigestBusy(true); setDigest(null);
+    const week = items.filter((i) => daysAgo(i.date) <= 7);
+    const stale = items.filter((i) => i.status === "Inbox").sort((a, b) => a.date.localeCompare(b.date)).slice(0, 6);
+    const stats =
+      `Saved this week (${week.length}): ${week.map((i) => `${SECTIONS[i.type].label} — ${i.title}`).join("; ") || "nothing"}.\n` +
+      `In progress: ${items.filter((i) => i.status === "In progress").map((i) => i.title).join("; ") || "nothing"}.\n` +
+      `Oldest untouched Inbox items: ${stale.map((i) => `${i.title} (${daysAgo(i.date)} days)`).join("; ") || "none"}.\n` +
+      `Projects: ${[...new Set(items.flatMap((i) => i.tags))].join(", ") || "none"}.`;
+    try {
+      setDigest(await askText(
+        `Here is the current state of my personal knowledge vault:\n\n${stats}\n\nWrite my weekly digest.`,
+        { system: "You write a short weekly digest for a personal knowledge hub. At most 3 short paragraphs: what happened this week; what's rotting in the inbox and what to finish; one concrete suggestion for next week. Plain text, direct and encouraging, no headings or bullet lists." }
+      ));
+    } catch (e) {
+      setDigest(`⚠ ${e.message}`);
+    } finally {
+      setDigestBusy(false);
+    }
+  };
+  const [sortBy, setSortBy] = useState("added");       // added | edited | title
+  const [dateFilter, setDateFilter] = useState("");    // show only items added on this day
+
+  /* click-again-to-confirm for destructive actions — window.confirm is
+   * silently blocked in embedded browsers/webviews, so we never rely on it */
+  const [armDel, setArmDel] = useState(null);
+  useEffect(() => {
+    if (!armDel) return;
+    const t = setTimeout(() => setArmDel(null), 3000);
+    return () => clearTimeout(t);
+  }, [armDel]);
+
+  /* dashboard: one friendly "today" pulse instead of a wall of numbers */
+  const [pulse, setPulse] = useState(null);
+  useEffect(() => {
+    if (view !== "dash") return;
+    try {
+      const tasks = (JSON.parse(localStorage.getItem("vault.todos.v1") || "{}").tasks) || [];
+      const fin = JSON.parse(localStorage.getItem("vault.finance.v1") || "{}");
+      const t0 = today();
+      setPulse({
+        savedWeek: items.filter((i) => daysAgo(i.date) <= 7).length,
+        dueToday: tasks.filter((t) => !t.done && t.due === t0).length,
+        doneToday: tasks.filter((t) => t.done && (t.doneAt === t0 || t.due === t0)).length,
+        overdueTasks: tasks.filter((t) => !t.done && t.due && t.due < t0).length,
+        pendingBills: (fin.bills || []).filter((b) => !b.paid).length,
+        overdueBills: (fin.bills || []).filter((b) => !b.paid && daysAgo(b.due) > 0).length,
+        ins: buildInsights(items, tasks, fin, t0),
+      });
+    } catch { setPulse(null); }
+  }, [view, items]);
+
+  /* instant drop-to-save for Documents */
+  const quickFileRef = useRef(null);
+  const [quickDragOver, setQuickDragOver] = useState(false);
+  const quickSaveFile = (list) => {
+    const f = list && list[0];
+    if (!f) return;
+    if (f.size > 2 * 1024 * 1024) { alert(`“${f.name}” is ${(f.size / 1048576).toFixed(1)} MB — max is 2 MB. Save a link to it instead.`); return; }
+    const r = new FileReader();
+    r.onload = () => add({
+      id: Date.now(), type: "doc", title: f.name.replace(/\.[^.]+$/, ""),
+      meta: "Saved via quick drop", tags: [], status: "Inbox",
+      file: { name: f.name, type: f.type, size: f.size, data: r.result }, date: today(),
+    });
+    r.readAsDataURL(f);
+  };
+  const [folderSel, setFolderSel] = useState("All");   // Notes folder filter
+  /* folders are derived from the notes that use them (Apple Notes-style) */
+  const folders = [...new Set(items.filter((i) => i.type === "note" && i.folder).map((i) => i.folder))].sort();
+  const effFolder = folders.includes(folderSel) ? folderSel : "All";
+  const filterRef = useRef(null);                      // "/" focuses the current filter box
+  const pageItem = items.find((i) => i.id === pageId);
+
+  /* ---------- global keyboard shortcuts ----------
+     Linear/Gmail-style: G-chords navigate, single keys act.
+     Single-key shortcuts are suspended while typing in any field. */
+  const kb = useRef({});
+  kb.current = { view, tag, adding, palette, helpOpen, menuOpen, pageId, showTemplates, profile, exportJson: doExport, keymap, keyListen };
+  useEffect(() => {
+    let gUntil = 0; // G-chord window (2s)
+    const typing = (el) =>
+      el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || el.isContentEditable);
+
+    const onKey = (e) => {
+      const s = kb.current;
+      const k = e.key;
+
+      /* ⌘K / Ctrl+K — command palette, works everywhere (even while typing) */
+      if ((e.ctrlKey || e.metaKey) && k.toLowerCase() === "k") {
+        e.preventDefault();
+        setPalette((p) => !p);
+        return;
+      }
+
+      /* Esc — close the topmost layer (palette & help handle themselves) */
+      if (k === "Escape" && !s.palette && !s.helpOpen) {
+        if (s.menuOpen) { setMenuOpen(false); return; }
+        if (s.adding) { setAdding(false); return; }
+        if (s.showTemplates) { setShowTemplates(false); return; }
+        if (s.pageId) { setPageId(null); return; }
+        if (typing(document.activeElement)) document.activeElement.blur();
+        return;
+      }
+
+      /* everything below is suspended while typing or while an overlay is open */
+      if (typing(document.activeElement)) return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (s.palette || s.helpOpen) return;
+
+      /* ? — shortcuts sheet */
+      if (k === "?") { e.preventDefault(); setHelpOpen(true); return; }
+
+      /* G-chord navigation — letters are user-rebindable */
+      const now = Date.now();
+      if (k.toLowerCase() === "g") { gUntil = now + 2000; setChord(true); setTimeout(() => setChord(false), 2000); return; }
+      if (now < gUntil) {
+        const kmNav = s.keymap || DEFAULT_KEYS;
+        const hit = NAV_ACTIONS.find((a) => (kmNav[a.id] || a.def) === k.toLowerCase());
+        if (hit) {
+          e.preventDefault();
+          gUntil = 0; setChord(false);
+          if (hit.view === "dash" || hit.view === "graph" || hit.view === "todos" || hit.view === "board" || hit.view === "finance" || hit.view === "tags") {
+            setView(hit.view); setTag(null); setAdding(false); setPageId(null);
+          } else openSection(hit.view);
+          return;
+        }
+        gUntil = 0; setChord(false);
+      }
+
+      /* single-key actions — user-rebindable (Settings → Preferences) */
+      if (s.keyListen) return;                 // a rebind capture is in progress
+      const km = s.keymap || DEFAULT_KEYS;
+      const kl = k.toLowerCase();
+      if (kl === km.capture) { e.preventDefault(); setCapOpen(true); return; }
+      if (kl === km.newItem) {
+        e.preventDefault();
+        if (!(s.view in SECTIONS) && s.view !== "tag") openSection("note");
+        setPageId(null);
+        setAdding(true);
+        return;
+      }
+      if (kl === km.search) { e.preventDefault(); filterRef.current?.focus(); return; }
+      if (kl === km.theme) { e.preventDefault(); setProfile((p) => ({ ...p, theme: p.theme === "dark" ? "light" : "dark" })); return; }
+      if (kl === km.sidebar) { e.preventDefault(); setOpen((o) => !o); return; }
+      if (kl === km.export) { e.preventDefault(); s.exportJson(); return; }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /* commands offered inside the ⌘K palette */
+  const navKeyFor = (view) => (keymap[NAV_ACTIONS.find((a) => a.view === view)?.id] || "?").toUpperCase();
+  const paletteActions = [
+    { group: "GO TO", label: "Dashboard", hint: `G ${navKeyFor("dash")}`, keywords: "home overview", run: () => { setView("dash"); setTag(null); setAdding(false); setPageId(null); } },
+    { group: "GO TO", label: "Project board", hint: `G ${navKeyFor("board")}`, keywords: "kanban status progress projects", run: () => { setView("board"); setTag(null); setAdding(false); setPageId(null); } },
+    { group: "GO TO", label: "Finance", hint: `G ${navKeyFor("finance")}`, keywords: "money expenses bills payments credit card", run: () => { setView("finance"); setTag(null); setAdding(false); setPageId(null); } },
+    { group: "GO TO", label: "To-dos", hint: `G ${navKeyFor("todos")}`, keywords: "tasks board", run: () => { setView("todos"); setTag(null); setAdding(false); setPageId(null); } },
+    { group: "GO TO", label: "Graph", hint: `G ${navKeyFor("graph")}`, keywords: "connections map", run: () => { setView("graph"); setTag(null); setAdding(false); setPageId(null); } },
+    { group: "GO TO", label: "Notes", hint: `G ${navKeyFor("note")}`, keywords: "section", run: () => openSection("note") },
+    { group: "GO TO", label: "YouTube", hint: `G ${navKeyFor("video")}`, keywords: "videos section", run: () => openSection("video") },
+    { group: "GO TO", label: "Library", hint: `G ${navKeyFor("book")}`, keywords: "books pdfs reading section", run: () => openSection("book") },
+    { group: "GO TO", label: "Documents", hint: `G ${navKeyFor("doc")}`, keywords: "files section", run: () => openSection("doc") },
+    { group: "GO TO", label: "Tags", hint: `G ${navKeyFor("tags")}`, keywords: "projects tags labels", run: () => { setView("tags"); setTag(null); setAdding(false); setPageId(null); } },
+    { group: "GO TO", label: "Recently deleted", keywords: "trash bin restore deleted", run: () => { setView("trash"); setTag(null); setAdding(false); setPageId(null); } },
+    { group: "ACTION", label: "✦ Ask your Vault (AI)", keywords: "ai ask question claude rag search answers", run: () => setAskOpen(true) },
+    { group: "ACTION", label: "✦ Generate weekly digest (AI)", keywords: "ai digest review week summary", run: () => { setView("dash"); setTag(null); setAdding(false); setPageId(null); genDigest(); } },
+    { group: "ACTION", label: "New item", hint: "N", keywords: "add create capture", run: () => { if (!(view in SECTIONS) && view !== "tag") openSection("note"); setPageId(null); setAdding(true); } },
+    { group: "ACTION", label: "Toggle dark / light theme", hint: "T", keywords: "mode appearance", run: () => setProfile((p) => ({ ...p, theme: p.theme === "dark" ? "light" : "dark" })) },
+    { group: "ACTION", label: "Toggle sidebar", hint: "B", keywords: "collapse expand menu", run: () => setOpen((o) => !o) },
+    { group: "ACTION", label: "Export backup (JSON)", hint: "E", keywords: "save download data", run: doExport },
+    { group: "ACTION", label: "📊 Generate reports", keywords: "report pdf print summary stats export feature", run: () => setReportsOpen(true) },
+    { group: "ACTION", label: "Import backup", keywords: "restore upload data", run: () => importRef.current?.click() },
+    { group: "ACTION", label: "Keyboard shortcuts", hint: "?", keywords: "help keys cheatsheet", run: () => setHelpOpen(true) },
+  ];
+
+  const useTemplate = (t) => {
+    const id = Date.now();
+    add({
+      id, type: "note", title: t.title, meta: t.desc, tags: [],
+      status: "Inbox", blocks: instantiateTemplate(t), date: today(),
+    });
+    setShowTemplates(false);
+    setPageId(id); // open the fresh note as a full page, ready to fill in
+  };
+
+  const docCategory = (it) => {
+    if (!it.file) return "Other";
+    const ext = (it.file.name.split(".").pop() || "").toLowerCase();
+    if (ext === "pdf") return "PDF";
+    if (/^docx?$|^txt$|^md$/.test(ext)) return "Word";
+    if (/^xlsx?$|^csv$/.test(ext)) return "Sheet";
+    if (/^png$|^jpe?g$|^webp$|^gif$/.test(ext)) return "Image";
+    return "Other";
+  };
+  const openTag = (t) => { setTag(t); setView("tag"); setAdding(false); setQ(""); setDateFilter(""); setPageId(null); };
+  const openSection = (k) => { setView(k); setTag(null); setAdding(false); setQ(""); setDateFilter(""); setPageId(null); };
+  /* jump to a specific item in its own section, scroll to it and flash it */
+  const goto = (it) => {
+    openSection(it.type);
+    setFocusId(it.id);
+    setTimeout(() => setFocusId(null), 2200);
+  };
+
+  const thisWeek = (type) => {
+    const cut = new Date(); cut.setDate(cut.getDate() - 7);
+    return items.filter((i) => (type ? i.type === type : true) && new Date(i.date) >= cut).length;
+  };
+
+  const visible = items
+    .filter((i) => {
+      if (view === "tag") return i.tags.includes(tag);
+      if (view in SECTIONS) return i.type === view;
+      return true;
+    })
+    .filter((i) => !(view === "doc" && docFilter !== "All") || docCategory(i) === docFilter)
+    .filter((i) => !(view === "note" && effFolder !== "All") || i.folder === effFolder)
+    .filter((i) => !dateFilter || i.date === dateFilter)
+    .filter((i) => !q || (i.title + " " + (i.alias || "") + " " + i.meta + " " + i.tags.join(" ")).toLowerCase().includes(q.toLowerCase()))
+    .sort((a, b) =>
+      (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) ||
+      (sortBy === "title"
+        ? (a.alias || a.title).localeCompare(b.alias || b.title)
+        : sortBy === "edited"
+          ? (b.edited || b.date).localeCompare(a.edited || a.date)
+          : b.date.localeCompare(a.date)));
+
+  const nav = [
+    { k: "dash", label: "Dashboard", ic: "home" },
+    { k: "board", label: "Projects", ic: "board" },
+    { k: "finance", label: "Finance", ic: "finance" },
+    { k: "todos", label: "To-dos", ic: "todos" },
+    { k: "graph", label: "Graph", ic: "graph" },
+    { k: "note", label: "Notes", ic: "note" },
+    { k: "video", label: "YouTube", ic: "video" },
+    { k: "book", label: "Library", ic: "book" },
+    { k: "doc", label: "Documents", ic: "doc" },
+    { k: "tags", label: "Tags", ic: "tag" },
+  ].map((n) => ({ ...n, hint: `G then ${navKeyFor(n.k)}` }));
+
+  const onImport = (e) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    importJson(f, (err, n) => {
+      if (err) alert("Import failed — that file isn't a valid Vault backup.");
+      else alert(`Imported ${n} items.`);
+    });
+    e.target.value = "";
+  };
+
+  return (
+    <div className="vault">
+      <CommandPalette items={items} actions={paletteActions} open={palette} onClose={() => setPalette(false)}
+        onGo={(r) => (r.kind === "tag" ? openTag(r.tag) : openSection(r.item.type))} />
+      <ShortcutsHelp open={helpOpen} onClose={() => setHelpOpen(false)} keymap={keymap} />
+
+      <QuickCapture open={capOpen} onClose={() => setCapOpen(false)}
+        onAddItem={(it) => add(it)}
+        onSaved={() => { setCapBump((b) => b + 1); setAlerts(computeAlerts()); }} />
+
+      {reportsOpen && (
+        <div className="pal-overlay" onClick={() => setReportsOpen(false)} role="dialog" aria-label="Generate reports">
+          <div className="pal reportsdlg" onClick={(e) => e.stopPropagation()}>
+            <div className="cd-head">
+              <h3 className="display" style={{ margin: 0, fontSize: 18 }}>📊 Reports</h3>
+              <span className="cardsub mono" style={{ marginLeft: 10 }}>open to read & print (PDF) · download to keep</span>
+              <button className="kbtn" style={{ marginLeft: "auto" }} title="Close (Esc)" onClick={() => setReportsOpen(false)}>✕</button>
+            </div>
+            <div className="cd-body">
+              {REPORTS.map((r) => (
+                <div key={r.id} className={`reportrow ${r.id === "all" ? "reportrow-all" : ""}`}>
+                  <span className="reportname">{r.label}</span>
+                  <button className="kbtn" onClick={() => openReport(r.id)} title="Open in a new tab — read it, or print to PDF">👁 Open</button>
+                  <button className="kbtn" onClick={() => downloadReport(r.id)} title="Download as a self-contained HTML file">⬇ Download</button>
+                </div>
+              ))}
+              <div className="menu-foot" style={{ border: "none" }}>
+                Reports are snapshots of this browser's data. For spreadsheets, Finance and Sprints also export CSV in place.
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {hydrated && ob === null && (
+        <WelcomeModal onChoose={(c) => {
+          if (c === "clean") { startClean(); window.location.reload(); return; }
+          setObState(setOB({ choice: "sample", startedAt: today(), dismissed: false }));
+        }} />
+      )}
+
+      {settingsOpen && (
+        <div className="pal-overlay" onClick={() => { setSettingsOpen(false); setKeyEdit(false); }} role="dialog" aria-label="Settings">
+          <div className="pal settingsdlg" onClick={(e) => e.stopPropagation()}>
+            <div className="cd-head">
+              <h3 className="display" style={{ margin: 0, fontSize: 18 }}>⚙ Settings</h3>
+              <button className="kbtn" style={{ marginLeft: "auto" }} title="Close (Esc)"
+                onClick={() => { setSettingsOpen(false); setKeyEdit(false); }}>✕</button>
+            </div>
+            <div className="cd-body">
+              <div className="set-sec">
+                <div className="menu-sec">👤 PROFILE</div>
+                <input className="menu-input" value={profile.name} aria-label="Your name"
+                  onChange={(e) => setProfile({ ...profile, name: e.target.value })}
+                  placeholder="Your name" />
+                <input className="menu-input" type="email" value={profile.email || ""} aria-label="Email"
+                  style={{ marginTop: 6 }}
+                  onChange={(e) => setProfile({ ...profile, email: e.target.value })}
+                  placeholder="Email (used for sign-in at launch)" />
+              </div>
+
+              <div className="set-sec">
+                <div className="menu-sec">⚙ PREFERENCES</div>
+                <button className="menu-item" onClick={() => setProfile({ ...profile, theme: profile.theme === "dark" ? "light" : "dark" })}>
+                  {profile.theme === "dark" ? "☀ Light mode" : "◐ Dark mode"} <span className="menukey kbd">{keymap.theme.toUpperCase()}</span>
+                </button>
+                <button className="menu-item" onClick={() => { setHelpOpen(true); setSettingsOpen(false); }}>
+                  ⌨ Keyboard shortcuts <span className="menukey kbd">?</span>
+                </button>
+
+                <details className="kmfold">
+                  <summary className="kmfold-head">
+                    <span>⌨ Customize shortcuts</span>
+                    <span className="cardsub mono">{KEY_ACTIONS.length + NAV_ACTIONS.length} bindings ▾</span>
+                  </summary>
+                <div className="menu-sec" style={{ marginTop: 8 }}>ACTIONS</div>
+                {KEY_ACTIONS.map((a) => (
+                  <div key={a.id} className="kmrow">
+                    <span className="kmlabel">{a.label}</span>
+                    {keyListen === a.id ? (
+                      <span className="kmlisten mono">press a key… (Esc cancels)</span>
+                    ) : (
+                      <span className="kbd">{keymap[a.id] === "/" ? "/" : keymap[a.id].toUpperCase()}</span>
+                    )}
+                    <button className="kbtn" onClick={() => { setKeyListen(keyListen === a.id ? null : a.id); setKeyErr(null); }}>
+                      {keyListen === a.id ? "Cancel" : "Change"}
+                    </button>
+                  </div>
+                ))}
+                <div className="menu-sec" style={{ marginTop: 10 }}>🧭 NAVIGATION — PRESS G, THEN…</div>
+                {NAV_ACTIONS.map((a) => (
+                  <div key={a.id} className="kmrow">
+                    <span className="kmlabel">{a.label}</span>
+                    {keyListen === a.id ? (
+                      <span className="kmlisten mono">press a key… (Esc cancels)</span>
+                    ) : (
+                      <span className="shorts-keys"><span className="kbd">G</span><span className="thn">then</span><span className="kbd">{(keymap[a.id] || a.def).toUpperCase()}</span></span>
+                    )}
+                    <button className="kbtn" onClick={() => { setKeyListen(keyListen === a.id ? null : a.id); setKeyErr(null); }}>
+                      {keyListen === a.id ? "Cancel" : "Change"}
+                    </button>
+                  </div>
+                ))}
+                {keyErr && <div className="kmerr">{keyErr}</div>}
+                <button className="btn ghost sm" style={{ marginTop: 8 }}
+                  onClick={() => { setKm(resetKeymap()); setKeyListen(null); setKeyErr(null); }}>
+                  Reset all shortcuts to defaults
+                </button>
+                </details>
+              </div>
+
+              <div className="set-sec">
+                <div className="menu-sec">✨ AI ASSISTANT</div>
+                <select className="menu-input" value={aiCfg.provider || "anthropic"} aria-label="AI provider"
+                  onChange={(e) => { updateAI({ provider: e.target.value }); setKeyEdit(false); }}>
+                  <option value="anthropic">Claude (Anthropic)</option>
+                  <option value="oss">Open-source model (Ollama, Groq, OpenRouter…)</option>
+                </select>
+
+                {(aiCfg.provider || "anthropic") === "anthropic" ? (
+                  <>
+                    {aiCfg.apiKey && !keyEdit ? (
+                      <div className="keyrow">
+                        {/* the stored key is never rendered — not even masked into an input */}
+                        <span className="keystate mono">API key saved ✓</span>
+                        <button className="kbtn" onClick={() => setKeyEdit(true)} title="Paste a different key">Replace</button>
+                        <button className="kbtn kdel" onClick={() => { updateAI({ apiKey: undefined }); setKeyEdit(false); }}
+                          title="Remove the key from this browser">Remove</button>
+                      </div>
+                    ) : (
+                      <input className="menu-input" type="password" autoComplete="off" defaultValue=""
+                        style={{ marginTop: 6 }} aria-label="Anthropic API key"
+                        placeholder={aiCfg.apiKey ? "Paste new key, press Enter (Esc to keep current)" : "Anthropic API key (sk-ant-…) — press Enter"}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            const v = e.target.value.trim();
+                            if (v) { updateAI({ apiKey: v }); e.target.value = ""; setKeyEdit(false); }
+                          }
+                          if (e.key === "Escape") { e.stopPropagation(); e.target.value = ""; setKeyEdit(false); }
+                        }} />
+                    )}
+                    <select className="menu-input" value={aiCfg.model} aria-label="AI model"
+                      style={{ marginTop: 6 }}
+                      onChange={(e) => updateAI({ model: e.target.value })}>
+                      {AI_MODELS.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+                    </select>
+                  </>
+                ) : (
+                  <>
+                    <select className="menu-input" style={{ marginTop: 6 }} aria-label="Open-source preset"
+                      value={OSS_PRESETS.find((p) => p.url === aiCfg.ossBaseUrl)?.id || "custom"}
+                      onChange={(e) => {
+                        const p = OSS_PRESETS.find((x) => x.id === e.target.value);
+                        if (p) updateAI({ ossBaseUrl: p.url });
+                      }}>
+                      {OSS_PRESETS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
+                      <option value="custom">Custom server…</option>
+                    </select>
+                    <input className="menu-input" style={{ marginTop: 6 }} aria-label="Server URL"
+                      value={aiCfg.ossBaseUrl || ""} placeholder="Server URL, e.g. http://localhost:11434/v1"
+                      onChange={(e) => updateAI({ ossBaseUrl: e.target.value.trim() })} />
+                    <input className="menu-input" style={{ marginTop: 6 }} list="oss-models" aria-label="Model name"
+                      value={aiCfg.ossModel || ""} placeholder="Model name, e.g. llama3.3 or qwen2.5:14b"
+                      onChange={(e) => updateAI({ ossModel: e.target.value.trim() })} />
+                    <datalist id="oss-models">
+                      {OSS_MODEL_SUGGESTIONS.map((m) => <option key={m} value={m} />)}
+                    </datalist>
+                    {aiCfg.ossKey && !keyEdit ? (
+                      <div className="keyrow">
+                        <span className="keystate mono">API key saved ✓</span>
+                        <button className="kbtn" onClick={() => setKeyEdit(true)} title="Paste a different key">Replace</button>
+                        <button className="kbtn kdel" onClick={() => { updateAI({ ossKey: undefined }); setKeyEdit(false); }}
+                          title="Remove the key from this browser">Remove</button>
+                      </div>
+                    ) : (
+                      <input className="menu-input" type="password" autoComplete="off" defaultValue=""
+                        style={{ marginTop: 6 }} aria-label="Open-source provider API key"
+                        placeholder={aiCfg.ossKey ? "Paste new key, press Enter (Esc to keep current)" : "API key — only for hosted providers, Enter to save (local models: leave empty)"}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            const v = e.target.value.trim();
+                            if (v) { updateAI({ ossKey: v }); e.target.value = ""; setKeyEdit(false); }
+                          }
+                          if (e.key === "Escape") { e.stopPropagation(); e.target.value = ""; setKeyEdit(false); }
+                        }} />
+                    )}
+                  </>
+                )}
+                <div className="menu-foot" style={{ border: "none", marginTop: 4, paddingTop: 0 }}>
+                  {(aiCfg.provider || "anthropic") === "anthropic"
+                    ? "Your key is stored only in this browser and never shown again after saving. It moves server-side with the backend."
+                    : "Works with any OpenAI-compatible server. Local Ollama needs CORS enabled: OLLAMA_ORIGINS='*' ollama serve"}
+                </div>
+              </div>
+
+              <div className="set-sec">
+                <div className="menu-sec">🔗 CONNECTED APPS</div>
+                <div className="conn-row">
+                  <span>☁ Cloud files linked</span>
+                  <span className="mono">{items.filter((i) => i.cloud).length}</span>
+                </div>
+                <div className="conn-row">
+                  <span>📅 Calendar events imported</span>
+                  <span className="mono">{(() => { try { return (JSON.parse(localStorage.getItem("vault.calendar.v1") || "{}").events || []).length; } catch { return 0; } })()}</span>
+                </div>
+                <button className="menu-item" onClick={() => { setSettingsOpen(false); openSection("doc"); }}>
+                  ＋ Link a Google Doc / Sheet / Drive / Excel file <span className="menukey">→ Documents</span>
+                </button>
+                <button className="menu-item" onClick={() => { setSettingsOpen(false); setView("todos"); setTag(null); setAdding(false); setPageId(null); }}>
+                  ＋ Import Google / Apple calendar (.ics) <span className="menukey">→ To-dos</span>
+                </button>
+                <div className="menu-foot" style={{ border: "none", marginTop: 4, paddingTop: 0 }}>
+                  Links open in their own app; calendar imports show beside your to-dos. Live two-way sync (OAuth) arrives with the cloud release.
+                </div>
+              </div>
+
+              <div className="set-sec">
+                <div className="menu-sec">🗄 YOUR DATA</div>
+                <button className="menu-item" onClick={() => doExport()}>⬇ Export backup (JSON) <span className="menukey kbd">E</span></button>
+                <button className="menu-item" onClick={() => importRef.current?.click()}>⬆ Import backup</button>
+                <button className="menu-item" onClick={() => downloadICS()}
+                  title="Due to-dos and bills as calendar events — import into Google/Apple/Outlook and get reminded there">
+                  📅 Export due dates to calendar (.ics)
+                </button>
+                <button className="menu-item" onClick={() => { setReportsOpen(true); setSettingsOpen(false); }}
+                  title="A formatted, printable report for any feature — or the whole vault">
+                  📊 Generate reports…
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      <AskVault items={items} open={askOpen} onClose={() => setAskOpen(false)}
+        onGoto={goto} onOpenSettings={() => setMenuOpen(true)} />
+      {chord && <div className="chordhint mono" role="status">G — then {NAV_ACTIONS.map((a) => (keymap[a.id] || a.def).toUpperCase()).join(" ")}</div>}
+
+      <nav className={`side ${open ? "open" : "rail"}`}>
+        <div className="top">
+          <button className="burger" onClick={() => setOpen((o) => !o)}
+            title={open ? "Collapse sidebar" : "Expand sidebar"}
+            aria-label={open ? "Collapse sidebar" : "Expand sidebar"}><Ic name="menu" size={19} /></button>
+          {open && <h1>Vault</h1>}
+        </div>
+
+        <button className="qadd" onClick={() => setCapOpen(true)}
+          title={`Capture anything — a link, a to-do, an expense, a thought (${keymap.capture.toUpperCase()})`}>
+          <span className="ic" aria-hidden="true"><Ic name="plus" size={19} strokeWidth={1.9} /></span>
+          {open && <>Quick add<span className="cnt">{keymap.capture.toUpperCase()}</span></>}
+        </button>
+
+        {nav.map((n) => (
+          <button key={n.k} className={`navbtn ${view === n.k ? "on" : ""}`}
+            title={open ? n.hint : `${n.label} (${n.hint})`}
+            onClick={() => n.k in SECTIONS
+              ? openSection(n.k)
+              : (setView(n.k), setTag(null), setAdding(false), setPageId(null))}>
+            <span className="ic" aria-hidden="true"><Ic name={n.ic} size={19} /></span>
+            {open && <>{n.label}{n.k in SECTIONS && <span className="cnt">{items.filter((i) => i.type === n.k).length}</span>}</>}
+          </button>
+        ))}
+
+        <button className="navbtn" onClick={() => setPalette(true)} title="Search everything (Ctrl+K)">
+          <span className="ic" aria-hidden="true"><Ic name="search" size={19} /></span>
+          {open && <>Search<span className="cnt">⌘K</span></>}
+        </button>
+
+        <button className="navbtn askbtn" onClick={() => setAskOpen(true)}
+          title="Ask your Vault — AI answers with citations from your saved items">
+          <span className="ic" aria-hidden="true"><Ic name="ai" size={19} /></span>
+          {open && <>Ask AI</>}
+        </button>
+
+        {trashed.length > 0 && (
+          <button className={`navbtn ${view === "trash" ? "on" : ""}`}
+            title={open ? undefined : "Recently deleted"}
+            onClick={() => { setView("trash"); setTag(null); setAdding(false); setPageId(null); }}>
+            <span className="ic" aria-hidden="true"><Ic name="trash" size={19} /></span>
+            {open && <>Recently deleted<span className="cnt">{trashed.length}</span></>}
+          </button>
+        )}
+
+        {open && (
+          <div className="foot">
+            Data lives in this browser (localStorage).
+            <div style={{ marginTop: 6 }}>
+              <button onClick={doExport}>⬇ Export backup</button>
+              <button onClick={() => importRef.current?.click()}>⬆ Import</button>
+              <input ref={importRef} type="file" accept="application/json" hidden onChange={onImport} />
+            </div>
+          </div>
+        )}
+      </nav>
+
+      <main className="main">
+        <div className="topbar">
+          <span className={`savestate ${saveState.startsWith("Saving") ? "busy" : ""}`}>{saveState}</span>
+          <div style={{ flex: 1 }} />
+          <button className="bellbtn" onClick={(e) => { e.stopPropagation(); setBellOpen((b) => !b); setMenuOpen(false); setAlerts(computeAlerts()); }}
+            aria-haspopup="menu" aria-expanded={bellOpen} aria-label={`Notifications — ${alerts.length} alert${alerts.length === 1 ? "" : "s"}`}
+            title="Notifications & reminders">
+            <Ic name="bell" size={18} />
+            {alerts.length > 0 && <span className="bellbadge mono">{alerts.length}</span>}
+          </button>
+          {bellOpen && (
+            <div className="menu bellmenu" onClick={(e) => e.stopPropagation()} role="menu">
+              <div className="menu-sec">🔔 NEEDS ATTENTION</div>
+              {alerts.length === 0 && (
+                <div className="menu-foot" style={{ border: "none", marginTop: 0 }}>All clear — nothing due right now. 🎉</div>
+              )}
+              {alerts.map((a) => (
+                <button key={a.id} className="menu-item" style={a.warn ? { color: "var(--stamp)" } : undefined}
+                  onClick={() => { setView(a.view); setTag(null); setAdding(false); setPageId(null); setBellOpen(false); }}>
+                  {a.text}
+                </button>
+              ))}
+              <div className="menu-sec">STAY UPDATED</div>
+              <button className="menu-item" onClick={() => { downloadICS(); setBellOpen(false); }}
+                title="Download your due dates as a calendar file — import it into Google/Apple/Outlook Calendar and get reminders there">
+                📅 Send due dates to my calendar (.ics)
+              </button>
+              {typeof Notification !== "undefined" && notifPerm !== "granted" && (
+                <button className="menu-item" onClick={() => Notification.requestPermission().then((p) => setNotifPerm(p))}
+                  title="Vault will show a desktop summary once a day when something needs attention">
+                  🖥 Enable desktop alerts
+                </button>
+              )}
+              {notifPerm === "granted" && (
+                <div className="menu-foot" style={{ border: "none", marginTop: 0 }}>
+                  Desktop alerts on — you'll get a summary when things come due.
+                </div>
+              )}
+            </div>
+          )}
+          <button className="avatar" onClick={(e) => { e.stopPropagation(); setMenuOpen((m) => !m); setBellOpen(false); }}
+            aria-haspopup="menu" aria-expanded={menuOpen} title="Profile & settings">
+            {(profile.name || "You").trim().split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase()}
+          </button>
+          {menuOpen && (
+            <div className="menu" onClick={(e) => e.stopPropagation()} role="menu">
+              {/* account header — the shape a signed-in account takes at launch */}
+              <div className="menu-account">
+                <span className="menu-avatar" aria-hidden="true">
+                  {(profile.name || "You").trim().split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase()}
+                </span>
+                <span className="menu-who">
+                  <b>{profile.name?.trim() || "Your account"}</b>
+                  <small>{profile.email?.trim() || "Local account · not synced"}</small>
+                </span>
+              </div>
+              <button className="menu-item" onClick={() => { setSettingsOpen(true); setMenuOpen(false); }}>
+                ⚙ Settings
+              </button>
+              <button className="menu-item" onClick={() => { setHelpOpen(true); setMenuOpen(false); }}>
+                ⌨ Keyboard shortcuts <span className="menukey kbd">?</span>
+              </button>
+              <div className="menu-foot">Vault v1 · data stays in this browser — sync arrives with the cloud release</div>
+            </div>
+          )}
+        </div>
+        {undoItem && (
+          <div className="toast" role="status">
+            Moved “{(undoItem.alias || undoItem.title).slice(0, 40)}” to Recently deleted
+            <button onClick={() => { update(undoItem); setUndoItem(null); }}>Undo</button>
+          </div>
+        )}
+        {view === "dash" && (
+          <>
+            <div className="crumb">Overview · {fmtStamp(today())}</div>
+            <h2 className="display">Your collection, at a glance</h2>
+            <p className="sub">Search everything with <span className="kbd">Ctrl</span>+<span className="kbd">K</span> — here's just what matters today.</p>
+
+            {ob && !ob.dismissed && ob.choice && (() => {
+              let boardsOwn = false;
+              try { boardsOwn = (JSON.parse(localStorage.getItem("vault.boards.v1") || "{}").boards || []).some((b) => b.id !== "sb1"); } catch {}
+              const steps = [
+                { id: "cap", label: "Capture your first item — a link, a thought, an expense", hint: "Press C and type anything; Vault files it for you", key: "C", done: items.some((i) => +i.id > 1e12), go: () => setCapOpen(true) },
+                { id: "name", label: "Make it yours — add your name", hint: "Settings → Profile", done: !!profile.name?.trim() && profile.name.trim() !== "You", go: () => setSettingsOpen(true) },
+                { id: "board", label: "Plan something — create your own board", hint: "Projects → ＋ New board", done: boardsOwn, go: () => { setView("board"); setTag(null); setAdding(false); setPageId(null); } },
+                { id: "backup", label: "Own your data — export a backup", hint: "One click, one JSON file — your insurance", key: "E", done: !!ob.exported, go: doExport },
+                { id: "ai", label: "Optional: connect AI — Claude or an open-source model", hint: "Settings → AI assistant", done: aiEnabled(), go: () => setSettingsOpen(true) },
+              ];
+              return (
+                <ChecklistCard steps={steps} sampleMode={ob.choice === "sample"}
+                  onDismiss={() => setObState(setOB({ dismissed: true }))}
+                  onGo={(s) => s.go()} />
+              );
+            })()}
+
+            {pulse?.ins && (() => {
+              const ins = pulse.ins;
+              const maxDay = Math.max(1, ...ins.days.map((d) => d.n));
+              return (
+                <div className="charts-top">
+                  <div className="card">
+                    <div className="wstrip-head">
+                      <h3 style={{ margin: 0 }}>Your week</h3>
+                      <span className={`streak mono ${ins.streak > 0 ? "hot" : ""}`}>
+                        {ins.streak > 0 ? `🔥 ${ins.streak}-day streak` : "Nothing yet today"}
+                      </span>
+                    </div>
+                    <div className="wstrip" aria-label="Activity over the last 7 days">
+                      {ins.days.map((d, k) => (
+                        <div key={d.iso} className="wday" title={`${d.iso} — ${d.n} thing${d.n === 1 ? "" : "s"} (saved, done, or logged)`}>
+                          <div className="wbarwrap"><div className={`wbar ${d.n > 0 ? "on" : ""}`} style={{ height: `${Math.max(8, (d.n / maxDay) * 100)}%` }} /></div>
+                          <span className={`wlbl mono ${k === 6 ? "today" : ""}`}>{k === 6 ? "Today" : d.wd}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="m" style={{ color: "var(--ink-soft)", fontSize: 12 }}>
+                      A day counts when you save, finish or log anything.
+                    </div>
+                  </div>
+                  <div className="card">
+                    <div className="wstrip-head">
+                      <h3 style={{ margin: 0 }}>Items added per week</h3>
+                      <span className="cardsub mono">
+                        {ins.trend.savedNow >= ins.trend.savedPrev ? "▲" : "▼"} {ins.trend.savedNow} this wk · {ins.trend.savedPrev} last
+                      </span>
+                    </div>
+                    <WeeklyBars items={items} />
+                  </div>
+                  <div className="card"><h3>Where things live</h3><Donut items={items} /></div>
+                  <div className="card">
+                    <div className="wstrip-head">
+                      <h3 style={{ margin: 0 }}>Where money goes</h3>
+                      <span className="cardsub mono">{ins.money.sym}{Math.round(ins.money.spent).toLocaleString()} this month</span>
+                    </div>
+                    {ins.money.topCats.length ? (
+                      <div className="catbars">
+                        {ins.money.topCats.map((c) => {
+                          const max = ins.money.topCats[0].amt || 1;
+                          return (
+                            <div key={c.cat} className="catbar" title={`${c.cat} — ${ins.money.sym}${c.amt.toFixed(2)} spent this month`}>
+                              <span className="cb-name">{c.cat}</span>
+                              <span className="cb-track"><span className="cb-fill" style={{ width: `${Math.max(4, (c.amt / max) * 100)}%` }} /></span>
+                              <span className="cb-amt mono">{ins.money.sym}{Math.round(c.amt)}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="m" style={{ color: "var(--ink-soft)" }}>No expenses logged this month yet — add one in Finance.</div>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {pulse?.ins && (() => {
+              const usage = pulse.ins.usage;
+              const last30 = (d) => d && daysAgo(d) <= 30;
+              const used = [
+                { name: "Notes", color: "var(--moss)", n: items.filter((i) => i.type === "note" && last30(i.date)).length },
+                { name: "YouTube", color: "var(--azure)", n: items.filter((i) => i.type === "video" && last30(i.date)).length },
+                { name: "Library", color: "var(--gold)", n: items.filter((i) => i.type === "book" && last30(i.date)).length },
+                { name: "Documents", color: "var(--blue)", n: items.filter((i) => i.type === "doc" && last30(i.date)).length },
+                { name: "To-dos done", color: "var(--violet)", n: usage.todoDates.filter(last30).length },
+                { name: "Expenses", color: "var(--ink-soft)", n: usage.expenseDates.filter(last30).length },
+              ].sort((a, b) => b.n - a.n);
+              const maxUsed = Math.max(1, ...used.map((u) => u.n));
+              return (
+                <div className="card">
+                  <div className="wstrip-head">
+                    <h3 style={{ margin: 0 }}>Most used</h3>
+                    <span className="cardsub mono">actions per feature · last 30 days</span>
+                  </div>
+                  <div className="usedgrid">
+                    {used.map((u) => (
+                      <div key={u.name} className="catbar" title={`${u.name}: ${u.n} action${u.n === 1 ? "" : "s"} in the last 30 days`}>
+                        <span className="cb-name">{u.name}</span>
+                        <span className="cb-track"><span className="cb-fill" style={{ width: `${Math.max(3, (u.n / maxUsed) * 100)}%`, background: u.color }} /></span>
+                        <span className="cb-amt mono">{u.n}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
+
+            <div className="bar">
+              <input ref={filterRef} placeholder="Search your whole vault — notes, videos, books, docs, #tags…  ( / )"
+                value={dq} onChange={(e) => setDq(e.target.value)} aria-label="Search vault" />
+              {dq && <button className="btn ghost" onClick={() => setDq("")}>Clear</button>}
+            </div>
+            {dq && (
+              <div className="card">
+                <h3>Results for “{dq}”</h3>
+                {items
+                  .filter((i) => (i.title + " " + i.meta + " " + i.tags.join(" ")).toLowerCase().includes(dq.toLowerCase()))
+                  .slice(0, 8)
+                  .map((it) => {
+                    const s = SECTIONS[it.type];
+                    return (
+                      <div key={it.id} className="row" style={{ padding: "10px 12px", cursor: "pointer" }}
+                        onClick={() => { openSection(it.type); setDq(""); }} role="button" tabIndex={0}
+                        onKeyDown={(e) => e.key === "Enter" && (openSection(it.type), setDq(""))}>
+                        <div className="icbox" style={{ width: 30, height: 30, fontSize: 13, background: s.soft, color: s.color }} aria-hidden="true"><Ic name={s.ic} /></div>
+                        <div className="body">
+                          <div className="t" style={{ fontSize: 14 }}>{it.title}</div>
+                          <div className="m">{s.label} · {it.tags.map((t) => `#${t}`).join(" ") || "no tags"}</div>
+                        </div>
+                        <div className="stamp">Added · {fmtStamp(it.date)}</div>
+                      </div>
+                    );
+                  })}
+                {items.filter((i) => (i.title + " " + i.meta + " " + i.tags.join(" ")).toLowerCase().includes(dq.toLowerCase())).length === 0 && (
+                  <div className="empty">No matches for “{dq}”.</div>
+                )}
+              </div>
+            )}
+
+            <div className="tiles">
+              {Object.entries(SECTIONS).map(([k, s]) => (
+                <div key={k} className="tile" onClick={() => openSection(k)} role="button" tabIndex={0}
+                  onKeyDown={(e) => e.key === "Enter" && openSection(k)}>
+                  <div className="k" style={{ color: s.color }}><Ic name={s.ic} /> {s.label}</div>
+                  <div className="n">{items.filter((i) => i.type === k).length}</div>
+                  <div className="d"><b>+{thisWeek(k)}</b> this week</div>
+                </div>
+              ))}
+            </div>
+
+            {pulse?.ins && (() => {
+              const ins = pulse.ins;
+              const go = (v) => { setView(v); setTag(null); setAdding(false); setPageId(null); };
+              return (
+                <>
+                  <div className="insights">
+                    <button className="insight" onClick={() => openSection("book")} title="Open Library">
+                      <span className="ins-k" style={{ color: "var(--gold)" }}>▤ Reading</span>
+                      <span className="ins-n">{ins.reading.count}<small> book{ins.reading.count === 1 ? "" : "s"} going</small></span>
+                      <span className="tl-bar"><span className="tl-bar-fill" style={{ width: `${ins.reading.pct}%` }} /></span>
+                      <span className="ins-d">{ins.reading.count ? `${ins.reading.pct}% through on average` : "Pick a book to start"}</span>
+                    </button>
+                    <button className="insight" onClick={() => openSection("video")} title="Open YouTube">
+                      <span className="ins-k" style={{ color: "var(--azure)" }}>▶ Watching</span>
+                      <span className="ins-n">{ins.watching.done}<small> of {ins.watching.total} watched</small></span>
+                      <span className="tl-bar"><span className="tl-bar-fill" style={{ width: `${ins.watching.pct}%` }} /></span>
+                      <span className="ins-d">{ins.watching.total - ins.watching.done} still in the queue</span>
+                    </button>
+                    <button className="insight" onClick={() => go("todos")} title="Open To-dos">
+                      <span className="ins-k" style={{ color: "var(--moss)" }}>☑ To-dos</span>
+                      <span className="ins-n">{ins.todos.doneWeek}<small> done this week</small></span>
+                      <span className="tl-bar"><span className="tl-bar-fill" style={{ width: `${ins.todos.pct}%` }} /></span>
+                      <span className="ins-d">{ins.todos.open} still open</span>
+                    </button>
+                    <button className={`insight ${ins.money.budget && ins.money.pct > 100 ? "over" : ""}`} onClick={() => go("finance")} title="Open Finance">
+                      <span className="ins-k" style={{ color: "var(--violet)" }}>⛁ Money</span>
+                      <span className="ins-n">{ins.money.sym}{Math.round(ins.money.spent).toLocaleString()}<small> spent this month</small></span>
+                      <span className="tl-bar"><span className="tl-bar-fill" style={{ width: `${Math.min(100, ins.money.pct)}%` }} /></span>
+                      <span className="ins-d">{ins.money.budget
+                        ? (ins.money.pct > 100 ? `${ins.money.pct - 100}% over your ${ins.money.sym}${ins.money.budget.toLocaleString()} budget` : `${ins.money.pct}% of your ${ins.money.sym}${ins.money.budget.toLocaleString()} budget`)
+                        : "Set a budget in Finance → Payments"}</span>
+                    </button>
+                    <button className="insight" onClick={() => go("board")} title="Open Boards">
+                      <span className="ins-k" style={{ color: "var(--ink)" }}>▦ Boards</span>
+                      <span className="ins-n">{ins.boards.done}<small> of {ins.boards.total} cards done</small></span>
+                      <span className="tl-bar"><span className="tl-bar-fill" style={{ width: `${ins.boards.pct}%` }} /></span>
+                      <span className="ins-d">{ins.boards.count} board{ins.boards.count === 1 ? "" : "s"} in play</span>
+                    </button>
+                  </div>
+                </>
+              );
+            })()}
+
+            <div className="card" style={{ borderColor: "var(--violet)" }}>
+              <h3>✦ Weekly digest
+                <button className="aibtn" style={{ marginLeft: 10 }} disabled={digestBusy || !aiEnabled()}
+                  title={aiEnabled() ? "Your AI reviews your week: what you saved, what's rotting, what to do next" : "Set up AI in Settings (avatar menu) to enable"}
+                  onClick={genDigest}>{digestBusy ? "Writing…" : digest ? "Regenerate" : "Generate"}</button>
+              </h3>
+              {digest
+                ? <div className="digest">{digest}</div>
+                : <div className="m" style={{ color: "var(--ink-soft)" }}>
+                    {aiEnabled()
+                      ? "One click and your AI reviews your week — what you saved, what's going stale, and what to finish next."
+                      : "AI is off — connect Claude or an open-source model in Settings (avatar menu) to unlock the digest, Ask AI, summaries and more."}
+                  </div>}
+            </div>
+
+          </>
+        )}
+
+        {view === "board" && (
+          <>
+            <div className="crumb">Projects</div>
+            <h2 className="display">Boards</h2>
+            <p className="sub">"Vault items" tracks everything you've saved, by status. Create your own boards — a feature, a sprint, this week — with any columns you like.</p>
+            <CustomBoards itemsBoard={<ProjectBoard items={items} onUpdate={updateStamped} onGoto={goto} onTag={openTag} />} />
+          </>
+        )}
+
+        {view === "finance" && (
+          <>
+            <div className="crumb">Money</div>
+            <h2 className="display">Finance</h2>
+            <p className="sub">Track daily expenses and keep every pending payment — credit card, rent, subscriptions — on the board until it's paid.</p>
+            <FinanceBoard key={`fb-${capBump}`} />
+          </>
+        )}
+
+        {view === "todos" && (
+          <>
+            <div className="crumb">Tasks</div>
+            <h2 className="display">To-dos</h2>
+            <p className="sub">One box, zero setup — type a to-do and it sorts itself into Overdue, Today, Upcoming or Someday. ⚑ marks priority; click a date chip to reschedule.</p>
+            <TodoBoard key={`tb-${capBump}`} />
+          </>
+        )}
+
+        {view === "graph" && (
+          <>
+            <div className="crumb">Connections</div>
+            <h2 className="display">Graph</h2>
+            <p className="sub">Each project tag is a hub with its items gathered around it. Hover anything to spotlight its connections; click to open.</p>
+            <GraphView items={items} onOpenTag={openTag} onOpenSection={openSection} />
+          </>
+        )}
+
+        {view === "tags" && (
+          <>
+            <div className="crumb">Projects</div>
+            <h2 className="display">Tags</h2>
+            <p className="sub">Every project tag in your vault, with what it links together — click one to open the project.</p>
+
+            <div className="bar">
+              <input placeholder="＋ Create a tag — e.g. “side-project” or “2026-goals”… (Enter)" aria-label="Create a tag"
+                onKeyDown={(e) => {
+                  if (e.key !== "Enter") return;
+                  const t = normalizeTag(e.target.value);
+                  if (!t) return;
+                  setCustomTags(addCustomTag(t));
+                  e.target.value = "";
+                }} />
+            </div>
+
+            {(() => {
+              const every = [...new Set([...allTags, ...customTags])];
+              if (every.length === 0)
+                return <div className="empty">No tags yet — create one above, or add #tags when saving items.</div>;
+              return (
+                <div className="taggrid">
+                  {every
+                    .sort((a, b) => items.filter((i) => i.tags.includes(b)).length - items.filter((i) => i.tags.includes(a)).length)
+                    .map((t) => {
+                      const tagged = items.filter((i) => i.tags.includes(t));
+                      const unusedCustom = tagged.length === 0 && customTags.includes(t);
+                      return (
+                        <button key={t} className={`tagcard ${unusedCustom ? "tagcard-new" : ""}`} onClick={() => openTag(t)}>
+                          <div className="tg-name display">#{t}</div>
+                          <div className="tg-count mono">
+                            {unusedCustom ? "new — nothing tagged yet" : `${tagged.length} item${tagged.length === 1 ? "" : "s"}`}
+                          </div>
+                          <div className="tg-secs">
+                            {unusedCustom
+                              ? <span className="pill" style={{ background: "var(--violet-soft)", color: "var(--violet)", marginTop: 0 }}>use it via ＋ tag or #{t.slice(0, 12)} in Quick add</span>
+                              : Object.entries(SECTIONS).map(([k, s]) => {
+                                  const n = tagged.filter((i) => i.type === k).length;
+                                  return n ? <span key={k} className="pill" style={{ background: s.soft, color: s.color, marginTop: 0 }}><Ic name={s.ic} /> {n}</span> : null;
+                                })}
+                          </div>
+                          {unusedCustom && (
+                            <span className="tg-del" role="button" tabIndex={0} title="Remove this unused tag"
+                              aria-label={`Remove tag ${t}`}
+                              onClick={(e) => { e.stopPropagation(); setCustomTags(removeCustomTag(t)); }}
+                              onKeyDown={(e) => { if (e.key === "Enter") { e.stopPropagation(); setCustomTags(removeCustomTag(t)); } }}>✕</span>
+                          )}
+                        </button>
+                      );
+                    })}
+                </div>
+              );
+            })()}
+          </>
+        )}
+
+        {view === "trash" && (
+          <>
+            <div className="crumb">Trash</div>
+            <h2 className="display">Recently deleted</h2>
+            <p className="sub">Deleted items stay here for 30 days, then they're removed forever — just like Apple Notes.</p>
+            {trashed.length > 0 && (
+              <div className="bar">
+                <div style={{ flex: 1 }} />
+                <button className="btn ghost" style={armDel === "emptytrash" ? { borderColor: "var(--stamp)", color: "var(--stamp)" } : undefined}
+                  onClick={() => {
+                    if (armDel !== "emptytrash") { setArmDel("emptytrash"); return; }
+                    trashed.forEach((t) => remove(t.id));
+                    setArmDel(null);
+                  }}>
+                  {armDel === "emptytrash" ? `⚠ Delete ${trashed.length} forever? Click again` : "✕ Empty trash"}
+                </button>
+              </div>
+            )}
+            {trashed.length === 0
+              ? <div className="empty">Nothing in the trash. Deleted items land here and stay recoverable for 30 days.</div>
+              : [...trashed].sort((a, b) => b.deleted.localeCompare(a.deleted)).map((it) => {
+                  const s = SECTIONS[it.type];
+                  const left = Math.max(0, 30 - daysAgo(it.deleted));
+                  return (
+                    <div key={it.id} className="row">
+                      <div className="icbox" style={{ background: s.soft, color: s.color }} aria-hidden="true"><Ic name={s.ic} /></div>
+                      <div className="body">
+                        <div className="t"><span className="ttext">{it.alias || it.title}</span></div>
+                        <div className="m">{s.label} · deleted {fmtStamp(it.deleted)} · <b style={{ color: left <= 5 ? "var(--stamp)" : "inherit" }}>{left} day{left === 1 ? "" : "s"} left</b></div>
+                        <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                          <button className="btn sm" onClick={() => update({ ...it, deleted: undefined })}>↩ Restore</button>
+                          <button className="btn ghost sm" style={armDel === `trash:${it.id}` ? { borderColor: "var(--stamp)", color: "var(--stamp)" } : undefined}
+                            onClick={() => {
+                              if (armDel !== `trash:${it.id}`) { setArmDel(`trash:${it.id}`); return; }
+                              remove(it.id);
+                              setArmDel(null);
+                            }}>
+                            {armDel === `trash:${it.id}` ? "⚠ Click again" : "✕ Delete forever"}
+                          </button>
+                        </div>
+                      </div>
+                      <div className="stamp">Added · {fmtStamp(it.date)}</div>
+                    </div>
+                  );
+                })}
+          </>
+        )}
+
+        {(view in SECTIONS || view === "tag") && pageItem && (
+          <NotePage it={pageItem} onBack={() => setPageId(null)} onUpdate={updateStamped} onTag={openTag} folders={folders}
+            allItems={items} onGoto={goto} />
+        )}
+
+        {(view in SECTIONS || view === "tag") && !pageItem && (
+          <>
+            <div className="crumb">{view === "tag" ? "Project" : "Section"}</div>
+            <h2 className="display">{view === "tag" ? `#${tag}` : SECTIONS[view].label}</h2>
+            <p className="sub">
+              {view === "tag"
+                ? `Everything linked to “${tag}” across notes, videos, PDFs and documents.`
+                : view === "video"
+                  ? "Saved videos — press “Watch here” to play without leaving Vault."
+                  : view === "book"
+                    ? "Your reading hub — track progress on each book/PDF and link the notes, videos and docs that belong with it."
+                    : "Click any #tag to jump to that project. Click item text to edit."}
+            </p>
+
+            {view === "tag" && (
+              <div className="tagband">
+                {Object.entries(SECTIONS).map(([k, s]) => {
+                  const n = items.filter((i) => i.tags.includes(tag) && i.type === k).length;
+                  return n ? <span key={k} className="pill" style={{ background: s.soft, color: s.color, marginTop: 0 }}><Ic name={s.ic} /> {n} {s.label.toLowerCase()}</span> : null;
+                })}
+              </div>
+            )}
+
+            {view === "doc" && (() => {
+              const files = items.filter((i) => i.type === "doc" && i.file);
+              const bytes = files.reduce((a, b) => a + b.file.size, 0);
+              return (
+                <div className="doclib-head">
+                  <span className="doclib-meta mono">{files.length} file{files.length === 1 ? "" : "s"} · {bytes > 1048576 ? `${(bytes / 1048576).toFixed(1)} MB` : `${Math.round(bytes / 1024)} KB`} used</span>
+                  <div className="doctabs" role="tablist" aria-label="Filter by file type">
+                    {["All", "PDF", "Word", "Sheet", "Image"].map((f) => (
+                      <button key={f} className={docFilter === f ? "on" : ""} role="tab"
+                        aria-selected={docFilter === f} onClick={() => setDocFilter(f)}>{f}</button>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {view === "doc" && (
+              <div className="cloudbar">
+                <input placeholder="🔗 Paste a Google Doc / Sheet / Drive / Excel / OneDrive / Dropbox / Notion link to attach it…"
+                  aria-label="Link a cloud file"
+                  onKeyDown={(e) => {
+                    if (e.key !== "Enter") return;
+                    const v = e.target.value.trim();
+                    const cloud = detectCloud(v);
+                    if (!cloud) return;
+                    add({
+                      id: Date.now(), type: "doc", title: cloudTitle(v, cloud),
+                      meta: `${cloud.label} — opens in a new tab`, url: v, cloud: cloud.kind,
+                      status: "Inbox", tags: [], date: today(),
+                    });
+                    e.target.value = "";
+                  }} />
+                <span className="cardsub mono">lives in its app · linked here</span>
+              </div>
+            )}
+
+            {view === "doc" && (
+              <div className={`quickdrop ${quickDragOver ? "over" : ""}`} role="button" tabIndex={0}
+                onClick={() => quickFileRef.current?.click()}
+                onKeyDown={(e) => e.key === "Enter" && quickFileRef.current?.click()}
+                onDragOver={(e) => { e.preventDefault(); setQuickDragOver(true); }}
+                onDragLeave={() => setQuickDragOver(false)}
+                onDrop={(e) => { e.preventDefault(); setQuickDragOver(false); quickSaveFile(e.dataTransfer.files); }}
+                aria-label="Drop a file to save it instantly">
+                ⬆ <b>Drop any file here to save it instantly</b> — no form, stamped today · max 2 MB
+                <input ref={quickFileRef} type="file" hidden
+                  accept=".pdf,.doc,.docx,.rtf,.odt,.txt,.md,.csv,.json,.log,.epub,.xls,.xlsx,.ppt,.pptx,.png,.jpg,.jpeg,.webp,.gif,.svg,.mp3,.m4a,.wav,.mp4,.webm"
+                  onChange={(e) => { quickSaveFile(e.target.files); e.target.value = ""; }} />
+              </div>
+            )}
+
+            {view === "book" && (() => {
+              const reading = items.filter((i) => i.type === "book" && (i.progress || 0) > 0 && (i.progress || 0) < 100);
+              if (!reading.length) return null;
+              const bump = (b, d) => {
+                const p = Math.max(0, Math.min(100, (b.progress || 0) + d));
+                updateStamped({ ...b, progress: p, status: p >= 100 ? "Done" : p > 0 ? "In progress" : b.status });
+              };
+              return (
+                <div className="card" style={{ borderColor: "var(--gold)" }}>
+                  <h3>📖 Reading now</h3>
+                  {reading.map((b) => (
+                    <div key={b.id} className="readnow">
+                      <span className="fdesc" style={{ fontWeight: 600 }}>{b.alias || b.title}</span>
+                      <button className="kbtn" onClick={() => bump(b, -5)} title="Went back a bit">−5%</button>
+                      <div className="readbar" style={{ flex: 1, marginTop: 0, minWidth: 80 }}><div className="readbar-fill" style={{ width: `${b.progress || 0}%` }} /></div>
+                      <button className="kbtn" onClick={() => bump(b, 5)} title="Read a bit more — one tap">+5%</button>
+                      <span className="readpct mono">{b.progress || 0}%</span>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+
+            {view === "note" && folders.length > 0 && (
+              <div className="tagband" role="tablist" aria-label="Folders">
+                <button className={`fchip ${effFolder === "All" ? "on" : ""}`} role="tab"
+                  aria-selected={effFolder === "All"} onClick={() => setFolderSel("All")}>
+                  All notes · {items.filter((i) => i.type === "note").length}
+                </button>
+                {folders.map((f) => (
+                  <button key={f} className={`fchip ${effFolder === f ? "on" : ""}`} role="tab"
+                    aria-selected={effFolder === f} onClick={() => setFolderSel(f)}>
+                    ▸ {f} · {items.filter((i) => i.type === "note" && i.folder === f).length}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <div className="bar">
+              <input ref={filterRef} placeholder="Filter this view…  ( / — Ctrl+K searches everything)" value={q}
+                onChange={(e) => setQ(e.target.value)} aria-label="Filter items" />
+              <select className="sortsel" value={sortBy} onChange={(e) => setSortBy(e.target.value)}
+                aria-label="Sort items" title="Sort — pinned items always stay on top">
+                <option value="added">Newest added</option>
+                <option value="edited">Recently edited</option>
+                <option value="title">Title A–Z</option>
+              </select>
+              <span className="datefilter" title="Show only items added on a specific day">
+                <input type="date" value={dateFilter} aria-label="Filter by date added"
+                  onChange={(e) => setDateFilter(e.target.value)} />
+                {dateFilter && <button onClick={() => setDateFilter("")} aria-label="Clear date filter" title="Clear date filter">✕</button>}
+              </span>
+              {view === "note" && (
+                <button className="btn ghost" onClick={() => setShowTemplates((v) => !v)}>
+                  {showTemplates ? "Close templates" : "▦ Templates"}
+                </button>
+              )}
+              {view === "note" && (
+                <div className="layouttoggle" role="group" aria-label="Layout">
+                  <button className={notesLayout === "list" ? "on" : ""} title="List view"
+                    onClick={() => setNotesLayout("list")}>☰</button>
+                  <button className={notesLayout === "grid" ? "on" : ""} title="Grid view"
+                    onClick={() => setNotesLayout("grid")}>▦</button>
+                </div>
+              )}
+              <button className="btn" title="New item (N)" onClick={() => setAdding((a) => !a)}>{adding ? "Close (Esc)" : "+ Add item"}</button>
+            </div>
+
+            {view === "note" && showTemplates && (
+              <div className="tplwrap">
+                <div className="tpl-title display">Templates</div>
+                <div className="tpl-sub">Start a new page from a structured starter</div>
+                <div className="tplgrid">
+                  {TEMPLATES.map((t) => {
+                    const st = templateStats(t);
+                    return (
+                      <div key={t.title} className="tplcard">
+                        <div className="tpl-cat mono">{t.cat}</div>
+                        <div className="tpl-name display">{t.title}</div>
+                        <div className="tpl-desc">{t.desc}</div>
+                        <div className="tpl-meta mono">{st.blocks} blocks · {st.tasks} task{st.tasks === 1 ? "" : "s"}</div>
+                        <button className="tpl-use" onClick={() => useTemplate(t)}>＋ Use template</button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {adding && (
+              <AddForm section={view} existingTags={[...new Set([...allTags, ...customTags])]}
+                onAdd={(it) => add(view === "tag" ? { ...it, tags: [...new Set([...it.tags, tag])] } : it)}
+                onClose={() => setAdding(false)} />
+            )}
+
+            {/* the card grid is a NOTES gallery; Documents always use the list,
+                where files get their View / Open / Write actions */}
+            {view === "note" && notesLayout === "grid" ? (
+              visible.length ? (
+                <div className="notegrid">
+                  {visible.map((it) => {
+                    const first = (it.blocks || []).find((b) => b.text && b.text.trim());
+                    const nT = (it.blocks || []).filter((b) => b.kind === "todo").length;
+                    const nD = (it.blocks || []).filter((b) => b.kind === "todo" && b.done).length;
+                    return (
+                      <div key={it.id} className={`notecard ${focusId === it.id ? "flash" : ""}`} role="button" tabIndex={0}
+                        onClick={() => setPageId(it.id)}
+                        onKeyDown={(e) => e.key === "Enter" && setPageId(it.id)}>
+                        <div className="nc-title">
+                          {it.pinned && <span style={{ color: "var(--gold)" }} aria-label="Pinned">★ </span>}
+                          {it.title}
+                        </div>
+                        {first && <div className="nc-preview">{first.text.slice(0, 140)}{first.text.length > 140 ? "…" : ""}</div>}
+                        {!first && <div className="nc-preview" style={{ fontStyle: "italic" }}>{it.meta}</div>}
+                        <div className="nc-foot">
+                          {it.tags.slice(0, 3).map((t) => (
+                            <span key={t} className="pill" style={{ background: "var(--violet-soft)", color: "var(--violet)", marginTop: 0 }}>#{t}</span>
+                          ))}
+                          {nT > 0 && <span className="bcount">☑ {nD}/{nT}</span>}
+                          <span className="nc-date mono">{fmtStamp(it.date)}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : <div className="empty">{dateFilter || q
+                    ? <>Nothing {dateFilter ? <>added on <b>{fmtStamp(dateFilter)}</b></> : "matching your filter"} here — <button className="av-link" onClick={() => { setDateFilter(""); setQ(""); }}>clear filters</button>.</>
+                    : <>Nothing here yet. Tap <b>+ Add item</b> to create your first {SECTIONS[view].label.toLowerCase().replace(/s$/, "")}.</>}</div>
+            ) : visible.length
+              ? visible.map((it) => <ItemRow key={it.id} it={it} onTag={openTag} onUpdate={updateStamped} onRemove={removeWithUndo}
+                  allItems={items} onGoto={goto} focus={focusId === it.id} onOpen={() => setPageId(it.id)} folders={folders} />)
+              : <div className="empty">{dateFilter || q
+                  ? <>Nothing {dateFilter ? <>added on <b>{fmtStamp(dateFilter)}</b></> : "matching your filter"} here — <button className="av-link" onClick={() => { setDateFilter(""); setQ(""); }}>clear filters</button>.</>
+                  : <>Nothing here yet. Tap <b>+ Add item</b>, paste a link for instant capture, or drop a file straight into the form.</>}</div>}
+          </>
+        )}
+      </main>
+    </div>
+  );
+}
