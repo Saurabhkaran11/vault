@@ -107,7 +107,10 @@ async function apiWithHeaders(path) {
     err.status = res.status;
     throw err;
   }
-  return { rows: await res.json(), total: Number(res.headers.get("X-Total-Count")) };
+  // null (absent) is meaningfully different from 0 (genuinely empty), so
+  // keep them distinct — see fetchAllPages.
+  const raw = res.headers.get("X-Total-Count");
+  return { rows: await res.json(), total: raw === null ? null : Number(raw) };
 }
 
 /* Walk every page of a list endpoint.
@@ -124,17 +127,32 @@ async function apiWithHeaders(path) {
  */
 async function fetchAllPages(path, { pageSize = 1000 } = {}) {
   const join = path.includes("?") ? "&" : "?";
-  const first = await apiWithHeaders(`${path}${join}limit=${pageSize}&offset=0`);
-  const total = Number.isFinite(first.total) ? first.total : first.rows.length;
+  const page = (offset) => apiWithHeaders(`${path}${join}limit=${pageSize}&offset=${offset}`);
+
+  const first = await page(0);
   const out = [...first.rows];
 
-  while (out.length < total) {
-    const next = await apiWithHeaders(`${path}${join}limit=${pageSize}&offset=${out.length}`);
+  if (first.total === null) {
+    /* No X-Total-Count — a proxy or CDN stripped it, or CORS is not exposing
+       it. Treating that as "one page is everything" is precisely the silent
+       truncation this function exists to prevent, so fall back to the only
+       signal left: keep asking until a page comes back short. */
+    let lastSize = first.rows.length;
+    while (lastSize === pageSize) {
+      const next = await page(out.length);
+      out.push(...next.rows);
+      lastSize = next.rows.length;
+    }
+    return out;
+  }
+
+  while (out.length < first.total) {
+    const next = await page(out.length);
     if (!next.rows.length) break;          // server disagrees with its own count
     out.push(...next.rows);
   }
-  if (out.length < total) {
-    throw new Error(`Incomplete read of ${path}: got ${out.length} of ${total} rows`);
+  if (out.length < first.total) {
+    throw new Error(`Incomplete read of ${path}: got ${out.length} of ${first.total} rows`);
   }
   return out;
 }

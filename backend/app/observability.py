@@ -62,6 +62,12 @@ log = logging.getLogger("vault")
 async def request_context(request: Request, call_next):
     """Correlate every log line for one request, and time it."""
     rid = request.headers.get("x-request-id") or uuid.uuid4().hex[:16]
+    # Also stashed on request.state, because the unhandled-error handler runs
+    # in Starlette's ServerErrorMiddleware — OUTSIDE this middleware — where
+    # the context var has already been reset. request.state is the only
+    # carrier that survives that boundary, and without it a 500 comes back
+    # with no id at all: nothing for a user to quote, nothing to grep.
+    request.state.request_id = rid
     token = request_id_ctx.set(rid)
     started = time.perf_counter()
     try:
@@ -93,12 +99,22 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
     500 fallback skips CORSMiddleware, so a browser sees an unreadable reply
     and reports 'Failed to fetch' instead of the actual status.
     """
-    rid = request_id_ctx.get()
-    log.exception(
-        f"Unhandled {type(exc).__name__} on {request.method} {request.url.path}",
-        extra={"extra_fields": {"method": request.method, "path": request.url.path}},
-    )
+    rid = getattr(request.state, "request_id", None) or request_id_ctx.get()
+    # Re-enter the context so this log line carries the id too. Without it the
+    # traceback lands in the logs stamped "-", and the id handed to the user
+    # matches nothing you can search for.
+    token = request_id_ctx.set(rid)
+    try:
+        log.exception(
+            f"Unhandled {type(exc).__name__} on {request.method} {request.url.path}",
+            extra={"extra_fields": {"method": request.method, "path": request.url.path}},
+        )
+    finally:
+        request_id_ctx.reset(token)
     return JSONResponse(
         status_code=500,
         content={"detail": "Internal server error", "request_id": rid},
+        # The success path sets this in the middleware; that code never runs
+        # when the request raised, so set it here too.
+        headers={"X-Request-Id": rid},
     )

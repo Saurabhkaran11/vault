@@ -176,3 +176,56 @@ async def test_boot_guard_explains_itself_on_a_fresh_database(monkeypatch):
     with pytest.raises(RuntimeError, match="alembic upgrade head"):
         async with main.lifespan(main.app):
             pass
+
+
+@pytest.mark.asyncio
+async def test_a_500_is_traceable_by_the_id_the_caller_receives():
+    """The whole point of request ids: a user quotes one, you find the
+    traceback. This failed before — the error handler runs in Starlette's
+    ServerErrorMiddleware, outside the middleware that sets the context var,
+    so the id came back as "-" with no header and the log matched nothing.
+    """
+    import json
+    import logging
+
+    from fastapi import FastAPI
+    from httpx import ASGITransport, AsyncClient
+
+    from app.observability import request_context, unhandled_exception_handler
+
+    crash_app = FastAPI()
+    crash_app.middleware("http")(request_context)
+    crash_app.add_exception_handler(Exception, unhandled_exception_handler)
+
+    @crash_app.get("/boom")
+    async def boom():
+        raise RuntimeError("kaboom")
+
+    logged = []
+
+    class Capture(logging.Handler):
+        def emit(self, record):
+            logged.append(self.format(record))
+
+    vault_log = logging.getLogger("vault")
+    previous = vault_log.level
+    vault_log.setLevel(logging.INFO)
+    handler = Capture()
+    from app.observability import JsonFormatter
+    handler.setFormatter(JsonFormatter())
+    vault_log.addHandler(handler)
+    try:
+        transport = ASGITransport(app=crash_app, raise_app_exceptions=False)
+        async with AsyncClient(transport=transport, base_url="http://test") as ac:
+            r = await ac.get("/boom")
+    finally:
+        vault_log.removeHandler(handler)
+        vault_log.setLevel(previous)
+
+    rid = r.json()["request_id"]
+    assert rid and rid != "-", "the caller must get a real id, not the context default"
+    assert r.headers.get("X-Request-Id") == rid, "header and body must agree"
+
+    error_lines = [json.loads(line) for line in logged if '"ERROR"' in line]
+    assert error_lines, "the traceback must be logged"
+    assert error_lines[0]["request_id"] == rid, "the log line must carry the id the user was given"

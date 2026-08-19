@@ -162,8 +162,11 @@ class BudgetIn(BaseModel):
 
 # ---------- AI ----------
 class AskIn(BaseModel):
-    question: str
-    k: int = 6
+    question: str = Field(min_length=1, max_length=2000)
+    # Bounded: k flows straight into SQL LIMIT, where a negative value is a
+    # database error (500) and an enormous one would pull the whole index
+    # into a prompt. 50 is already far more context than any answer needs.
+    k: int = Field(6, ge=1, le=50)
 
 
 class AskSource(BaseModel):
