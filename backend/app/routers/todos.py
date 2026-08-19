@@ -21,9 +21,23 @@ async def list_tasks(session: AsyncSession = Depends(get_session), user: str = D
 
 
 @router.post("", response_model=TaskOut, status_code=201)
-async def create_task(body: TaskIn, session: AsyncSession = Depends(get_session), user: str = Depends(current_user_id)):
-    task = Task(user_id=user, **body.model_dump())
-    session.add(task)
+async def upsert_task(body: TaskIn, session: AsyncSession = Depends(get_session), user: str = Depends(current_user_id)):
+    """Idempotent upsert keyed on the frontend task id, so fire-and-forget
+    mirrors (and retry-queue replays) are safe. Emits `task.completed` on the
+    false→true done transition, same as the PUT path."""
+    task = await session.get(Task, body.id)
+    if task is not None and task.user_id != user:
+        raise HTTPException(409, "Task id belongs to another user")
+    if task is None:
+        task = Task(user_id=user, **body.model_dump())
+        session.add(task)
+    else:
+        was_done = task.done
+        for k, v in body.model_dump().items():
+            setattr(task, k, v)
+        if body.done and not was_done:
+            task.done_at = body.done_at or date.today()
+            await emit(session, user, "task.completed", {"text": task.text})
     await session.commit()
     return task
 
@@ -45,11 +59,12 @@ async def update_task(task_id: str, body: TaskIn, session: AsyncSession = Depend
 
 @router.delete("/{task_id}")
 async def delete_task(task_id: str, session: AsyncSession = Depends(get_session), user: str = Depends(current_user_id)):
+    """Idempotent like the upsert: deleting an already-gone task is a no-op
+    success, so retry-queue replays never wedge behind a 404."""
     task = await session.get(Task, task_id)
-    if not task or task.user_id != user:
-        raise HTTPException(404, "Task not found")
-    await session.delete(task)
-    await session.commit()
+    if task is not None and task.user_id == user:
+        await session.delete(task)
+        await session.commit()
     return {"ok": True}
 
 
