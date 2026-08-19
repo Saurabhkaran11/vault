@@ -21,6 +21,38 @@ async def _get(model, id_, session, user):
     return row
 
 
+async def _upsert(model, body, session, user, insert_event=None):
+    """Insert-or-update by the frontend-owned string id.
+
+    POST create endpoints must be upserts so frontend mirror calls are
+    idempotent (see backend-integration skill) — a replayed mirror updates
+    all fields instead of erroring on the duplicate key."""
+    row = await session.get(model, body.id)
+    if row is not None and row.user_id != user:
+        raise HTTPException(409, f"{model.__name__} id belongs to another user")
+    if row is None:
+        row = model(user_id=user, **body.model_dump())
+        session.add(row)
+        if insert_event:  # only a genuinely new row is an "event"; replays stay silent
+            kind, payload = insert_event
+            await emit(session, user, kind, payload)
+    else:
+        for k, v in body.model_dump(exclude={"id"}).items():
+            setattr(row, k, v)
+    await session.commit()
+    return row
+
+
+async def _delete(model, id_, session, user):
+    """Idempotent delete: a row that is already gone is success, so a
+    replayed mirror DELETE never wedges the frontend retry queue."""
+    row = await session.get(model, id_)
+    if row is not None and row.user_id == user:
+        await session.delete(row)
+        await session.commit()
+    return {"ok": True}
+
+
 # ---------- expenses ----------
 @router.get("/expenses", response_model=list[ExpenseOut])
 async def expenses(month: str | None = None, session: AsyncSession = Depends(get_session), user: str = Depends(current_user_id)):
@@ -33,11 +65,8 @@ async def expenses(month: str | None = None, session: AsyncSession = Depends(get
 
 @router.post("/expenses", response_model=ExpenseOut, status_code=201)
 async def add_expense(body: ExpenseIn, session: AsyncSession = Depends(get_session), user: str = Depends(current_user_id)):
-    row = Expense(user_id=user, **body.model_dump())
-    session.add(row)
-    await emit(session, user, "expense.logged", {"amount": body.amount, "cat": body.cat})
-    await session.commit()
-    return row
+    return await _upsert(Expense, body, session, user,
+                         insert_event=("expense.logged", {"amount": body.amount, "cat": body.cat}))
 
 
 @router.put("/expenses/{eid}", response_model=ExpenseOut)
@@ -51,9 +80,7 @@ async def edit_expense(eid: str, body: ExpenseIn, session: AsyncSession = Depend
 
 @router.delete("/expenses/{eid}")
 async def del_expense(eid: str, session: AsyncSession = Depends(get_session), user: str = Depends(current_user_id)):
-    await session.delete(await _get(Expense, eid, session, user))
-    await session.commit()
-    return {"ok": True}
+    return await _delete(Expense, eid, session, user)
 
 
 # ---------- bills (recurring auto-reschedule lives HERE, server-side) ----------
@@ -68,10 +95,7 @@ async def bills(session: AsyncSession = Depends(get_session), user: str = Depend
 
 @router.post("/bills", response_model=BillOut, status_code=201)
 async def add_bill(body: BillIn, session: AsyncSession = Depends(get_session), user: str = Depends(current_user_id)):
-    row = Bill(user_id=user, **body.model_dump())
-    session.add(row)
-    await session.commit()
-    return row
+    return await _upsert(Bill, body, session, user)
 
 
 @router.post("/bills/{bid}/pay", response_model=list[BillOut])
@@ -97,9 +121,7 @@ async def pay_bill(bid: str, session: AsyncSession = Depends(get_session), user:
 
 @router.delete("/bills/{bid}")
 async def del_bill(bid: str, session: AsyncSession = Depends(get_session), user: str = Depends(current_user_id)):
-    await session.delete(await _get(Bill, bid, session, user))
-    await session.commit()
-    return {"ok": True}
+    return await _delete(Bill, bid, session, user)
 
 
 # ---------- income / pay methods / budgets / goals ----------
@@ -110,10 +132,12 @@ async def incomes(session: AsyncSession = Depends(get_session), user: str = Depe
 
 @router.post("/incomes", response_model=IncomeOut, status_code=201)
 async def add_income(body: IncomeIn, session: AsyncSession = Depends(get_session), user: str = Depends(current_user_id)):
-    row = Income(user_id=user, **body.model_dump())
-    session.add(row)
-    await session.commit()
-    return row
+    return await _upsert(Income, body, session, user)
+
+
+@router.delete("/incomes/{iid}")
+async def del_income(iid: str, session: AsyncSession = Depends(get_session), user: str = Depends(current_user_id)):
+    return await _delete(Income, iid, session, user)
 
 
 @router.get("/pay-methods", response_model=list[PayMethodOut])
@@ -123,17 +147,12 @@ async def pay_methods(session: AsyncSession = Depends(get_session), user: str = 
 
 @router.post("/pay-methods", response_model=PayMethodOut, status_code=201)
 async def add_pay_method(body: PayMethodIn, session: AsyncSession = Depends(get_session), user: str = Depends(current_user_id)):
-    row = PayMethod(user_id=user, **body.model_dump())
-    session.add(row)
-    await session.commit()
-    return row
+    return await _upsert(PayMethod, body, session, user)
 
 
 @router.delete("/pay-methods/{pid}")
 async def del_pay_method(pid: str, session: AsyncSession = Depends(get_session), user: str = Depends(current_user_id)):
-    await session.delete(await _get(PayMethod, pid, session, user))
-    await session.commit()
-    return {"ok": True}
+    return await _delete(PayMethod, pid, session, user)
 
 
 @router.put("/budgets")
@@ -154,10 +173,12 @@ async def goals(session: AsyncSession = Depends(get_session), user: str = Depend
 
 @router.post("/goals", response_model=GoalOut, status_code=201)
 async def add_goal(body: GoalIn, session: AsyncSession = Depends(get_session), user: str = Depends(current_user_id)):
-    row = Goal(user_id=user, **body.model_dump())
-    session.add(row)
-    await session.commit()
-    return row
+    return await _upsert(Goal, body, session, user)
+
+
+@router.delete("/goals/{gid}")
+async def del_goal(gid: str, session: AsyncSession = Depends(get_session), user: str = Depends(current_user_id)):
+    return await _delete(Goal, gid, session, user)
 
 
 # ---------- summary: one SQL round-trip feeds tiles, charts and reports ----------
