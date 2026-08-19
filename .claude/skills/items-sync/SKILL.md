@@ -44,3 +44,19 @@ the UI path; `mirror` already swallows/queues failures.
 ## Status log
 
 - 2026-08-18: skill created; work pending.
+- 2026-08-18: implemented. Backend (`routers/items.py`): `ItemUpsert(ItemIn)`
+  schema (required `client_id`, adds `deleted_on`), `POST /items/upsert`
+  (select by user_id+client_id → update all fields, else insert + emit
+  item.created; enqueues embed_item), `POST /items/by-client/{id}/trash`,
+  `POST /items/by-client/{id}/restore`, `DELETE /items/by-client/{id}`.
+  Frontend (`hooks/useStore.js`): `toApi()` mapping (String(id)→client_id,
+  date→added_on, deleted→deleted_on always carried as null|date, file→
+  file_meta with `data` stripped, undefined dropped); add/update mirror
+  `POST /items/upsert`, remove mirrors `DELETE /items/by-client/{id}` —
+  all fire-and-forget via `mirror()`, no-op when sync is off. Verified on
+  :8100 as `qa-items`: upsert twice with changed title → ONE row (psql
+  count=1, same server id), new title; trash by client id → hidden by
+  default, listed with deleted_on under include_deleted; restore clears
+  deleted_on; DELETE removes (404 on repeat); trash/restore also proven
+  through the upsert `deleted_on` field (App.jsx update path); qa rows
+  cleaned up after. `node --check hooks/useStore.js` passes.
