@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { SECTIONS, GENERIC_TAGS, today, ytId } from "@/lib/seed";
 import { askJSON, aiEnabled } from "@/lib/ai";
+import { storeFile, fileStorageEnabled, formatSize } from "@/lib/files";
 
 /* Paste-a-link smart capture via the free noembed.com oEmbed proxy. */
 async function fetchTitle(url) {
@@ -76,6 +77,16 @@ export default function AddForm({ section, existingTags = [], onAdd, onClose }) 
   const [err, setErr] = useState("");
   const [file, setFile] = useState(null);
   const [fileErr, setFileErr] = useState("");
+  const [fileBusy, setFileBusy] = useState(false);
+  /* The storage key is built from the item's id, so the id has to exist
+     before the upload — not at save time. Minted once per open form, and
+     reused on submit so the key and the item always agree. Kept numeric
+     because "was this created by the user" checks read `+id > 1e12`. */
+  const draftId = useRef(Date.now());
+  /* Only used to label the size cap honestly — the actual decision lives in
+     storeFile(), so a stale value here can never route bytes wrongly. */
+  const [storageOn, setStorageOn] = useState(false);
+  useEffect(() => { let live = true; fileStorageEnabled().then((on) => live && setStorageOn(on)); return () => { live = false; }; }, []);
   const [dragOver, setDragOver] = useState(false);
   const fileRef = useRef(null);
 
@@ -119,23 +130,31 @@ export default function AddForm({ section, existingTags = [], onAdd, onClose }) 
     }
   };
 
-  /* Visible drop zone + click-to-browse (never drag-only). 2 MB cap. */
-  const handleFiles = (list) => {
+  /* Visible drop zone + click-to-browse (never drag-only).
+   *
+   * storeFile() decides where the bytes go: the bucket when file storage is
+   * configured (bigger cap, and the file follows you to other devices), the
+   * browser otherwise. The form only cares that it gets something back to
+   * attach to the item. */
+  const handleFiles = async (list) => {
     const f = list && list[0];
     if (!f) return;
     setFileErr("");
-    if (f.size > 2 * 1024 * 1024) {
-      setFileErr(`“${f.name}” is ${(f.size / 1048576).toFixed(1)} MB — max is 2 MB. Paste a link to it instead.`);
-      return;
-    }
-    const r = new FileReader();
-    r.onload = () => {
-      setFile({ name: f.name, type: f.type, size: f.size, data: r.result });
+    setFileBusy(true);
+    try {
+      const stored = await storeFile(draftId.current, f);
+      setFile(stored);
+      if (stored.localOnlyReason) {
+        setFileErr(`Saved in this browser only — ${stored.localOnlyReason}. It won't appear on your other devices.`);
+      }
       if (!title.trim()) setTitle(f.name.replace(/\.[^.]+$/, ""));
       if (/pdf|epub/i.test(f.name.split(".").pop()) && type === "note") setType("book");
       else if (type === "note" && !/image/.test(f.type)) setType("doc");
-    };
-    r.readAsDataURL(f);
+    } catch (err) {
+      setFileErr(err?.message || `Could not save “${f.name}”.`);
+    } finally {
+      setFileBusy(false);
+    }
   };
 
   const onUrl = async (value) => {
@@ -158,7 +177,7 @@ export default function AddForm({ section, existingTags = [], onAdd, onClose }) 
   const save = (blank = false) => {
     if (!title.trim() && !blank) { setErr("Enter a title first"); return; }
     onAdd({
-      id: Date.now(), type: blank ? "doc" : type,
+      id: draftId.current, type: blank ? "doc" : type,
       title: title.trim() || "Untitled document",
       meta: meta.trim() || (blank ? "Blank document — open the editor to start writing" : "—"),
       url: url.trim() || undefined, status: "Inbox",
@@ -183,10 +202,12 @@ export default function AddForm({ section, existingTags = [], onAdd, onClose }) 
         onDragLeave={() => setDragOver(false)}
         onDrop={(e) => { e.preventDefault(); setDragOver(false); handleFiles(e.dataTransfer.files); }}
         aria-label="Upload a file: drag it here or press Enter to browse">
-        <div className="dz-main">⬆ <b>Drag a file here</b> or click to browse</div>
+        <div className="dz-main">
+          {fileBusy ? "⏳ Saving file…" : <>⬆ <b>Drag a file here</b> or click to browse</>}
+        </div>
         <div className="dz-types">
           <span>▨ PDF</span><span>❏ DOC/DOCX</span><span>▤ EPUB</span><span>▦ CSV</span><span>≡ TXT/MD</span><span>▣ PNG/JPG</span>
-          <span className="dz-cap">· max 2 MB</span>
+          <span className="dz-cap">{storageOn ? "· up to 25 MB" : "· max 2 MB in this browser"}</span>
         </div>
         <input ref={fileRef} type="file" hidden onChange={(e) => { handleFiles(e.target.files); e.target.value = ""; }}
           accept=".pdf,.doc,.docx,.rtf,.odt,.txt,.md,.csv,.json,.log,.epub,.xls,.xlsx,.ppt,.pptx,.png,.jpg,.jpeg,.webp,.gif,.svg,.mp3,.m4a,.wav,.mp4,.webm" />
@@ -195,7 +216,7 @@ export default function AddForm({ section, existingTags = [], onAdd, onClose }) 
         <div className="fileprev full">
           <span className="fico" aria-hidden="true">{fileIcon(file.name)}</span>
           <span className="fname">{file.name}</span>
-          <span className="fsize">{Math.round(file.size / 1024)} KB</span>
+          <span className="fsize">{formatSize(file.size)}</span>
           <button type="button" aria-label="Remove attached file" onClick={() => setFile(null)}>✕</button>
         </div>
       )}

@@ -289,11 +289,15 @@ export async function pullAll() {
         date: i.added_on,
       };
       if (i.deleted_on) out.deleted = i.deleted_on;
-      /* File BYTES never left the browser (metadata-only until the S3
-         phase), so a pulled document knows its name and size but cannot be
-         opened. Flag it so the UI can say so instead of showing a broken
-         viewer. */
-      if (i.file_meta) out.file = { ...i.file_meta, bodyMissing: true };
+      /* A file carrying an `s3_key` is fully restorable — the bytes are in
+         the bucket and the viewer fetches a signed URL on demand. Without
+         one, the body only ever existed in the browser that saved it, so
+         mark it and let the UI say so rather than showing a dead viewer. */
+      if (i.file_meta) {
+        out.file = i.file_meta.s3_key
+          ? { ...i.file_meta }
+          : { ...i.file_meta, bodyMissing: true };
+      }
       return out;
     }),
     todos: {

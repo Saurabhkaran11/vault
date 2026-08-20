@@ -3,6 +3,10 @@
 Every step, in the order it has to happen. Steps marked **(you)** need an
 account or a credential only you can create; everything else is a command.
 
+> **Just need the accounts and keys?** See the
+> [setup checklist](setup-checklist.md) — every signup link and where each
+> value goes, without the surrounding commands.
+
 - [1. Run it locally](#1-run-it-locally)
 - [2. Turn on sign-in](#2-turn-on-sign-in-clerk)
 - [3. Turn on file storage](#3-turn-on-file-storage-s3)
@@ -82,7 +86,7 @@ can't overwrite your real vault with its sample data.
 ### 1.5 Run the tests
 
 ```bash
-cd backend && VIRTUAL_ENV=.venv uv run pytest -q     # 46 passing
+cd backend && VIRTUAL_ENV=.venv uv run pytest -q     # 61 passing
 ```
 
 ---
