@@ -5,6 +5,7 @@ import { SECTIONS, STATUSES, fmtStamp, daysAgo, ytId } from "@/lib/seed";
 import { detectCloud } from "@/lib/cloud";
 import NoteBlocks from "./NoteBlocks";
 import { Ic } from "./Icons";
+import { resolveFileUrl, fileBodyMissing, formatSize } from "@/lib/files";
 
 /* Inline tag adder: type any custom tag (Enter) or pick an existing one. */
 export function TagAdder({ it, onUpdate, allItems = [] }) {
@@ -58,6 +59,46 @@ const toBlobUrl = (file) => {
   return URL.createObjectURL(new Blob([u8], { type: mime }));
 };
 
+/* Download works from either shape. A local body is already a URL; a bucket
+ * body needs a signed one, which can only be fetched on demand — presigned
+ * links expire, so resolving them up-front for every row would hand out a
+ * page full of dead links. Hence a button that resolves at click time. */
+function FileDownload({ file, className = "btn sm", children }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+
+  if (file.data) {
+    return (
+      <a className={className} style={{ textDecoration: "none" }} href={file.data} download={file.name}>
+        {children}
+      </a>
+    );
+  }
+  if (!file.s3_key) return null;   // nothing to download — caller explains why
+
+  const go = async () => {
+    setBusy(true); setErr(null);
+    try {
+      const url = await resolveFileUrl(file);
+      if (!url) throw new Error("no longer in storage");
+      /* The signed URL already carries a Content-Disposition, so a plain
+         navigation downloads it with the right filename. */
+      window.open(url, "_blank", "noopener");
+    } catch (e) {
+      setErr(e?.message || "unavailable");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <button type="button" className={className} onClick={go} disabled={busy}
+      title={err ? `Couldn't fetch this file — ${err}` : undefined}>
+      {busy ? "Preparing…" : err ? "⚠ Unavailable" : children}
+    </button>
+  );
+}
+
 /* What can a browser actually show? Everything else gets an honest,
  * helpful card instead of a dead end. */
 const previewKind = (file) => {
@@ -83,16 +124,54 @@ function FilePreview({ file }) {
   const [url, setUrl] = useState(null);
   const [text, setText] = useState(null);
   const [full, setFull] = useState(false);
+  const [loadErr, setLoadErr] = useState(null);
   const kind = previewKind(file);
 
+  /* Three shapes reach this component:
+   *   · `data`   — a local base64 body, available immediately
+   *   · `s3_key` — in the bucket; needs a short-lived signed URL first
+   *   · neither  — the body only ever lived in another browser
+   * The async branch is why this isn't just toBlobUrl(). */
   useEffect(() => {
-    if (kind === "text") {
-      try { setText(atob(file.data.split(",")[1])); } catch { setText("Could not decode this file."); }
-      return;
-    }
-    const u = toBlobUrl(file);
-    setUrl(u);
-    return () => URL.revokeObjectURL(u);
+    let alive = true;
+    let objectUrl = null;
+    setLoadErr(null); setUrl(null); setText(null);
+
+    (async () => {
+      if (file.data) {
+        if (kind === "text") {
+          try { setText(atob(file.data.split(",")[1])); }
+          catch { setText("Could not decode this file."); }
+          return;
+        }
+        objectUrl = toBlobUrl(file);
+        if (alive) setUrl(objectUrl); else URL.revokeObjectURL(objectUrl);
+        return;
+      }
+
+      if (file.s3_key) {
+        try {
+          const signed = await resolveFileUrl(file);
+          if (!alive) return;
+          if (!signed) { setLoadErr("This file is no longer in storage."); return; }
+          if (kind === "text") {
+            const res = await fetch(signed);
+            if (!res.ok) throw new Error(`status ${res.status}`);
+            const body = await res.text();
+            if (alive) setText(body);
+            return;
+          }
+          setUrl(signed);
+        } catch (e) {
+          if (alive) setLoadErr(`Couldn't load this file — ${e?.message || "storage is unreachable"}.`);
+        }
+        return;
+      }
+
+      if (alive) setLoadErr(null);   // body-missing case, handled below
+    })();
+
+    return () => { alive = false; if (objectUrl) URL.revokeObjectURL(objectUrl); };
   }, [file, kind]);
 
   useEffect(() => {
@@ -101,6 +180,29 @@ function FilePreview({ file }) {
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
   }, [full]);
+
+  /* Body unreachable: name and size synced, bytes did not. Say exactly that
+     rather than rendering an empty viewer. */
+  if (fileBodyMissing(file)) {
+    return (
+      <div className="fnopreview">
+        <div className="fnp-head">☁ <b>{file.name}</b> was saved on another device.</div>
+        <div className="fnp-tip">
+          Only its details synced — the file itself stayed in the browser that saved it.
+          Turn on file storage (Settings → Backend sync) and re-upload it to keep future
+          files available everywhere.
+        </div>
+      </div>
+    );
+  }
+  if (loadErr) {
+    return (
+      <div className="fnopreview">
+        <div className="fnp-head">⚠ <b>{file.name}</b></div>
+        <div className="fnp-tip">{loadErr}</div>
+      </div>
+    );
+  }
 
   const inner = (fullMode) => {
     if (kind === "text") return <pre className={fullMode ? "ftext ftext-full" : "ftext"}>{(text || "").slice(0, 40000)}</pre>;
@@ -125,7 +227,7 @@ function FilePreview({ file }) {
       <div className="fnopreview">
         <div className="fnp-head">📄 <b>.{ext.toLowerCase()}</b> files can't be shown inside a browser — that's a browser limit, not a lost file.</div>
         <div className="fnp-actions">
-          <a className="btn sm" style={{ textDecoration: "none" }} href={file.data} download={file.name}>⬇ Download & open in {APP_FOR[kind] || "its app"}</a>
+          <FileDownload file={file}>⬇ Download &amp; open in {APP_FOR[kind] || "its app"}</FileDownload>
         </div>
         <div className="fnp-tip">
           Tips: export it as <b>PDF</b> to read it right here · or keep it in Google Docs/Sheets and paste the link in the bar above — then it's one click away.
@@ -383,12 +485,15 @@ export default function ItemRow({ it, onTag, onUpdate, onRemove, allItems = [], 
               )}
             </>
           )}
-          {it.file && (
-            <a className="filechip" href={it.file.data} download={it.file.name}
-              title={`Download ${it.file.name}`}>
-              ⬇ {it.file.name} <span className="bcount">{Math.round(it.file.size / 1024)} KB</span>
-            </a>
-          )}
+          {it.file && (fileBodyMissing(it.file) ? (
+            <span className="filechip" title="Saved on another device — only the details synced">
+              ☁ {it.file.name} <span className="bcount">details only</span>
+            </span>
+          ) : (
+            <FileDownload file={it.file} className="filechip">
+              ⬇ {it.file.name} <span className="bcount">{formatSize(it.file.size)}</span>
+            </FileDownload>
+          ))}
         </div>
 
         {showPreview && it.file && <FilePreview file={it.file} />}

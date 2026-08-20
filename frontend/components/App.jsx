@@ -26,6 +26,7 @@ import AskVault from "./AskVault";
 import { emptyBlock } from "./NoteBlocks";
 import { AI_MODELS, OSS_PRESETS, OSS_MODEL_SUGGESTIONS, getAIConfig, setAIConfig, aiEnabled, askText, askJSON } from "@/lib/ai";
 import { getBackend, setBackend, backendHealthy, fullSync, flushQueue, pendingMirrors, pullAll, applyPulled, hydrateIfEmpty, hasVerifiedIdentity } from "@/lib/api";
+import { storeFile } from "@/lib/files";
 import AccountSection from "./AccountSection";
 
 /* flatten a note's blocks to plain text (for AI prompts + similarity) */
@@ -742,17 +743,29 @@ export default function App() {
   /* instant drop-to-save for Documents */
   const quickFileRef = useRef(null);
   const [quickDragOver, setQuickDragOver] = useState(false);
-  const quickSaveFile = (list) => {
+  const [quickFileErr, setQuickFileErr] = useState("");
+  const quickSaveFile = async (list) => {
     const f = list && list[0];
     if (!f) return;
-    if (f.size > 2 * 1024 * 1024) { alert(`“${f.name}” is ${(f.size / 1048576).toFixed(1)} MB — max is 2 MB. Save a link to it instead.`); return; }
-    const r = new FileReader();
-    r.onload = () => add({
-      id: Date.now(), type: "doc", title: f.name.replace(/\.[^.]+$/, ""),
-      meta: "Saved via quick drop", tags: [], status: "Inbox",
-      file: { name: f.name, type: f.type, size: f.size, data: r.result }, date: today(),
-    });
-    r.readAsDataURL(f);
+    setQuickFileErr("");
+    /* Mint the id first: the storage key is derived from it, so it has to
+       exist before the bytes move. */
+    const id = Date.now();
+    try {
+      const stored = await storeFile(id, f);
+      add({
+        id, type: "doc", title: f.name.replace(/\.[^.]+$/, ""),
+        meta: stored.s3_key ? "Saved via quick drop" : "Saved via quick drop — this browser only",
+        tags: [], status: "Inbox", file: stored, date: today(),
+      });
+      if (stored.localOnlyReason) {
+        setQuickFileErr(`Saved here only — ${stored.localOnlyReason}`);
+        setTimeout(() => setQuickFileErr(""), 6000);
+      }
+    } catch (err) {
+      setQuickFileErr(err?.message || `Could not save “${f.name}”.`);
+      setTimeout(() => setQuickFileErr(""), 8000);
+    }
   };
   const [folderSel, setFolderSel] = useState("All");   // Notes folder filter
   /* folders are derived from the notes that use them (Apple Notes-style) */
@@ -1739,11 +1752,14 @@ export default function App() {
                 onDragLeave={() => setQuickDragOver(false)}
                 onDrop={(e) => { e.preventDefault(); setQuickDragOver(false); quickSaveFile(e.dataTransfer.files); }}
                 aria-label="Drop a file to save it instantly">
-                ⬆ <b>Drop any file here to save it instantly</b> — no form, stamped today · max 2 MB
+                ⬆ <b>Drop any file here to save it instantly</b> — no form, stamped today
                 <input ref={quickFileRef} type="file" hidden
                   accept=".pdf,.doc,.docx,.rtf,.odt,.txt,.md,.csv,.json,.log,.epub,.xls,.xlsx,.ppt,.pptx,.png,.jpg,.jpeg,.webp,.gif,.svg,.mp3,.m4a,.wav,.mp4,.webm"
                   onChange={(e) => { quickSaveFile(e.target.files); e.target.value = ""; }} />
               </div>
+            )}
+            {view === "doc" && quickFileErr && (
+              <div className="kmerr" role="status">{quickFileErr}</div>
             )}
 
             {view === "book" && (() => {

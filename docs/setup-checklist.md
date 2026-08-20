@@ -10,7 +10,7 @@ For the surrounding commands (installing, migrating, deploying) see the
 |---|---|---|---|
 | 1 | [Embeddings provider](#1-embeddings-provider) | AI search that understands meaning | 5 min |
 | 2 | [Clerk](#2-clerk-sign-in) | real sign-in — **required before deploying** | 10 min |
-| 3 | [AWS S3](#3-aws-s3-file-storage) | ⚠ backend only — see the note | 10 min |
+| 3 | [AWS S3](#3-aws-s3-file-storage) | documents that open on every device | 10 min |
 | 4 | [Hosting](#4-hosting) | putting it online | 30–60 min |
 | 5 | [Error tracking](#5-error-tracking-not-wired-yet) | knowing when it breaks | needs code first |
 
@@ -127,21 +127,14 @@ Docs: <https://clerk.com/docs/quickstarts/nextjs>
 
 ## 3. AWS S3 (file storage)
 
-> **⚠ Configuring S3 today changes nothing yet — don't start here.**
->
-> The API endpoints (`/files/upload-url`, `/files/download-url`,
-> `/files/status`) are built, tested and working, but **the frontend never
-> calls them**. Uploads still write base64 into localStorage exactly as
-> before, so a document opened on a second device still won't work.
->
-> The remaining piece is wiring the browser upload path to the presigned
-> URLs. Until that lands, set S3 up only if you want the backend ready in
-> advance.
+Without this, uploaded document *bytes* stay in the browser that saved them:
+a document restored on another device shows its name and size but won't open,
+and the app says so rather than showing a broken viewer. Turning it on also
+lifts the per-file cap from 2 MB to 25 MB, because bytes stop having to fit
+in localStorage.
 
-Once the frontend is wired: uploaded document *bytes* currently stay in the
-browser that saved them, so a document restored on another device shows its
-name and size but won't open. The app says so honestly rather than showing a
-broken viewer.
+Files saved before you enable it keep working exactly as they do now — the
+two storage shapes coexist, so this is a switch, not a migration.
 
 1. Console: <https://console.aws.amazon.com/s3>
 2. Create a bucket — **keep "Block all public access" ON**

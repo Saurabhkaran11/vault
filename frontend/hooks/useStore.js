@@ -27,8 +27,15 @@ const toApi = (it) => {
     progress: it.progress,
     blocks: it.blocks,
     links: it.links,
+    /* s3_key must travel with the metadata: /files/download-url refuses to
+     * sign a key it can't find on one of the caller's own items, so an
+     * un-mirrored key would make the file unopenable everywhere. The base64
+     * `data` deliberately never leaves the browser. */
     file_meta: it.file
-      ? { name: it.file.name, type: it.file.type, size: it.file.size }
+      ? {
+          name: it.file.name, type: it.file.type, size: it.file.size,
+          ...(it.file.s3_key ? { s3_key: it.file.s3_key } : {}),
+        }
       : undefined,
     added_on: it.date,
     deleted_on: it.deleted ?? null,
@@ -86,8 +93,13 @@ export function useStore() {
     mirror("/items/upsert", { method: "POST", body: toApi(it) });
   };
   const remove = (id) => {
+    /* Purge the stored body too, or deleting an item leaks an orphaned
+     * object that nothing references and nobody is paying attention to.
+     * Read the key before dropping the item — afterwards it is gone. */
+    const key = items.find((x) => x.id === id)?.file?.s3_key;
     setItems((xs) => xs.filter((x) => x.id !== id));
     mirror(`/items/by-client/${encodeURIComponent(String(id))}`, { method: "DELETE" });
+    if (key) mirror(`/files?key=${encodeURIComponent(key)}`, { method: "DELETE" });
   };
 
   /* one-click JSON backup — your data insurance */
