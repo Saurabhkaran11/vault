@@ -35,28 +35,82 @@ def _hash_embed(text: str, dim: int) -> list[float]:
     return [v / norm for v in vec]
 
 
-async def embed_texts(texts: list[str]) -> list[list[float]]:
+def _task_prefix(kind: str) -> str:
+    """Nomic's models are trained with task prefixes and lose accuracy without
+    them — a document and a question about that document are embedded for
+    different jobs, and saying which one this is measurably separates hits
+    from near-misses. Measured on this vault: "how do I build a web API"
+    returned an untitled spreadsheet unprefixed and the FastAPI architecture
+    notes with the prefix.
+
+    Only applied to models that ask for it. OpenAI's embeddings, for one,
+    would treat the prefix as content and make results slightly worse.
+    """
+    if "nomic" not in (settings.embeddings_model or "").lower():
+        return ""
+    return "search_query: " if kind == "query" else "search_document: "
+
+
+async def embed_texts(texts: list[str], kind: str = "document") -> list[list[float]]:
     if settings.embeddings_url:
+        prefix = _task_prefix(kind)
         headers = {"Content-Type": "application/json"}
         if settings.embeddings_api_key:
             headers["Authorization"] = f"Bearer {settings.embeddings_api_key}"
         async with httpx.AsyncClient(timeout=30) as client:
             r = await client.post(f"{settings.embeddings_url.rstrip('/')}/embeddings",
-                                  json={"model": settings.embeddings_model, "input": texts}, headers=headers)
+                                  json={"model": settings.embeddings_model,
+                                        "input": [prefix + t for t in texts]}, headers=headers)
             r.raise_for_status()
             return [d["embedding"][: settings.embedding_dim] for d in r.json()["data"]]
     return [_hash_embed(t, settings.embedding_dim) for t in texts]
 
 
+# Provenance strings the app writes itself. They carry no information about
+# what an item *is*, and because the same phrase repeats across dozens of
+# items it actively pulls unrelated results together — an item whose only
+# text is "Saved via quick drop" ends up a mediocre match for everything.
+_BOILERPLATE_META = {
+    "captured via quick add", "saved via quick drop", "saved via browser",
+    "—", "-", "",
+}
+
+# Below this there is no signal left, only a filename or a stray word. Such
+# an embedding lands near the centre of the space and outranks genuinely
+# relevant documents on unrelated queries — measured: a near-empty item beat
+# a rich FastAPI note on "what should I read next".
+_MIN_CHUNK_CHARS = 12
+
+
 def item_chunks(item: Item) -> list[str]:
-    parts = [f"{item.title}. {item.meta}. tags: {' '.join(item.tags or [])}"]
+    """Build the text that actually gets embedded.
+
+    Retrieval quality is set here far more than by the choice of model: the
+    embedder can only work with what it is handed.
+    """
+    meta = (item.meta or "").strip()
+    if meta.lower() in _BOILERPLATE_META:
+        meta = ""
+
+    # The type is real signal a user searches with ("that video about…"),
+    # and folder/alias are the user's own words for the thing.
+    descriptors = [item.type, item.folder, item.alias]
+    header = ". ".join(
+        p for p in [item.title, meta, " ".join(item.tags or []), " ".join(d for d in descriptors if d)]
+        if p and p.strip()
+    )
+
+    parts = [header]
     text = " ".join(
         (b.get("text") or "") + " " + (b.get("title") or "")
         for b in (item.blocks or []) if isinstance(b, dict)
     ).strip()
     for i in range(0, len(text), 800):
         parts.append(text[i : i + 800])
-    return [p for p in parts if p.strip(" .")]
+
+    # Drop anything with no content left — punctuation, empty tag lists, or a
+    # title-less item, which would otherwise be indexed as ". . tags: ".
+    return [p for p in parts if len(p.strip(" .:,-")) >= _MIN_CHUNK_CHARS]
 
 
 async def index_item(session: AsyncSession, item: Item):
@@ -87,7 +141,8 @@ async def reindex(session: AsyncSession = Depends(get_session), user: str = Depe
 
 @router.post("/ask", response_model=AskOut)
 async def ask(body: AskIn, session: AsyncSession = Depends(get_session), user: str = Depends(current_user_id)):
-    qvec = (await embed_texts([body.question]))[0]
+    # The question is a query, not a document — see _task_prefix.
+    qvec = (await embed_texts([body.question], kind="query"))[0]
     dist = Embedding.vector.cosine_distance(qvec)
     rows = (await session.execute(
         select(Embedding, Item, dist.label("d"))
