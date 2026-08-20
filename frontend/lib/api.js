@@ -15,11 +15,30 @@
 const KEY = "vault.backend.v1";
 const QKEY = "vault.backend.queue.v1";
 
+/* Where the API lives, and whether to talk to it at all.
+ *
+ * NEXT_PUBLIC_API_URL is how a DEPLOYED build knows its backend. Without it
+ * every visitor would land on the localhost default and have to type the URL
+ * into Settings themselves — fine for the machine that built the app, useless
+ * for anyone else. Its presence also flips sync on by default, because a
+ * hosted instance is server-backed by definition; a local build has no such
+ * URL and stays local-first until you turn sync on.
+ *
+ * Stored config still wins over both, so Settings remains an override — which
+ * is what makes pointing a local frontend at a staging API possible. */
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
+
+const DEFAULTS = {
+  url: API_URL || "http://localhost:8000",
+  enabled: !!API_URL,
+  userId: "demo",
+};
+
 export function getBackend() {
   try {
-    return { url: "http://localhost:8000", enabled: false, userId: "demo", ...JSON.parse(localStorage.getItem(KEY) || "{}") };
+    return { ...DEFAULTS, ...JSON.parse(localStorage.getItem(KEY) || "{}") };
   } catch {
-    return { url: "http://localhost:8000", enabled: false, userId: "demo" };
+    return { ...DEFAULTS };
   }
 }
 
