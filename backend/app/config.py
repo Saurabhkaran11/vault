@@ -53,6 +53,12 @@ class Settings(BaseSettings):
     rate_limit_per_minute: int = 300
     log_level: str = "INFO"
 
+    # ---- error reporting (optional; unset = logs only) ----
+    sentry_dsn: str | None = None
+    sentry_environment: str = "development"
+    sentry_traces_sample_rate: float = 0.1
+    release: str | None = None          # set to the git sha at deploy time
+
     class Config:
         env_file = ".env"
 

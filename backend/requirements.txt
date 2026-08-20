@@ -12,3 +12,4 @@ python-dateutil>=2.9
 alembic>=1.13
 pyjwt[crypto]>=2.9
 boto3>=1.35
+sentry-sdk[fastapi]>=2.0

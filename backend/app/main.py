@@ -8,6 +8,7 @@ from sqlalchemy import text
 from .auth import assert_safe_auth_config
 from .config import settings
 from .db import engine
+from .errors import init_error_reporting
 from .observability import configure_logging, log, request_context, unhandled_exception_handler
 from .ratelimit import close_redis, get_redis, rate_limit
 from .routers import ai, boards, files, finance, items, sync, tags, todos
@@ -23,6 +24,7 @@ async def lifespan(app: FastAPI):
     auth configuration is unsafe, the deploy should stop, not improvise.
     """
     configure_logging(settings.log_level)
+    init_error_reporting()
     assert_safe_auth_config()
 
     # to_regclass returns NULL instead of raising when the table is absent.

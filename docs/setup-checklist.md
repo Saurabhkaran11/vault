@@ -12,7 +12,7 @@ For the surrounding commands (installing, migrating, deploying) see the
 | 2 | [Clerk](#2-clerk-sign-in) | real sign-in — **required before deploying** | 10 min |
 | 3 | [AWS S3](#3-aws-s3-file-storage) | documents that open on every device | 10 min |
 | 4 | [Hosting](#4-hosting) | putting it online | 30–60 min |
-| 5 | [Error tracking](#5-error-tracking-not-wired-yet) | knowing when it breaks | needs code first |
+| 5 | [Error tracking](#5-error-tracking-sentry) | knowing when it breaks, not hearing it from a user | 5 min |
 
 Backend variables go in `backend/.env` (local) or your host's environment
 (production). Frontend variables go in `frontend/.env.local`. Neither file is
@@ -218,18 +218,47 @@ Load balancer health check → `/health/ready`. Container liveness →
 
 ---
 
-## 5. Error tracking (not wired yet)
+## 5. Error tracking (Sentry)
 
-**This is the one gap where the code doesn't exist yet.** Right now you'd
-learn about a 500 from a user rather than an alert — and five crashes turned
-up in a single hour of probing, so this matters more than it sounds.
+Without this you learn about a 500 from a user rather than an alert — five
+distinct crashes turned up in a single hour of probing this API, and every one
+would have reached someone silently.
 
-Signing up won't help on its own; the SDK needs adding to both apps first.
-It's about an hour of work — say the word and I'll do it. Then setup is:
+The code is wired on both sides and **inert until you set a DSN**, so nothing
+leaves your machine in development.
 
-1. <https://sentry.io/signup/> → create two projects (Python + Next.js)
-2. Copy each DSN
-3. `SENTRY_DSN=...` (backend), `NEXT_PUBLIC_SENTRY_DSN=...` (frontend)
+1. <https://sentry.io/signup/> → create two projects: **Python** and **Next.js**
+2. Copy each project's DSN (Settings → Client Keys)
+
+```bash
+# backend/.env
+SENTRY_DSN=https://...@o0.ingest.sentry.io/...
+SENTRY_ENVIRONMENT=production
+RELEASE=$(git rev-parse --short HEAD)   # ties an issue to a deploy
+```
+
+```bash
+# frontend/.env.local
+NEXT_PUBLIC_SENTRY_DSN=https://...@o0.ingest.sentry.io/...
+```
+
+### What is deliberately never sent
+
+A vault's contents *are* the product, so an error report must not become a
+copy of them. Scrubbed before anything leaves the process:
+
+- `Authorization`, `Cookie`, `X-User-Id`, `X-API-Key` headers
+- request bodies (note text, expense descriptions, file names)
+- query strings (they carry storage keys, which act as capabilities)
+- **stack-frame local variables** — the one that matters most and the least
+  obvious. Sentry captures them by default, and in a FastAPI handler the
+  locals include the parsed request body and the bearer token. Header
+  scrubbing does not reach inside frames. A test sends a real event through a
+  fake transport and asserts a runtime-only secret never appears; it fails if
+  either defence is removed.
+
+What *is* sent: the exception, the stack, the route, and the request id — so
+an issue in Sentry and a line in your own logs are the same incident.
 
 ---
 

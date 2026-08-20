@@ -24,6 +24,8 @@ from contextvars import ContextVar
 from fastapi import Request
 from fastapi.responses import JSONResponse
 
+from .errors import capture, note_request
+
 request_id_ctx: ContextVar[str] = ContextVar("request_id", default="-")
 
 
@@ -69,6 +71,10 @@ async def request_context(request: Request, call_next):
     # with no id at all: nothing for a user to quote, nothing to grep.
     request.state.request_id = rid
     token = request_id_ctx.set(rid)
+    # Tag the Sentry scope with the same id, so an issue there and a line here
+    # are the same incident rather than two things you have to correlate by
+    # timestamp. No-ops entirely when no DSN is configured.
+    note_request(rid, request.headers.get("x-user-id"))
     started = time.perf_counter()
     try:
         response = await call_next(request)
@@ -100,6 +106,9 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
     and reports 'Failed to fetch' instead of the actual status.
     """
     rid = getattr(request.state, "request_id", None) or request_id_ctx.get()
+    # Report before logging: an alert nobody has to go looking for is the
+    # whole reason this exists.
+    capture(exc)
     # Re-enter the context so this log line carries the id too. Without it the
     # traceback lands in the logs stamped "-", and the id handed to the user
     # matches nothing you can search for.
