@@ -268,6 +268,32 @@ an issue in Sentry and a line in your own logs are the same incident.
 
 ---
 
+## 6. AI provider for answers (pick any one)
+
+Answers are generated in the browser with **your** key, which never leaves it.
+Everything except Anthropic goes through the OpenAI chat-completions shape, so
+adding a provider is choosing a preset — not new code.
+
+| Provider | Key from | Notes |
+|---|---|---|
+| Ollama / LM Studio | — | Local and free; nothing leaves your machine |
+| OpenAI | <https://platform.openai.com/api-keys> | |
+| Google Gemini | <https://aistudio.google.com/apikey> | Has a free tier |
+| Mistral | <https://console.mistral.ai/api-keys> | |
+| DeepSeek | <https://platform.deepseek.com/api_keys> | |
+| Groq | <https://console.groq.com/keys> | Open-weight models, very fast, free tier |
+| Together AI | <https://api.together.xyz/settings/api-keys> | |
+| OpenRouter | <https://openrouter.ai/keys> | One key reaches most providers |
+
+Settings → **AI assistant** → *Another provider* → pick one. The model name
+fills in automatically and can be changed; anything unlisted works through
+**Custom server** as long as it speaks `/chat/completions`.
+
+The same applies to the backend's `EMBEDDINGS_URL`, which is the identical
+contract — so search and answers can use different providers.
+
+---
+
 ## Order I'd actually do it
 
 1. **Embeddings** — 5 minutes, and immediately makes AI search feel real
