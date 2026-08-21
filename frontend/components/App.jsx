@@ -323,151 +323,84 @@ function NotePage({ it, onBack, onUpdate, onTag, folders = [], allItems = [], on
  * local to this section (it mounts only inside the Settings dialog).
  * localStorage stays the working copy; enabling sync write-through-mirrors
  * every mutation and the first enable pushes the whole vault via fullSync(). */
-function BackendSyncSection() {
-  const [cfg, setCfg] = useState(getBackend);
-  const [health, setHealth] = useState(null);     // null = checking, true/false = result
-  const [pending, setPending] = useState(pendingMirrors);
-  const [busy, setBusy] = useState(null);         // "sync" | "flush" | "pull" | null
-  const [msg, setMsg] = useState(null);           // { ok, text } from the last sync/flush
-  const [armPull, setArmPull] = useState(false);  // restore overwrites local — click again to confirm
+function SyncSection() {
+  /* Production sync is automatic: signed in, backed by the deployed API, it
+     just runs. This panel is only a HONEST STATUS plus two rescue actions —
+     no backend URL, no internal user id, no retry-queue counters. Those were
+     developer tooling on a user-facing screen, which read as the app leaking
+     its own plumbing.
 
-  /* probe /health when the section opens and whenever the target changes
-     (debounced so typing a URL doesn't fire a request per keystroke) */
+     "Sync now" re-pushes this browser's vault; "Restore" pulls the account's
+     vault down and replaces this browser (the new-device / cleared-data
+     case). Both are rare, both are safe to repeat. */
+  const [health, setHealth] = useState(null);      // null=checking, bool=result
+  const [pending, setPending] = useState(pendingMirrors);
+  const [busy, setBusy] = useState(null);          // "push" | "pull" | null
+  const [armPull, setArmPull] = useState(false);
+  const [msg, setMsg] = useState(null);
+
   useEffect(() => {
     let live = true;
-    setHealth(null);
     const t = setTimeout(() => {
       backendHealthy().then((ok) => { if (live) setHealth(ok); });
       setPending(pendingMirrors());
-    }, 350);
+    }, 300);
     return () => { live = false; clearTimeout(t); };
-  }, [cfg.url, cfg.userId, cfg.enabled]);
+  }, []);
 
-  const saveCfg = (patch) => { const next = setBackend(patch); setCfg(next); return next; };
-
-  const runFullSync = async () => {
-    setBusy("sync"); setMsg(null);
+  const syncNow = async () => {
+    setBusy("push"); setMsg(null);
     try {
-      const res = await fullSync();               // POST /sync/import + /ai/reindex, stamps syncedAt
-      const c = res?.imported || {};
-      setCfg(getBackend());
-      setMsg({ ok: true, text: `Imported ${c.items ?? 0} items · ${c.tasks ?? 0} tasks · ${c.finance ?? 0} finance rows · ${c.boards ?? 0} boards` });
-    } catch (e) {
-      setMsg({ ok: false, text: `Full sync failed (${e?.message || "network error"}). Either the backend is unreachable, or it already holds rows with these ids — a re-import then writes nothing. Pre-launch fix: wipe the dev database and sync again.` });
-    }
-    setBusy(null);
-    setPending(pendingMirrors());
-  };
-
-  /* First enable has two very different meanings, and guessing wrong loses
-     data. On the browser that owns the vault it means "upload this". On a
-     new device it means "get my stuff" — and pushing there would send the
-     sample vault over the real one. So ask the server first: if the account
-     already holds data, restore instead of push. */
-  const toggle = async () => {
-    const next = saveCfg({ enabled: !cfg.enabled });
-    setMsg(null);
-    if (!next.enabled || next.syncedAt || next.pulledAt) return;
-    setBusy("sync");
-    try {
-      const remote = await pullAll();
-      if (remote.items.length || remote.todos.tasks.length || remote.boards.boards.length) {
-        const c = applyPulled(remote);
-        setMsg({ ok: true, text: `This account already has a vault — restored ${c.items} items · ${c.tasks} tasks · ${c.boards} boards instead of overwriting it. Reloading…` });
-        setTimeout(() => window.location.reload(), 1400);
-        return;
-      }
+      await fullSync();
+      setPending(pendingMirrors());
+      setMsg({ ok: true, text: "Your vault is up to date." });
     } catch {
-      /* unreachable backend — fall through to the push attempt, which
-         reports the failure properly */
+      setMsg({ ok: false, text: "Couldn't reach the server. Your changes are saved here and will sync when you're back online." });
     }
     setBusy(null);
-    await runFullSync();
   };
 
-  /* Restore replaces this browser's working copy with the server's state,
-     so it is armed-then-confirmed like every other destructive action. The
-     page reloads afterwards: every store hydrates from localStorage at
-     mount, so a reload is the honest way to show what actually landed. */
   const restore = async () => {
     if (!armPull) { setArmPull(true); setTimeout(() => setArmPull(false), 4000); return; }
     setArmPull(false); setBusy("pull"); setMsg(null);
     try {
       const c = applyPulled(await pullAll());
-      setMsg({ ok: true, text: `Restored ${c.items} items · ${c.tasks} tasks · ${c.finance} finance rows · ${c.boards} boards — reloading…` });
+      setMsg({ ok: true, text: `Restored ${c.items} items, ${c.tasks} to-dos and ${c.boards} boards. Reloading…` });
       setTimeout(() => window.location.reload(), 1200);
-    } catch (e) {
-      setMsg({ ok: false, text: `Restore failed (${e?.message || "network error"}). Nothing local was changed.` });
+    } catch {
+      setMsg({ ok: false, text: "Couldn't restore right now — nothing on this device was changed." });
       setBusy(null);
     }
   };
 
-  const retryNow = async () => {
-    setBusy("flush");
-    const r = await flushQueue();
-    setPending(pendingMirrors());
-    setMsg(r.left
-      ? { ok: false, text: `Retried — ${r.flushed} sent, ${r.left} still queued (backend unreachable?)` }
-      : { ok: true, text: `Queue flushed — ${r.flushed} change${r.flushed === 1 ? "" : "s"} mirrored.` });
-    setBusy(null);
-  };
+  const status = health === null
+    ? { dot: "sync-dot checking", text: "Checking…" }
+    : !health
+      ? { dot: "sync-dot off", text: "Offline — saved on this device" }
+      : pending > 0
+        ? { dot: "sync-dot pending", text: `Syncing ${pending} change${pending === 1 ? "" : "s"}…` }
+        : { dot: "sync-dot ok", text: "All changes synced" };
 
   return (
     <div className="set-sec">
-      <div className="menu-sec">☁ BACKEND SYNC</div>
-      <input className="menu-input" value={cfg.url} aria-label="Backend URL"
-        placeholder="Backend URL, e.g. http://localhost:8000"
-        onChange={(e) => saveCfg({ url: e.target.value.trim() })} />
-      {hasVerifiedIdentity() ? (
-        <div className="conn-row">
-          <span>Identified by your signed-in account</span>
-          <span className="mono">verified token</span>
-        </div>
-      ) : (
-        <input className="menu-input" style={{ marginTop: 6 }} value={cfg.userId || ""} aria-label="Backend user ID"
-          placeholder="User ID (unverified — anyone could type it)"
-          onChange={(e) => saveCfg({ userId: e.target.value.trim() })} />
-      )}
-      <button className="menu-item" style={{ marginTop: 6 }} disabled={busy !== null} onClick={toggle}>
-        {cfg.enabled ? "⏻ Disable sync — keep changes local-only" : "▶ Enable sync — mirror every change to the backend"}
+      <div className="menu-sec">Sync</div>
+      <div className="conn-row">
+        <span><span className={status.dot} aria-hidden="true" /> {status.text}</span>
+        <button className="btn ghost sm" disabled={busy !== null} onClick={syncNow}>
+          {busy === "push" ? "Syncing…" : "Sync now"}
+        </button>
+      </div>
+      <button className={`menu-item ${armPull ? "danger" : ""}`} disabled={busy !== null} onClick={restore}>
+        {busy === "pull" ? "Restoring…"
+          : armPull ? "Tap again — this replaces what's on this device"
+          : "Restore from another device"}
       </button>
-      <div className="conn-row">
-        <span>{health === null ? "◌ Checking backend…" : health ? "● Backend reachable" : "○ Backend unreachable"}</span>
-        <span className="mono">{cfg.syncedAt ? `synced ${new Date(cfg.syncedAt).toLocaleString()}` : "never synced"}</span>
-      </div>
-      {cfg.pulledAt && (
-        <div className="conn-row">
-          <span>⬇ Last restored from backend</span>
-          <span className="mono">{new Date(cfg.pulledAt).toLocaleString()}</span>
-        </div>
-      )}
-      <div className="conn-row">
-        <span>⟳ Pending retry queue</span>
-        <span className="mono">{pending} change{pending === 1 ? "" : "s"}</span>
-      </div>
-      {pending > 0 && (
-        <button className="btn ghost sm" disabled={busy !== null} onClick={retryNow}
-          title="Failed mirrors wait here and re-send in order once the backend is reachable">
-          {busy === "flush" ? "Retrying…" : "⟳ Retry now"}
-        </button>
-      )}
-      {cfg.enabled && (
-        <button className="btn ghost sm" style={{ marginTop: 6 }} disabled={busy !== null} onClick={runFullSync}
-          title="Pushes this browser's whole vault to the backend. Safe to re-run: the import upserts, so rows are updated in place rather than duplicated.">
-          {busy === "sync" ? "Syncing…" : "⟲ Sync everything again"}
-        </button>
-      )}
-      {cfg.enabled && (
-        <button className={`btn ghost sm ${armPull ? "danger" : ""}`} style={{ marginTop: 6 }} disabled={busy !== null} onClick={restore}
-          title="Pulls your vault down from the backend and replaces what this browser holds. Use it on a new device, or after clearing browser data.">
-          {busy === "pull" ? "Restoring…" : armPull ? "⚠ Click again — this replaces local data" : "⬇ Restore this browser from the backend"}
-        </button>
-      )}
       {msg && (msg.ok
         ? <div style={{ padding: "6px 8px 0" }}><span className="keystate mono">{msg.text}</span></div>
         : <div className="kmerr">{msg.text}</div>)}
       <div className="menu-foot" style={{ border: "none", marginTop: 4, paddingTop: 0 }}>
-        Local-first: this browser keeps the working copy and stays fully usable offline. With sync on, every change also writes through to your backend; failures queue and retry, so nothing is lost. Sync runs both ways — a browser with no data pulls your vault down automatically, and you can restore this one at any time. Uploaded file contents stay in the browser that saved them until cloud file storage ships, so restored documents show their details but can&rsquo;t be opened. See docs/integration.md.
+        Your vault saves here first, so it works offline, and syncs to your
+        account automatically. Restore pulls everything down on a new device.
       </div>
     </div>
   );
@@ -1021,14 +954,13 @@ export default function App() {
               <AccountSection />
 
               <div className="set-sec">
-                <div className="menu-sec">👤 PROFILE</div>
-                <input className="menu-input" value={profile.name} aria-label="Your name"
+                <div className="menu-sec">Display name</div>
+                <input className="menu-input" value={profile.name} aria-label="Display name"
                   onChange={(e) => setProfile({ ...profile, name: e.target.value })}
-                  placeholder="Your name" />
-                <input className="menu-input" type="email" value={profile.email || ""} aria-label="Email"
-                  style={{ marginTop: 6 }}
-                  onChange={(e) => setProfile({ ...profile, email: e.target.value })}
-                  placeholder="Email (used for sign-in at launch)" />
+                  placeholder="What should we call you?" />
+                <div className="menu-foot" style={{ border: "none", marginTop: 4, paddingTop: 0 }}>
+                  Shown in your dashboard greeting. Your sign-in email lives under Account.
+                </div>
               </div>
 
               <div className="set-sec">
@@ -1082,11 +1014,11 @@ export default function App() {
               </div>
 
               <div className="set-sec">
-                <div className="menu-sec">✨ AI ASSISTANT</div>
+                <div className="menu-sec">AI model</div>
                 <select className="menu-input" value={aiCfg.provider || "anthropic"} aria-label="AI provider"
                   onChange={(e) => { updateAI({ provider: e.target.value }); setKeyEdit(false); }}>
-                  <option value="anthropic">Claude (Anthropic)</option>
-                  <option value="oss">Another provider (OpenAI, Gemini, Mistral, local models…)</option>
+                  <option value="anthropic">Claude</option>
+                  <option value="oss">Open model — Gemma, Mistral, Llama, or bring your own</option>
                 </select>
 
                 {(aiCfg.provider || "anthropic") === "anthropic" ? (
@@ -1101,8 +1033,8 @@ export default function App() {
                       </div>
                     ) : (
                       <input className="menu-input" type="password" autoComplete="off" defaultValue=""
-                        style={{ marginTop: 6 }} aria-label="Anthropic API key"
-                        placeholder={aiCfg.apiKey ? "Paste new key, press Enter (Esc to keep current)" : "Anthropic API key (sk-ant-…) — press Enter"}
+                        style={{ marginTop: 6 }} aria-label="Claude API key"
+                        placeholder={aiCfg.apiKey ? "Paste a new key, press Enter (Esc to keep current)" : "Your Claude API key — press Enter to save"}
                         onKeyDown={(e) => {
                           if (e.key === "Enter") {
                             const v = e.target.value.trim();
@@ -1177,8 +1109,8 @@ export default function App() {
                 )}
                 <div className="menu-foot" style={{ border: "none", marginTop: 4, paddingTop: 0 }}>
                   {(aiCfg.provider || "anthropic") === "anthropic"
-                    ? "Your key is stored only in this browser and never shown again after saving. It moves server-side with the backend."
-                    : "Works with any OpenAI-compatible server. Local Ollama needs CORS enabled: OLLAMA_ORIGINS='*' ollama serve"}
+                    ? "Your key is kept only in this browser and never shown again once saved."
+                    : "Pick a hosted model and paste its key, or point at a local model (Ollama, LM Studio) with no key at all."}
                 </div>
               </div>
 
@@ -1203,7 +1135,7 @@ export default function App() {
                 </div>
               </div>
 
-              <BackendSyncSection />
+              <SyncSection />
 
               <div className="set-sec">
                 <div className="menu-sec">🗄 YOUR DATA</div>
@@ -1223,7 +1155,7 @@ export default function App() {
         </div>
       )}
       <AskVault items={items} open={askOpen} onClose={() => setAskOpen(false)}
-        onGoto={goto} onOpenSettings={() => setMenuOpen(true)} />
+        onGoto={goto} onOpenSettings={() => setSettingsOpen(true)} />
       {chord && <div className="chordhint mono" role="status">G — then {NAV_ACTIONS.map((a) => (keymap[a.id] || a.def).toUpperCase()).join(" ")}</div>}
 
       <nav className={`side ${open ? "open" : "rail"}`}>
@@ -1336,7 +1268,7 @@ export default function App() {
                 </span>
                 <span className="menu-who">
                   <b>{profile.name?.trim() || "Your account"}</b>
-                  <small>{profile.email?.trim() || "Local account · not synced"}</small>
+                  <small>Manage account in Settings</small>
                 </span>
               </div>
               <button className="menu-item" onClick={() => { setSettingsOpen(true); setMenuOpen(false); }}>
@@ -1345,7 +1277,7 @@ export default function App() {
               <button className="menu-item" onClick={() => { setHelpOpen(true); setMenuOpen(false); }}>
                 ⌨ Keyboard shortcuts <span className="menukey kbd">?</span>
               </button>
-              <div className="menu-foot">Vault v1 · data stays in this browser — sync arrives with the cloud release</div>
+              <div className="menu-foot">Vault · saved on this device and synced to your account</div>
             </div>
           )}
         </div>
