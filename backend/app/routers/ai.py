@@ -20,6 +20,7 @@ from ..config import settings
 from ..db import get_session
 from ..deps import current_user_id
 from ..events import enqueue
+from ..extract import chunk_text
 from ..models import Embedding, Item
 from ..schemas import AskIn, AskOut, AskSource
 
@@ -108,6 +109,12 @@ def item_chunks(item: Item) -> list[str]:
     for i in range(0, len(text), 800):
         parts.append(text[i : i + 800])
 
+    # An uploaded document's own text — the difference between finding that a
+    # PDF exists and being able to ask what is inside it. Chunked with overlap
+    # so a fact spanning a boundary stays findable from either side.
+    if item.extracted_text:
+        parts.extend(chunk_text(item.extracted_text))
+
     # Drop anything with no content left — punctuation, empty tag lists, or a
     # title-less item, which would otherwise be indexed as ". . tags: ".
     return [p for p in parts if len(p.strip(" .:,-")) >= _MIN_CHUNK_CHARS]
@@ -125,11 +132,21 @@ async def index_item(session: AsyncSession, item: Item):
 
 @router.post("/reindex")
 async def reindex(session: AsyncSession = Depends(get_session), user: str = Depends(current_user_id)):
-    """Queue every item for (re)embedding — used after bulk import."""
-    ids = (await session.execute(select(Item.id).where(Item.user_id == user, Item.deleted_on.is_(None)))).scalars().all()
+    """Queue every item for (re)embedding — used after bulk import.
+
+    Documents whose text has never been read are queued for extraction
+    instead, which reindexes them once it finishes. That makes this the
+    backfill for files uploaded before extraction existed, or while storage
+    was switched off.
+    """
+    items = (await session.execute(
+        select(Item).where(Item.user_id == user, Item.deleted_on.is_(None))
+    )).scalars().all()
+    ids = [i.id for i in items]
     queued = 0
-    for iid in ids:
-        if await enqueue("embed_item", iid):
+    for it in items:
+        needs_text = bool((it.file_meta or {}).get("s3_key")) and it.extracted_at is None
+        if await enqueue("extract_item" if needs_text else "embed_item", it.id):
             queued += 1
     if queued == 0:  # no Redis (dev): index inline so the feature still works
         items = (await session.execute(select(Item).where(Item.id.in_(ids)))).scalars().all()
@@ -144,13 +161,20 @@ async def ask(body: AskIn, session: AsyncSession = Depends(get_session), user: s
     # The question is a query, not a document — see _task_prefix.
     qvec = (await embed_texts([body.question], kind="query"))[0]
     dist = Embedding.vector.cosine_distance(qvec)
-    rows = (await session.execute(
+    stmt = (
         select(Embedding, Item, dist.label("d"))
         .join(Item, Item.id == Embedding.item_id)
         .where(Embedding.user_id == user, Item.deleted_on.is_(None))
-        .order_by(dist)
-        .limit(body.k)
-    )).all()
+    )
+    # Scoping is applied INSIDE the ranked query rather than by filtering
+    # results afterwards: post-filtering would search the whole vault, take
+    # the best k, and then discard most of them — so asking about one document
+    # would routinely come back empty.
+    if body.item_ids:
+        stmt = stmt.where(Item.id.in_(body.item_ids))
+    if body.types:
+        stmt = stmt.where(Item.type.in_(body.types))
+    rows = (await session.execute(stmt.order_by(dist).limit(body.k))).all()
     sources = [AskSource(item_id=item.id, title=item.title, type=item.type,
                          score=round(1 - float(d), 4), chunk=emb.chunk[:400])
                for emb, item, d in rows]

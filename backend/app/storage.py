@@ -19,6 +19,7 @@ that cleanly and the app keeps working exactly as it does today, with file
 bodies staying local.
 """
 
+import io
 import logging
 import re
 from dataclasses import dataclass
@@ -129,3 +130,16 @@ def delete_object(key: str) -> None:
         # A file that outlives its item wastes storage; a failed request that
         # breaks the user's delete is worse. Log and move on.
         log.warning(f"Could not delete {key}: {type(exc).__name__}: {exc}")
+
+
+def get_object_bytes(key: str) -> bytes:
+    """Download an object for server-side processing (text extraction).
+
+    The only place the API handles file bytes at all. Uploads and downloads
+    stay presigned and go browser↔bucket directly; this exists because
+    extracting text requires actually reading the file, and doing that in the
+    browser would mean shipping a PDF parser to every visitor.
+    """
+    buf = io.BytesIO()
+    _client().download_fileobj(settings.s3_bucket, key, buf)
+    return buf.getvalue()

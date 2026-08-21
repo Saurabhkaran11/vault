@@ -167,6 +167,13 @@ class AskIn(BaseModel):
     # database error (500) and an enormous one would pull the whole index
     # into a prompt. 50 is already far more context than any answer needs.
     k: int = Field(6, ge=1, le=50)
+    # Narrow the search. `item_ids` asks about specific documents ("what do
+    # these two contracts say about notice periods"); `types` asks a whole
+    # section ("search only my documents"). Both empty searches everything,
+    # which is the existing behaviour. Bounded for the same reason as k —
+    # these reach SQL, and an unbounded IN list is a denial-of-service.
+    item_ids: list[int] = Field(default_factory=list, max_length=100)
+    types: list[str] = Field(default_factory=list, max_length=10)
 
 
 class AskSource(BaseModel):

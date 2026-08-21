@@ -2,11 +2,13 @@
 
 Jobs:
   · embed_item(item_id)  — (re)index one item for pgvector RAG
+  · extract_item(item_id) — read an uploaded document's text, then reindex
   · daily_digest()       — cron 08:00: due/overdue summary per user → Event
                            (phase 4 fans out to email/Slack/push)
   · drain_outbox()       — cron every minute: mark processed, deliver
 """
 
+import asyncio
 from datetime import date, datetime, timezone
 
 from arq import cron
@@ -19,7 +21,60 @@ sys.path.append(str(pathlib.Path(__file__).resolve().parents[1]))
 from app.config import settings           # noqa: E402
 from app.db import SessionLocal           # noqa: E402
 from app.models import Bill, Event, Item, Task  # noqa: E402
+from app.extract import Unsupported, extract_text  # noqa: E402
 from app.routers.ai import index_item     # noqa: E402
+
+
+async def extract_item(ctx, item_id: int):
+    """Read an uploaded document so its CONTENTS become searchable.
+
+    Runs in the worker because parsing is CPU-bound and a large PDF would
+    otherwise hold an API request open for seconds. Always records a result —
+    text on success, `extract_error` on failure — so the difference between
+    "not processed yet" and "processed, nothing readable" stays visible
+    instead of both looking like an empty document.
+    """
+    from app.storage import get_object_bytes, storage_enabled
+
+    async with SessionLocal() as session:
+        item = await session.get(Item, item_id)
+        if not item or item.deleted_on is not None:
+            return "gone"
+        key = (item.file_meta or {}).get("s3_key")
+        if not key:
+            return "no stored file"          # local-only upload; nothing to read
+        if not storage_enabled():
+            return "storage not configured"
+
+        try:
+            data = await asyncio.to_thread(get_object_bytes, key)
+            item.extracted_text = extract_text(
+                data,
+                filename=(item.file_meta or {}).get("name", ""),
+                content_type=(item.file_meta or {}).get("type", ""),
+            )
+            item.extract_error = None
+            result = f"extracted {len(item.extracted_text)} chars"
+        except Unsupported as exc:
+            item.extracted_text = None
+            item.extract_error = str(exc)
+            result = f"unsupported: {exc}"
+        except Exception as exc:
+            item.extracted_text = None
+            item.extract_error = f"{type(exc).__name__}: {exc}"
+            result = f"failed: {result_safe(exc)}"
+
+        item.extracted_at = datetime.now(timezone.utc)
+        # Re-index in the same transaction: the new text is only useful once
+        # it has been embedded, and leaving that to a separate job would make
+        # a document briefly present but unsearchable.
+        await index_item(session, item)
+        await session.commit()
+        return result
+
+
+def result_safe(exc: Exception) -> str:
+    return f"{type(exc).__name__}"
 
 
 async def embed_item(ctx, item_id: int):
@@ -68,7 +123,7 @@ async def drain_outbox(ctx):
 
 
 class WorkerSettings:
-    functions = [embed_item, daily_digest, drain_outbox]
+    functions = [embed_item, extract_item, daily_digest, drain_outbox]
     cron_jobs = [
         cron(daily_digest, hour=8, minute=0),
         cron(drain_outbox, minute=set(range(0, 60))),
