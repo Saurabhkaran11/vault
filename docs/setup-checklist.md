@@ -194,6 +194,30 @@ that expire in 15 minutes.
 
 ---
 
+## 3b. Converting a Neon connection string
+
+Neon gives you a standard Postgres URL. It will **not** work as-is, and the
+two edits are not discoverable from their console:
+
+```
+postgresql://…?sslmode=require            ← what Neon shows you
+postgresql+asyncpg://…?ssl=require        ← what DATABASE_URL must be
+```
+
+`postgresql+asyncpg://` is a SQLAlchemy marker naming the driver, not
+something Neon knows about. And `sslmode` is a libpq spelling that asyncpg
+rejects outright — `connect() got an unexpected keyword argument 'sslmode'`.
+
+Let the script do it:
+
+```bash
+cd backend && python scripts/neon-url.py '<paste the URL from Neon>'
+```
+
+It also warns if you copied the **pooled** endpoint (host contains
+`-pooler`). Use the direct one: the pooler is pgbouncer in transaction mode,
+which breaks asyncpg's prepared statements.
+
 ## 4. Hosting
 
 ### Railway first *(recommended)*
