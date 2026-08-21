@@ -22,6 +22,16 @@ class Settings(BaseSettings):
 
     # AI proxy (phase 3): the user's provider key lives HERE, never in the browser.
     anthropic_api_key: str | None = None
+
+    # Server-side chat completion. Any OpenAI-compatible endpoint — including
+    # ones a BROWSER cannot reach, which is the point: providers like NVIDIA
+    # NIM send no CORS headers, so the frontend can never call them directly
+    # however valid the key. Routing through here also means the key lives on
+    # the server instead of in every user's localStorage.
+    chat_url: str | None = None            # e.g. https://integrate.api.nvidia.com/v1
+    chat_api_key: str | None = None
+    chat_model: str | None = None          # e.g. meta/llama-3.3-70b-instruct
+    chat_max_tokens: int = 4096
     # Any OpenAI-compatible embeddings endpoint (Ollama, Together, OpenAI…).
     embeddings_url: str | None = None
     embeddings_api_key: str | None = None

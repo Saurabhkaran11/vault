@@ -12,8 +12,8 @@ import hashlib
 import math
 
 import httpx
-from fastapi import APIRouter, Depends
-from sqlalchemy import delete, select
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import delete, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import settings
@@ -21,8 +21,8 @@ from ..db import get_session
 from ..deps import current_user_id
 from ..events import enqueue
 from ..extract import chunk_text
-from ..models import Embedding, Item
-from ..schemas import AskIn, AskOut, AskSource
+from ..models import Board, BoardColumn, Card, Embedding, Item, Task
+from ..schemas import AskIn, AskOut, AskSource, CompleteIn, CompleteOut
 
 router = APIRouter(prefix="/ai", tags=["ai"])
 
@@ -126,8 +126,68 @@ async def index_item(session: AsyncSession, item: Item):
     if chunks:
         vectors = await embed_texts(chunks)
         for chunk, vec in zip(chunks, vectors):
-            session.add(Embedding(user_id=item.user_id, item_id=item.id, chunk=chunk,
+            session.add(Embedding(user_id=item.user_id, item_id=item.id,
+                                  source_type="item", source_ref=item.client_id,
+                                  title=item.title, chunk=chunk,
                                   model=settings.embeddings_model, vector=vec))
+
+
+async def index_tasks(session: AsyncSession, user: str) -> int:
+    """To-dos, indexed as one chunk each.
+
+    They were invisible to search: "what did I plan about the migration?" could
+    not reach a to-do however plainly it said so. Each is short enough that
+    chunking would only fragment it.
+    """
+    await session.execute(delete(Embedding).where(
+        Embedding.user_id == user, Embedding.source_type == "task"))
+    rows = (await session.execute(select(Task).where(Task.user_id == user))).scalars().all()
+    texts, keep = [], []
+    for t in rows:
+        parts = [t.text, t.label or "", "done" if t.done else "to do"]
+        if t.due:
+            parts.append(f"due {t.due.isoformat()}")
+        text = ". ".join(p for p in parts if p)
+        if len(text.strip(" .")) >= _MIN_CHUNK_CHARS:
+            texts.append(text); keep.append(t)
+    if not texts:
+        return 0
+    for t, chunk, vec in zip(keep, texts, await embed_texts(texts)):
+        session.add(Embedding(user_id=user, item_id=None, source_type="task",
+                              source_ref=t.id, title=t.text[:120], chunk=chunk,
+                              model=settings.embeddings_model, vector=vec))
+    return len(texts)
+
+
+async def index_cards(session: AsyncSession, user: str) -> int:
+    """Kanban cards, with their board and column as context.
+
+    A card's meaning depends on where it sits — "Ship auth" in Done is a
+    different fact from the same words in Backlog — so the board and column
+    names are part of the indexed text rather than dropped.
+    """
+    await session.execute(delete(Embedding).where(
+        Embedding.user_id == user, Embedding.source_type == "card"))
+    rows = (await session.execute(
+        select(Card, BoardColumn, Board)
+        .join(BoardColumn, BoardColumn.id == Card.column_id)
+        .join(Board, Board.id == BoardColumn.board_id)
+        .where(Board.user_id == user)
+    )).all()
+    texts, keep = [], []
+    for card, col, board in rows:
+        parts = [card.text, card.desc or "", " ".join(card.labels or []),
+                 f"board {board.name}", f"column {col.title}"]
+        text = ". ".join(p for p in parts if p and p.strip())
+        if len(text.strip(" .")) >= _MIN_CHUNK_CHARS:
+            texts.append(text); keep.append(card)
+    if not texts:
+        return 0
+    for card, chunk, vec in zip(keep, texts, await embed_texts(texts)):
+        session.add(Embedding(user_id=user, item_id=None, source_type="card",
+                              source_ref=card.id, title=card.text[:120], chunk=chunk,
+                              model=settings.embeddings_model, vector=vec))
+    return len(texts)
 
 
 @router.post("/reindex")
@@ -153,7 +213,14 @@ async def reindex(session: AsyncSession = Depends(get_session), user: str = Depe
         for it in items:
             await index_item(session, it)
         await session.commit()
-    return {"items": len(ids), "queued": queued, "inline": queued == 0}
+    # To-dos and cards are small and embed in one batch each, so they are done
+    # inline rather than queued — waiting on a worker to make a to-do
+    # searchable would be a strange thing to explain.
+    tasks_n = await index_tasks(session, user)
+    cards_n = await index_cards(session, user)
+    await session.commit()
+    return {"items": len(ids), "queued": queued, "inline": queued == 0,
+            "tasks": tasks_n, "cards": cards_n}
 
 
 @router.post("/ask", response_model=AskOut)
@@ -161,10 +228,15 @@ async def ask(body: AskIn, session: AsyncSession = Depends(get_session), user: s
     # The question is a query, not a document — see _task_prefix.
     qvec = (await embed_texts([body.question], kind="query"))[0]
     dist = Embedding.vector.cosine_distance(qvec)
+    # LEFT join: to-dos and cards have no item row, and an inner join would
+    # silently drop every one of them from results.
     stmt = (
         select(Embedding, Item, dist.label("d"))
-        .join(Item, Item.id == Embedding.item_id)
-        .where(Embedding.user_id == user, Item.deleted_on.is_(None))
+        .outerjoin(Item, Item.id == Embedding.item_id)
+        .where(
+            Embedding.user_id == user,
+            or_(Embedding.item_id.is_(None), Item.deleted_on.is_(None)),
+        )
     )
     # Scoping is applied INSIDE the ranked query rather than by filtering
     # results afterwards: post-filtering would search the whole vault, take
@@ -173,9 +245,20 @@ async def ask(body: AskIn, session: AsyncSession = Depends(get_session), user: s
     if body.item_ids:
         stmt = stmt.where(Item.id.in_(body.item_ids))
     if body.types:
-        stmt = stmt.where(Item.type.in_(body.types))
+        # `types` spans two different columns: item kinds live on the item row,
+        # while to-dos and cards have no item row and are identified by
+        # source_type. Filtering only on Item.type silently returned nothing
+        # for "task" and "card", because Item.type is NULL for them and
+        # NULL IN (...) is never true.
+        stmt = stmt.where(or_(
+            Item.type.in_(body.types),
+            Embedding.source_type.in_(body.types),
+        ))
     rows = (await session.execute(stmt.order_by(dist).limit(body.k))).all()
-    sources = [AskSource(item_id=item.id, title=item.title, type=item.type,
+    sources = [AskSource(item_id=item.id if item else 0,
+                         client_id=item.client_id if item else emb.source_ref,
+                         title=(item.title if item else emb.title) or "(untitled)",
+                         type=item.type if item else emb.source_type,
                          score=round(1 - float(d), 4), chunk=emb.chunk[:400])
                for emb, item, d in rows]
     numbered = "\n".join(f"[{i+1}] ({s.type}) {s.title}: {s.chunk}" for i, s in enumerate(sources))
@@ -184,3 +267,67 @@ async def ask(body: AskIn, session: AsyncSession = Depends(get_session), user: s
         f"SOURCES:\n{numbered}\n\nQUESTION: {body.question}"
     )
     return AskOut(sources=sources, prompt=prompt)
+
+
+@router.get("/status")
+async def ai_status():
+    """Whether the server can generate answers itself.
+
+    The frontend asks before offering server-side completion, so it can fall
+    back to the browser's own key rather than failing at the moment someone
+    presses Ask."""
+    return {
+        "server_completion": bool(settings.chat_url and settings.chat_model),
+        "model": settings.chat_model if settings.chat_url else None,
+    }
+
+
+@router.post("/complete", response_model=CompleteOut)
+async def complete(body: CompleteIn, user: str = Depends(current_user_id)):
+    """Generate an answer using the server's provider and the server's key.
+
+    This exists because the browser cannot reach every provider. NVIDIA NIM,
+    for one, returns no `access-control-allow-origin`, so a browser request is
+    blocked before it is ever sent — no key makes that work. Server to server
+    has no such restriction, which means ANY OpenAI-compatible provider
+    becomes usable, including the hundred-odd open models NIM hosts.
+
+    The second reason is arguably better: the key stays here. Browser-held
+    keys sit in localStorage on every device a user signs in from.
+    """
+    if not (settings.chat_url and settings.chat_model):
+        raise HTTPException(503, "Server-side AI is not configured — set CHAT_URL and CHAT_MODEL.")
+
+    headers = {"Content-Type": "application/json"}
+    if settings.chat_api_key:
+        headers["Authorization"] = f"Bearer {settings.chat_api_key}"
+
+    payload = {
+        "model": settings.chat_model,
+        "max_tokens": min(body.max_tokens or settings.chat_max_tokens, settings.chat_max_tokens),
+        "messages": [m.model_dump() for m in body.messages],
+    }
+    try:
+        async with httpx.AsyncClient(timeout=120) as client:
+            r = await client.post(f"{settings.chat_url.rstrip('/')}/chat/completions",
+                                  json=payload, headers=headers)
+    except httpx.RequestError as exc:
+        raise HTTPException(502, f"Could not reach the model provider: {type(exc).__name__}") from exc
+
+    if r.status_code >= 400:
+        # Surface the provider's status so a bad key reads as a bad key, but
+        # not its body — that can echo the prompt, and the prompt is the
+        # user's vault.
+        raise HTTPException(502, f"Model provider returned {r.status_code}.")
+
+    data = r.json()
+    try:
+        text = data["choices"][0]["message"]["content"] or ""
+    except (KeyError, IndexError, TypeError) as exc:
+        raise HTTPException(502, "Model provider returned an unexpected response shape.") from exc
+
+    # Reasoning models wrap their scratchpad in <think>…</think>; it is not
+    # part of the answer and reads as the model talking to itself.
+    import re
+    text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
+    return CompleteOut(text=text, model=settings.chat_model)

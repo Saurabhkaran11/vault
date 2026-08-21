@@ -187,3 +187,96 @@ async def test_scoping_cannot_reach_another_accounts_document(client, other_clie
         "question": "private contract", "item_ids": [theirs]})).json()["sources"]
 
     assert scoped == [], "asking about someone else's document id must return nothing"
+
+
+async def test_todos_and_cards_are_searchable(client, pfx):
+    """Every feature with text must be reachable by search.
+
+    To-dos and kanban cards were invisible: the index held only items, so
+    "what did I plan about X" could not reach a to-do however plainly it said
+    so. Regression guard for the LEFT join too — an inner join on items
+    silently drops every task and card, since neither has an item row.
+    """
+    from app.db import SessionLocal
+    from app.routers.ai import index_cards, index_tasks
+
+    uid = client.headers["X-User-Id"]
+    await client.post("/todos", json={
+        "id": f"{pfx}-t-idx", "text": "Renew the passport before travelling",
+        "created_on": "2026-08-20"})
+    await client.put(f"/boards/{pfx}-b-idx/snapshot", json={
+        "id": f"{pfx}-b-idx", "name": "Launch", "seq": 1, "current": "s1",
+        "sprints": [{"id": f"{pfx}-s1", "name": "S1", "ended": None}],
+        "cols": [{"id": f"{pfx}-c1", "title": "In progress",
+                  "cards": [{"id": f"{pfx}-k1", "num": 1, "text": "Wire up the payment provider"}]}]})
+
+    async with SessionLocal() as s:
+        assert await index_tasks(s, uid) >= 1
+        assert await index_cards(s, uid) >= 1
+        await s.commit()
+
+    found = (await client.post("/ai/ask", json={"question": "passport renewal travel"})).json()["sources"]
+    assert any(s["type"] == "task" for s in found), "to-dos must be searchable"
+
+    found = (await client.post("/ai/ask", json={"question": "payment provider integration"})).json()["sources"]
+    assert any(s["type"] == "card" for s in found), "kanban cards must be searchable"
+
+
+async def test_a_card_carries_its_board_and_column(client, pfx):
+    """"Ship auth" in Done means something different from the same words in
+    Backlog, so position is part of what gets indexed."""
+    from app.db import SessionLocal
+    from app.models import Embedding
+    from app.routers.ai import index_cards
+    from sqlalchemy import select
+
+    uid = client.headers["X-User-Id"]
+    await client.put(f"/boards/{pfx}-b2/snapshot", json={
+        "id": f"{pfx}-b2", "name": "Roadmap", "seq": 1, "current": "s1",
+        "sprints": [{"id": f"{pfx}-s1", "name": "S1", "ended": None}],
+        "cols": [{"id": f"{pfx}-c9", "title": "Done", "cards": [{"id": f"{pfx}-k9", "num": 1, "text": "Ship auth"}]}]})
+
+    async with SessionLocal() as s:
+        await index_cards(s, uid)
+        await s.commit()
+        chunk = (await s.execute(
+            select(Embedding.chunk).where(Embedding.user_id == uid, Embedding.source_type == "card")
+        )).scalars().first()
+
+    assert "Roadmap" in chunk and "Done" in chunk
+
+
+async def test_scoping_reaches_todos_and_cards(client, pfx):
+    """`types` spans two columns: item kinds live on the item row, while
+    to-dos and cards have none. Filtering only on Item.type returned nothing
+    for them, because NULL IN (...) is never true — so the scope silently
+    produced an empty result rather than the to-dos it named.
+    """
+    from app.db import SessionLocal
+    from app.routers.ai import index_cards, index_tasks
+
+    uid = client.headers["X-User-Id"]
+    await client.post("/todos", json={
+        "id": f"{pfx}-scope-t", "text": "Book the dentist appointment", "created_on": "2026-08-20"})
+    await client.put(f"/boards/{pfx}-sb/snapshot", json={
+        "id": f"{pfx}-sb", "name": "Ops", "seq": 1, "current": f"{pfx}-s",
+        "sprints": [{"id": f"{pfx}-s", "name": "S", "ended": None}],
+        "cols": [{"id": f"{pfx}-col", "title": "Doing",
+                  "cards": [{"id": f"{pfx}-cd", "num": 1, "text": "Rotate the signing keys"}]}]})
+    async with SessionLocal() as s:
+        await index_tasks(s, uid)
+        await index_cards(s, uid)
+        await s.commit()
+
+    only_tasks = (await client.post("/ai/ask", json={
+        "question": "dentist appointment", "types": ["task"]})).json()["sources"]
+    assert only_tasks and all(s["type"] == "task" for s in only_tasks)
+
+    only_cards = (await client.post("/ai/ask", json={
+        "question": "rotate signing keys", "types": ["card"]})).json()["sources"]
+    assert only_cards and all(s["type"] == "card" for s in only_cards)
+
+    # And an item scope must still exclude both.
+    only_docs = (await client.post("/ai/ask", json={
+        "question": "dentist appointment", "types": ["doc"]})).json()["sources"]
+    assert all(s["type"] == "doc" for s in only_docs)

@@ -268,6 +268,62 @@ an issue in Sentry and a line in your own logs are the same incident.
 
 ---
 
+## 6. AI provider for answers (pick any one)
+
+Answers are generated in the browser with **your** key, which never leaves it.
+Everything except Anthropic goes through the OpenAI chat-completions shape, so
+adding a provider is choosing a preset — not new code.
+
+| Provider | Key from | Notes |
+|---|---|---|
+| Ollama / LM Studio | — | Local and free; nothing leaves your machine |
+| OpenAI | <https://platform.openai.com/api-keys> | |
+| Google Gemini | <https://aistudio.google.com/apikey> | Has a free tier |
+| Mistral | <https://console.mistral.ai/api-keys> | |
+| DeepSeek | <https://platform.deepseek.com/api_keys> | |
+| Groq | <https://console.groq.com/keys> | Open-weight models, very fast, free tier |
+| Together AI | <https://api.together.xyz/settings/api-keys> | |
+| OpenRouter | <https://openrouter.ai/keys> | One key reaches most providers |
+
+### Providers a browser cannot reach
+
+Some providers send no CORS headers, so the browser is blocked before the
+request is even sent — no key fixes that. **NVIDIA NIM** (100+ open models) is
+one. For those, configure the provider on the **backend** instead:
+
+```bash
+CHAT_URL=https://integrate.api.nvidia.com/v1     # check the current base URL in their docs
+CHAT_API_KEY=nvapi-...
+CHAT_MODEL=meta/llama-3.3-70b-instruct
+```
+
+The app asks `/ai/status` and routes through the server automatically, so no
+key is needed in the browser at all — which is also the better place for it.
+
+### Running the model yourself (no provider, no key)
+
+`docker compose --profile selfhosted up -d` starts Ollama alongside the rest
+of the stack. Pull a model once and point the API at it:
+
+```bash
+docker compose exec ollama ollama pull gemma2:2b
+CHAT_URL=http://ollama:11434/v1
+CHAT_MODEL=gemma2:2b
+```
+
+Prompts and vault contents then never leave your infrastructure, and there is
+nothing to pay. `gemma2:2b` is ~1.6 GB and runs on modest hardware; larger
+models are better but want more RAM.
+
+Settings → **AI assistant** → *Another provider* → pick one. The model name
+fills in automatically and can be changed; anything unlisted works through
+**Custom server** as long as it speaks `/chat/completions`.
+
+The same applies to the backend's `EMBEDDINGS_URL`, which is the identical
+contract — so search and answers can use different providers.
+
+---
+
 ## Order I'd actually do it
 
 1. **Embeddings** — 5 minutes, and immediately makes AI search feel real

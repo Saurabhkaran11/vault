@@ -24,7 +24,7 @@ import CustomBoards from "./CustomBoards";
 import FinanceBoard from "./FinanceBoard";
 import AskVault from "./AskVault";
 import { emptyBlock } from "./NoteBlocks";
-import { AI_MODELS, OSS_PRESETS, OSS_MODEL_SUGGESTIONS, getAIConfig, setAIConfig, aiEnabled, askText, askJSON } from "@/lib/ai";
+import { AI_MODELS, OSS_PRESETS, OSS_MODEL_SUGGESTIONS, presetById, getAIConfig, setAIConfig, aiEnabled, askText, askJSON } from "@/lib/ai";
 import { getBackend, setBackend, backendHealthy, fullSync, flushQueue, pendingMirrors, pullAll, applyPulled, hydrateIfEmpty, hasVerifiedIdentity } from "@/lib/api";
 import { storeFile } from "@/lib/files";
 import AccountSection from "./AccountSection";
@@ -1069,7 +1069,7 @@ export default function App() {
                 <select className="menu-input" value={aiCfg.provider || "anthropic"} aria-label="AI provider"
                   onChange={(e) => { updateAI({ provider: e.target.value }); setKeyEdit(false); }}>
                   <option value="anthropic">Claude (Anthropic)</option>
-                  <option value="oss">Open-source model (Ollama, Groq, OpenRouter…)</option>
+                  <option value="oss">Another provider (OpenAI, Gemini, Mistral, local models…)</option>
                 </select>
 
                 {(aiCfg.provider || "anthropic") === "anthropic" ? (
@@ -1106,7 +1106,10 @@ export default function App() {
                       value={OSS_PRESETS.find((p) => p.url === aiCfg.ossBaseUrl)?.id || "custom"}
                       onChange={(e) => {
                         const p = OSS_PRESETS.find((x) => x.id === e.target.value);
-                        if (p) updateAI({ ossBaseUrl: p.url });
+                        /* Carry the preset's first model across too. Leaving the
+                           previous provider's model name behind is the most
+                           common way this ends in a confusing 404. */
+                        if (p) updateAI({ ossBaseUrl: p.url, ossModel: p.models?.[0] || aiCfg.ossModel });
                       }}>
                       {OSS_PRESETS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
                       <option value="custom">Custom server…</option>
@@ -1118,8 +1121,22 @@ export default function App() {
                       value={aiCfg.ossModel || ""} placeholder="Model name, e.g. llama3.3 or qwen2.5:14b"
                       onChange={(e) => updateAI({ ossModel: e.target.value.trim() })} />
                     <datalist id="oss-models">
-                      {OSS_MODEL_SUGGESTIONS.map((m) => <option key={m} value={m} />)}
+                      {(presetById(OSS_PRESETS.find((p) => p.url === aiCfg.ossBaseUrl)?.id)?.models
+                        || OSS_MODEL_SUGGESTIONS).map((m) => <option key={m} value={m} />)}
                     </datalist>
+                    {(() => {
+                      const p = OSS_PRESETS.find((x) => x.url === aiCfg.ossBaseUrl);
+                      if (!p) return null;
+                      return (
+                        <div className="menu-foot" style={{ border: "none", marginTop: 6, paddingTop: 0 }}>
+                          {p.note && <>{p.note} </>}
+                          {p.keyUrl && (
+                            <>Get a key: <a href={p.keyUrl} target="_blank" rel="noreferrer">{new URL(p.keyUrl).host}</a></>
+                          )}
+                          {!p.needsKey && <>No key needed — leave the field below empty.</>}
+                        </div>
+                      );
+                    })()}
                     {aiCfg.ossKey && !keyEdit ? (
                       <div className="keyrow">
                         <span className="keystate mono">API key saved ✓</span>

@@ -1,6 +1,7 @@
 "use client";
 
 import Anthropic from "@anthropic-ai/sdk";
+import { api, backendOn } from "./api";
 
 /* AI service layer — the single seam between Vault's UI and Claude.
  *
@@ -20,18 +21,72 @@ export const AI_MODELS = [
   { id: "claude-haiku-4-5", label: "Claude Haiku 4.5 (fastest)" },
 ];
 
-/* Open-source route: anything that speaks the OpenAI chat-completions API —
- * local (Ollama, LM Studio) or hosted (Groq, Together, OpenRouter). */
+/* Everything that is not Anthropic goes through one route: the OpenAI
+ * chat-completions shape, which almost every provider now speaks — including
+ * ones that are not remotely open source. That is why this seam is worth
+ * having: adding OpenAI, Mistral or Gemini is a row in this table, not a new
+ * client library, and "Custom server" already covers anything unlisted.
+ *
+ * `keyUrl` is where you actually get the key. Hunting for that page is the
+ * slowest part of setting one of these up.
+ * `models` are sensible starting points, not a complete catalogue — the field
+ * stays free text because these lists go stale within weeks. */
 export const OSS_PRESETS = [
-  { id: "ollama", label: "Ollama · local", url: "http://localhost:11434/v1", needsKey: false },
-  { id: "lmstudio", label: "LM Studio · local", url: "http://localhost:1234/v1", needsKey: false },
-  { id: "groq", label: "Groq · hosted", url: "https://api.groq.com/openai/v1", needsKey: true },
-  { id: "together", label: "Together AI · hosted", url: "https://api.together.xyz/v1", needsKey: true },
-  { id: "openrouter", label: "OpenRouter · hosted", url: "https://openrouter.ai/api/v1", needsKey: true },
+  {
+    id: "ollama", label: "Ollama · local, free", url: "http://localhost:11434/v1", needsKey: false,
+    models: ["llama3.3", "qwen2.5:14b", "gemma2:9b", "deepseek-r1:14b", "mistral"],
+    note: "Runs on your machine — nothing leaves it. Needs OLLAMA_ORIGINS='*' ollama serve for browser access.",
+  },
+  {
+    id: "lmstudio", label: "LM Studio · local, free", url: "http://localhost:1234/v1", needsKey: false,
+    models: ["local-model"],
+    note: "Start the local server from LM Studio's Developer tab.",
+  },
+  {
+    id: "openai", label: "OpenAI", url: "https://api.openai.com/v1", needsKey: true,
+    keyUrl: "https://platform.openai.com/api-keys",
+    models: ["gpt-4o", "gpt-4o-mini", "o3-mini"],
+  },
+  {
+    id: "gemini", label: "Google Gemini", url: "https://generativelanguage.googleapis.com/v1beta/openai/", needsKey: true,
+    keyUrl: "https://aistudio.google.com/apikey",
+    models: ["gemini-2.0-flash", "gemini-1.5-pro"],
+    note: "Google's OpenAI-compatible endpoint. Has a free tier.",
+  },
+  {
+    id: "mistral", label: "Mistral", url: "https://api.mistral.ai/v1", needsKey: true,
+    keyUrl: "https://console.mistral.ai/api-keys",
+    models: ["mistral-large-latest", "mistral-small-latest", "open-mistral-nemo"],
+  },
+  {
+    id: "deepseek", label: "DeepSeek", url: "https://api.deepseek.com/v1", needsKey: true,
+    keyUrl: "https://platform.deepseek.com/api_keys",
+    models: ["deepseek-chat", "deepseek-reasoner"],
+  },
+  {
+    id: "groq", label: "Groq · very fast", url: "https://api.groq.com/openai/v1", needsKey: true,
+    keyUrl: "https://console.groq.com/keys",
+    models: ["llama-3.3-70b-versatile", "mixtral-8x7b-32768"],
+    note: "Open-weight models on custom silicon. Free tier available.",
+  },
+  {
+    id: "together", label: "Together AI", url: "https://api.together.xyz/v1", needsKey: true,
+    keyUrl: "https://api.together.xyz/settings/api-keys",
+    models: ["meta-llama/Llama-3.3-70B-Instruct-Turbo", "mistralai/Mixtral-8x7B-Instruct-v0.1"],
+  },
+  {
+    id: "openrouter", label: "OpenRouter · many models, one key", url: "https://openrouter.ai/api/v1", needsKey: true,
+    keyUrl: "https://openrouter.ai/keys",
+    models: ["anthropic/claude-3.5-sonnet", "google/gemini-2.0-flash-001", "meta-llama/llama-3.3-70b-instruct"],
+    note: "A single key that reaches most providers — useful for trying several.",
+  },
 ];
+
+export const presetById = (id) => OSS_PRESETS.find((p) => p.id === id);
+
+/* Fallback list for "Custom server", where we cannot know what is available. */
 export const OSS_MODEL_SUGGESTIONS = [
-  "llama3.3", "llama-3.3-70b-versatile", "qwen2.5:14b", "mistral-small",
-  "deepseek-r1:14b", "gemma2:9b", "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+  "llama3.3", "qwen2.5:14b", "mistral-small-latest", "deepseek-chat", "gpt-4o-mini",
 ];
 
 export function getAIConfig() {
@@ -178,4 +233,65 @@ export async function askJSON(prompt, schema, opts = {}) {
     try { return JSON.parse(cand); } catch {}
   }
   throw new AIError("parse", "The model's response wasn't valid JSON — try again (larger open models are more reliable at this).");
+}
+
+
+/* ------------------------------------------------------- server-side route
+ *
+ * When the backend has a provider configured it answers, and the browser
+ * needs no key at all. Two reasons this matters beyond convenience:
+ *
+ *   · Some providers cannot be called from a browser however valid the key.
+ *     NVIDIA NIM sends no `access-control-allow-origin`, so the request is
+ *     blocked before it is sent. Server to server has no such restriction,
+ *     which makes every OpenAI-compatible provider reachable — including a
+ *     model you host yourself with no third party involved at all.
+ *   · A browser-held key sits in localStorage on every device the user signs
+ *     in from. A server-held one does not.
+ */
+let _serverAI = null;
+
+export function resetServerAICache() { _serverAI = null; }
+
+export async function serverAIStatus() {
+  if (!backendOn()) return { server_completion: false };
+  if (_serverAI) return _serverAI;
+  try {
+    _serverAI = await api("/ai/status");
+  } catch {
+    _serverAI = { server_completion: false };
+  }
+  return _serverAI;
+}
+
+async function completeViaServer({ system, messages, maxTokens }) {
+  const payload = [];
+  if (system) payload.push({ role: "system", content: system });
+  payload.push(...messages);
+  const res = await api("/ai/complete", {
+    method: "POST",
+    body: { messages: payload, max_tokens: maxTokens },
+  });
+  return res?.text || "";
+}
+
+/**
+ * Ask whichever route is available, preferring the server.
+ * Returns { text, via } so the UI can be honest about what answered.
+ */
+export async function askAnywhere(prompt, { system, maxTokens = 4000 } = {}) {
+  const status = await serverAIStatus();
+  if (status.server_completion) {
+    return {
+      text: await completeViaServer({ system, messages: [{ role: "user", content: prompt }], maxTokens }),
+      via: status.model || "server",
+    };
+  }
+  return { text: await askText(prompt, { system, maxTokens }), via: "browser" };
+}
+
+/** True when an answer can be produced by EITHER route. */
+export async function answersPossible() {
+  if (aiEnabled()) return true;
+  return (await serverAIStatus()).server_completion === true;
 }
