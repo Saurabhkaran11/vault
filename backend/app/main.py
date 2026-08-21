@@ -71,6 +71,9 @@ app.middleware("http")(request_context)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origin_list,   # CORS_ORIGINS env var in production
+    # Patterns in CORS_ORIGINS (e.g. https://*.vercel.app) land here, so
+    # per-deployment preview URLs work without maintaining a list.
+    allow_origin_regex=settings.cors_origin_regex,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -31,5 +31,9 @@ export const config = {
     // Everything except Next internals and static files, plus API routes.
     "/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)",
     "/(api|trpc)(.*)",
+    // Clerk's auto-proxy route. Without it those requests bypass the
+    // middleware entirely, so the flows that expect to be proxied through
+    // this domain never reach Clerk.
+    "/__clerk/:path*",
   ],
 };

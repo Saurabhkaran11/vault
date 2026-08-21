@@ -18,7 +18,32 @@ class Settings(BaseSettings):
 
     @property
     def cors_origin_list(self) -> list[str]:
-        return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+        """Exact origins only — anything with a '*' becomes a regex instead."""
+        return [o.strip() for o in self.cors_origins.split(",")
+                if o.strip() and "*" not in o]
+
+    @property
+    def cors_origin_regex(self) -> str | None:
+        """Pattern form, for hosts that mint a new origin per deployment.
+
+        Vercel gives every branch push its own URL — vault-git-feat-x-you
+        .vercel.app — so an exact list can never contain the preview you are
+        currently looking at, and every API call from it fails CORS. Writing
+        `https://*.vercel.app` in CORS_ORIGINS covers them.
+
+        Only the '*' is treated as a wildcard; everything else is escaped, so
+        a dot stays a literal dot. Without that, `https://*.vercel.app` would
+        also match `https://evil-vercelXapp.com`.
+        """
+        import re
+
+        patterns = [o.strip() for o in self.cors_origins.split(",")
+                    if o.strip() and "*" in o]
+        if not patterns:
+            return None
+        # A wildcard matches one label — no dots — so *.vercel.app cannot
+        # match a.b.vercel.app belonging to someone else.
+        return "|".join(re.escape(p).replace(r"\*", r"[^.]+") for p in patterns)
 
     # AI proxy (phase 3): the user's provider key lives HERE, never in the browser.
     anthropic_api_key: str | None = None
@@ -71,6 +96,12 @@ class Settings(BaseSettings):
 
     class Config:
         env_file = ".env"
+        # Ignore environment variables that are not settings, rather than
+        # refusing to start. Every real host sets its own: Render adds PORT and
+        # RENDER_SERVICE_ID, AWS adds task metadata, a shell adds VIRTUAL_ENV.
+        # Forbidding extras turns any of those into a crash at boot, with an
+        # error naming a variable that has nothing to do with the app.
+        extra = "ignore"
 
 
 settings = Settings()
