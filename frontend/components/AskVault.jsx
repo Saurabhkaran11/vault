@@ -3,7 +3,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { SECTIONS, fmtStamp } from "@/lib/seed";
 import { askAnywhere, aiEnabled, serverAIStatus } from "@/lib/ai";
-import { SCOPES, FORMATS, buildPrompt, canUseServerSearch, retrieveFromServer } from "@/lib/ask";
+import { SCOPES, FORMATS, buildPrompt, canUseServerSearch, retrieveFromServer, isListingQuestion, catalogue } from "@/lib/ask";
 import { Ic } from "./Icons";
 
 /* "Ask your Vault" — retrieval, then a cited answer in the shape you asked for.
@@ -70,6 +70,7 @@ export default function AskVault({ items, open, onClose, onGoto, onOpenSettings 
   const [serverSearch, setServerSearch] = useState(false);
   const [answeredBy, setAnsweredBy] = useState(null);
   const [serverAI, setServerAI] = useState(false);
+  const [listing, setListing] = useState(null);   // exact list, no model involved
   const [busy, setBusy] = useState(false);
   const [answer, setAnswer] = useState(null);
   const [sources, setSources] = useState([]);
@@ -103,7 +104,17 @@ export default function AskVault({ items, open, onClose, onGoto, onOpenSettings 
   const ask = async () => {
     const question = q.trim();
     if (!question || busy) return;
-    setBusy(true); setError(null); setAnswer(null);
+    setBusy(true); setError(null); setAnswer(null); setListing(null);
+
+    /* "List all my documents" is enumeration, not similarity. Answer it from
+       the data directly: complete and exact, where retrieval would hand the
+       model its top 8 and let it present those as the whole set. */
+    if (isListingQuestion(question)) {
+      setListing({ rows: catalogue(items, scope), scope });
+      setSources([]);
+      setBusy(false);
+      return;
+    }
 
     /* Server retrieval when it is available, because only it can see inside
        uploaded documents. Falling back to local search on failure keeps the
@@ -217,6 +228,38 @@ export default function AskVault({ items, open, onClose, onGoto, onOpenSettings 
           )}
           {busy && <div className="av-note">Searching your vault…</div>}
           {error && <div className="av-note av-err">⚠ {error.message}</div>}
+          {listing && (
+            <div className="av-listing">
+              <div className="av-note">
+                {listing.rows.length}{" "}
+                {listing.scope === "all"
+                  ? `item${listing.rows.length === 1 ? "" : "s"}`
+                  : (SCOPES.find((sc) => sc.id === listing.scope)?.label || "item").toLowerCase()}
+                {" "}— listed straight from your vault, so it is complete rather than a
+                model&rsquo;s best guess.
+              </div>
+              {listing.rows.length === 0 ? (
+                <div className="av-note">Nothing saved here yet.</div>
+              ) : (
+                <table className="av-table">
+                  <thead><tr><th>Title</th><th>Section</th><th>Tags</th></tr></thead>
+                  <tbody>
+                    {listing.rows.map((r) => (
+                      <tr key={r.id}>
+                        <td>
+                          <button className="av-link" onClick={() => { onGoto(r); onClose(); }}>
+                            {r.title.slice(0, 52)}
+                          </button>
+                        </td>
+                        <td>{SECTIONS[r.type]?.label || r.type}</td>
+                        <td>{r.tags.length ? r.tags.map((t) => `#${t}`).join(" ") : <span className="av-dim">—</span>}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          )}
           {answer && (
             <>
               <div className="av-answer">{renderAnswer(answer)}</div>

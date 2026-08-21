@@ -110,3 +110,45 @@ export function buildPrompt(question, sources, formatId) {
     user: `SOURCES:\n\n${numbered}\n\nQUESTION: ${question}`,
   };
 }
+
+/* ------------------------------------------------------------- catalogue
+ *
+ * "List all my documents" is not a similarity question, and running it
+ * through retrieval gives a confidently wrong answer: the search returns the
+ * top k chunks by relevance — 8 by default — so with 200 documents the model
+ * is handed 8, lists those, and presents them as the complete set. No choice
+ * of model fixes that, because the rest was never retrieved.
+ *
+ * Enumeration is a database query. Answering it directly is complete, exact,
+ * instant, and free — and it can show fields like tags that a prose answer
+ * routinely drops.
+ */
+
+const LISTING_VERB = /\b(list|show|give|provide|display|enumerate|what)\b/i;
+const LISTING_SCOPE = /\b(all|every|each|my)\b/i;
+const LISTING_NOUN = /\b(doc|docs|document|documents|file|files|note|notes|video|videos|book|books|item|items|bookmark|bookmarks)\b/i;
+
+/** Does this read as "give me the list", rather than a question about content? */
+export function isListingQuestion(q) {
+  const s = (q || "").trim();
+  if (!s) return false;
+  // "what does my resume say about X" is about content, not a list.
+  if (/\b(say|says|mention|explain|why|how|when|summar|compare|difference)\b/i.test(s)) return false;
+  return LISTING_VERB.test(s) && LISTING_SCOPE.test(s) && LISTING_NOUN.test(s);
+}
+
+/** The complete, scoped list — no model, no ranking, no truncation. */
+export function catalogue(items, scope = "all") {
+  const types = SCOPES.find((s) => s.id === scope)?.types || [];
+  return items
+    .filter((i) => !i.deleted && (!types.length || types.includes(i.type)))
+    .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")))
+    .map((i) => ({
+      id: i.id,
+      title: i.alias || i.title || "(untitled)",
+      type: i.type,
+      tags: i.tags || [],
+      date: i.date,
+      local: true,
+    }));
+}

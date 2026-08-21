@@ -1099,3 +1099,14 @@ button:disabled{opacity:.5; cursor:not-allowed}
   background: color-mix(in srgb, var(--gold) 12%, transparent);
   border-left: 2px solid var(--gold);
 }
+
+/* Enumeration answered from the data, not the model — so it is a table, not
+   prose, and it is complete rather than the top few by relevance. */
+.av-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
+.av-table th {
+  text-align: left; font-size: 11px; letter-spacing: .04em; text-transform: uppercase;
+  color: var(--muted); font-weight: 600; padding: 6px 8px; border-bottom: 1px solid var(--line);
+}
+.av-table td { padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.av-table tr:last-child td { border-bottom: none; }
+.av-dim { color: var(--muted); }
