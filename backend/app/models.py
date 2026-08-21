@@ -66,6 +66,14 @@ class Item(Base, TimestampMixin):
     added_on: Mapped[date] = mapped_column(Date, index=True)               # the user's visible date stamp
     deleted_on: Mapped[date | None] = mapped_column(Date, index=True)      # 30-day trash
 
+    # Text pulled out of an uploaded document (see extract.py). Stored rather
+    # than re-derived so re-embedding never re-downloads and re-parses the
+    # file. `extracted_at` records that we TRIED — distinguishing "not yet
+    # processed" from "processed, nothing readable", which is a scan.
+    extracted_text: Mapped[str | None] = mapped_column(Text)
+    extracted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    extract_error: Mapped[str | None] = mapped_column(Text)
+
     embeddings = relationship("Embedding", cascade="all, delete-orphan", back_populates="item")
 
 

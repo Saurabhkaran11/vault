@@ -20,6 +20,18 @@ services:
       interval: 3s
       retries: 15
 
+  # S3-compatible storage for local development, so the upload and
+  # document-extraction paths can be exercised without an AWS account.
+  # Production sets S3_BUCKET plus credentials and leaves S3_ENDPOINT_URL
+  # unset, which points the same code at real S3.
+  minio:
+    image: minio/minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: vaultminio
+      MINIO_ROOT_PASSWORD: vaultminio
+    ports: ["9000:9000", "9001:9001"]
+
   # Migrations run once, as their own service, before anything that touches
   # the schema. The API refuses to boot against an unmigrated database, and
   # the worker queries the same tables — so both wait for this to succeed

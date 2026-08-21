@@ -13,3 +13,5 @@ alembic>=1.13
 pyjwt[crypto]>=2.9
 boto3>=1.35
 sentry-sdk[fastapi]>=2.0
+pypdf>=5.0
+python-docx>=1.1

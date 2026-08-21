@@ -10,7 +10,7 @@ For the surrounding commands (installing, migrating, deploying) see the
 |---|---|---|---|
 | 1 | [Embeddings provider](#1-embeddings-provider) | AI search that understands meaning | 5 min |
 | 2 | [Clerk](#2-clerk-sign-in) | real sign-in — **required before deploying** | 10 min |
-| 3 | [AWS S3](#3-aws-s3-file-storage) | documents that open on every device | 10 min |
+| 3 | [AWS S3](#3-aws-s3-file-storage) | documents that open on every device **and become askable** | 10 min |
 | 4 | [Hosting](#4-hosting) | putting it online | 30–60 min |
 | 5 | [Error tracking](#5-error-tracking-sentry) | knowing when it breaks, not hearing it from a user | 5 min |
 
@@ -133,8 +133,14 @@ and the app says so rather than showing a broken viewer. Turning it on also
 lifts the per-file cap from 2 MB to 25 MB, because bytes stop having to fit
 in localStorage.
 
+Turning it on also unlocks **asking questions about a document's contents**:
+the worker downloads each uploaded file, extracts its text and indexes it, so
+"what is the notice period in that contract?" is answerable. Without storage
+the backend never sees the bytes and a PDF contributes only its filename.
+
 Files saved before you enable it keep working exactly as they do now — the
-two storage shapes coexist, so this is a switch, not a migration.
+two storage shapes coexist, so this is a switch, not a migration. Run
+`POST /ai/reindex` afterwards to backfill text for documents already uploaded.
 
 1. Console: <https://console.aws.amazon.com/s3>
 2. Create a bucket — **keep "Block all public access" ON**
