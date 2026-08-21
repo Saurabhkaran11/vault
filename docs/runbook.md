@@ -3,6 +3,10 @@
 Every step, in the order it has to happen. Steps marked **(you)** need an
 account or a credential only you can create; everything else is a command.
 
+> **Deploying, scaling, or wondering what is needed before other people use
+> it?** See [deployment-and-scale.md](deployment-and-scale.md) — staged by
+> when each thing actually becomes necessary.
+>
 > **Just need the accounts and keys?** See the
 > [setup checklist](setup-checklist.md) — every signup link and where each
 > value goes, without the surrounding commands.
