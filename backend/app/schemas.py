@@ -178,6 +178,10 @@ class AskIn(BaseModel):
 
 class AskSource(BaseModel):
     item_id: int
+    # The frontend's own id for this item. Without it a cited source cannot be
+    # matched back to anything in the browser, so the "jump to source" chip
+    # has nowhere to jump to.
+    client_id: str | None = None
     title: str
     type: str
     score: float

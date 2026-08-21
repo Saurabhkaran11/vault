@@ -175,7 +175,7 @@ async def ask(body: AskIn, session: AsyncSession = Depends(get_session), user: s
     if body.types:
         stmt = stmt.where(Item.type.in_(body.types))
     rows = (await session.execute(stmt.order_by(dist).limit(body.k))).all()
-    sources = [AskSource(item_id=item.id, title=item.title, type=item.type,
+    sources = [AskSource(item_id=item.id, client_id=item.client_id, title=item.title, type=item.type,
                          score=round(1 - float(d), 4), chunk=emb.chunk[:400])
                for emb, item, d in rows]
     numbered = "\n".join(f"[{i+1}] ({s.type}) {s.title}: {s.chunk}" for i, s in enumerate(sources))

@@ -3,14 +3,23 @@
 import React, { useEffect, useRef, useState } from "react";
 import { SECTIONS, fmtStamp } from "@/lib/seed";
 import { askText, aiEnabled } from "@/lib/ai";
+import { SCOPES, FORMATS, buildPrompt, canUseServerSearch, retrieveFromServer } from "@/lib/ask";
 import { Ic } from "./Icons";
 
-/* "Ask your Vault" — RAG-lite, fully client-side.
- * Retrieval: every item becomes a text chunk (title, meta, tags, all block
- * text, recursively). Chunks are scored against the question by term overlap;
- * the top matches are sent to Claude as numbered sources, and the answer must
- * cite them as [n]. Citations render as chips that jump to the source item.
- * (The backend phase upgrades retrieval to embeddings; this UI stays.) */
+/* "Ask your Vault" — retrieval, then a cited answer in the shape you asked for.
+ *
+ * Retrieval takes the better of two paths. With sync on it uses the backend's
+ * pgvector search, which understands meaning rather than shared words and —
+ * crucially — includes text extracted from uploaded PDFs and Word files.
+ * Those bytes were never in the browser, so local search cannot see inside a
+ * document at all; it can only ever match its filename.
+ *
+ * With sync off it falls back to term-overlap scoring over localStorage, so
+ * the feature still works offline. The UI says which path answered, because
+ * "nothing found" means different things in each.
+ *
+ * Answers must cite [n] against the numbered sources, and the chips jump to
+ * the item — an answer you cannot check is not much of an answer. */
 
 const blockText = (b) => {
   if (!b) return "";
@@ -56,6 +65,9 @@ function retrieve(items, question, maxChunks = 8, budget = 9000) {
 
 export default function AskVault({ items, open, onClose, onGoto, onOpenSettings }) {
   const [q, setQ] = useState("");
+  const [scope, setScope] = useState("all");
+  const [format, setFormat] = useState("prose");
+  const [serverSearch, setServerSearch] = useState(false);
   const [busy, setBusy] = useState(false);
   const [answer, setAnswer] = useState(null);
   const [sources, setSources] = useState([]);
@@ -79,23 +91,53 @@ export default function AskVault({ items, open, onClose, onGoto, onOpenSettings 
     const question = q.trim();
     if (!question || busy) return;
     setBusy(true); setError(null); setAnswer(null);
-    const picked = retrieve(items, question);
+
+    /* Server retrieval when it is available, because only it can see inside
+       uploaded documents. Falling back to local search on failure keeps the
+       feature usable when the backend is asleep or unreachable, which on a
+       free host is a normal Tuesday rather than an incident. */
+    let picked = [];
+    let usedServer = false;
+    if (canUseServerSearch()) {
+      try {
+        const hits = await retrieveFromServer(question, { scope });
+        picked = hits.map((h) => {
+          const local = items.find((i) => String(i.id) === String(h.client_id));
+          return {
+            id: local?.id ?? `srv-${h.item_id}`,
+            title: h.title, type: h.type, chunk: h.chunk,
+            alias: local?.alias, date: local?.date, local: !!local,
+          };
+        });
+        usedServer = true;
+      } catch {
+        usedServer = false;   // fall through to local
+      }
+    }
+    if (!usedServer) {
+      const types = SCOPES.find((sc) => sc.id === scope)?.types || [];
+      const pool = types.length ? items.filter((i) => types.includes(i.type)) : items;
+      picked = retrieve(pool, question).map((it) => ({
+        id: it.id, title: it.title, type: it.type, alias: it.alias, date: it.date,
+        chunk: itemChunk(it), local: true,
+      }));
+    }
+    setServerSearch(usedServer);
     setSources(picked);
-    const sourceBlock = picked
-      .map((it, i) => `[${i + 1}] (${SECTIONS[it.type].label}, added ${fmtStamp(it.date)})\n${itemChunk(it)}`)
-      .join("\n\n---\n\n");
+
+    if (!picked.length) {
+      setBusy(false);
+      setError(new Error(
+        usedServer
+          ? "Nothing in your vault matches that."
+          : "Nothing matches — and offline search only reads titles and notes, not the inside of uploaded files. Turn on Backend sync to search document contents."
+      ));
+      return;
+    }
+
     try {
-      const text = await askText(
-        `Here are the user's saved items:\n\n${sourceBlock}\n\nQuestion: ${question}`,
-        {
-          system:
-            "You answer questions about the user's personal knowledge vault using ONLY the numbered sources provided. " +
-            "Cite sources inline as [1], [2] etc. after each claim. If the sources don't contain the answer, say so plainly and suggest what to save. " +
-            "Keep answers short and direct — a few sentences unless the question demands more.",
-          maxTokens: 16000,
-        }
-      );
-      setAnswer(text);
+      const { system, user } = buildPrompt(question, picked, format);
+      setAnswer(await askText(user, { system, maxTokens: 16000 }));
     } catch (e) {
       setError(e);
     } finally {
@@ -110,6 +152,7 @@ export default function AskVault({ items, open, onClose, onGoto, onOpenSettings 
       if (!m) return <span key={i}>{part}</span>;
       const src = sources[+m[1] - 1];
       if (!src) return <span key={i}>{part}</span>;
+      if (!src.local) return <span key={i} className="cite cite-flat" title={src.title}>{m[1]}</span>;
       return (
         <button key={i} className="cite" title={`Open: ${src.title}`}
           onClick={() => { onGoto(src); onClose(); }}>{m[1]}</button>
@@ -130,6 +173,26 @@ export default function AskVault({ items, open, onClose, onGoto, onOpenSettings 
           </button>
         </div>
 
+        <div className="av-controls">
+          <label className="av-ctl">
+            <span>Search</span>
+            <select value={scope} onChange={(e) => setScope(e.target.value)} aria-label="What to search">
+              {SCOPES.map((sc) => <option key={sc.id} value={sc.id}>{sc.label}</option>)}
+            </select>
+          </label>
+          <label className="av-ctl">
+            <span>Answer as</span>
+            <select value={format} onChange={(e) => setFormat(e.target.value)} aria-label="Answer format">
+              {FORMATS.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
+            </select>
+          </label>
+          <span className="av-mode" title={canUseServerSearch()
+            ? "Searches meaning across your vault, including text inside uploaded documents."
+            : "Offline search matches words in titles and notes only — it cannot read inside uploaded files."}>
+            {canUseServerSearch() ? "◈ deep search" : "○ offline search"}
+          </span>
+        </div>
+
         <div className="av-body">
           {!aiEnabled() && (
             <div className="av-note">
@@ -137,23 +200,30 @@ export default function AskVault({ items, open, onClose, onGoto, onOpenSettings 
               Your key stays in this browser only.
             </div>
           )}
-          {busy && <div className="av-note">Reading {sources.length} relevant item{sources.length === 1 ? "" : "s"} from your vault…</div>}
+          {busy && <div className="av-note">Searching your vault…</div>}
           {error && <div className="av-note av-err">⚠ {error.message}</div>}
           {answer && (
             <>
               <div className="av-answer">{renderAnswer(answer)}</div>
               <div className="av-sources">
                 {sources.map((s, i) => (
-                  <button key={s.id} className="av-src" onClick={() => { onGoto(s); onClose(); }}
-                    title={`Open in ${SECTIONS[s.type].label}`}>
-                    <span className="mono">[{i + 1}]</span> <Ic name={SECTIONS[s.type].ic} size={12} /> {(s.alias || s.title).slice(0, 46)}
+                  <button key={s.id} className="av-src" disabled={!s.local}
+                    onClick={() => { if (s.local) { onGoto(s); onClose(); } }}
+                    title={s.local ? `Open in ${SECTIONS[s.type]?.label || s.type}`
+                                   : "Stored on the server — not in this browser"}>
+                    <span className="mono">[{i + 1}]</span>{" "}
+                    <Ic name={SECTIONS[s.type]?.ic || "doc"} size={12} /> {(s.alias || s.title).slice(0, 46)}
                   </button>
                 ))}
               </div>
             </>
           )}
           {!answer && !busy && !error && aiEnabled() && (
-            <div className="av-note">Answers come only from what you've saved — notes, videos, books, docs — with citations you can click.</div>
+            <div className="av-note">
+              {canUseServerSearch()
+                ? "Answers come only from what you've saved — including the text inside uploaded PDFs and Word files — with citations you can click."
+                : "Answers come only from what you've saved. Offline search reads titles and notes; turn on Backend sync to also search inside uploaded documents."}
+            </div>
           )}
         </div>
         <div className="tips">
