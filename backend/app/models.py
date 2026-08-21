@@ -96,7 +96,14 @@ class Embedding(Base):
     )
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[str] = mapped_column(String(64), index=True)
-    item_id: Mapped[int] = mapped_column(ForeignKey("items.id", ondelete="CASCADE"), index=True)
+    # Items keep the foreign key, so deleting one still cascades its vectors
+    # away. Everything else — to-dos, kanban cards — is identified by
+    # (source_type, source_ref) instead, because their ids are the frontend's
+    # own strings and they live in different tables.
+    item_id: Mapped[int | None] = mapped_column(ForeignKey("items.id", ondelete="CASCADE"), index=True)
+    source_type: Mapped[str] = mapped_column(String(12), default="item", index=True)  # item|task|card
+    source_ref: Mapped[str | None] = mapped_column(String(64), index=True)
+    title: Mapped[str | None] = mapped_column(Text)     # so a hit can be shown without a second query
     chunk: Mapped[str] = mapped_column(Text)
     model: Mapped[str] = mapped_column(String(80))
     vector: Mapped[list] = mapped_column(Vector(settings.embedding_dim))
