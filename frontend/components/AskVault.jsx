@@ -220,6 +220,20 @@ export default function AskVault({ items, open, onClose, onGoto, onOpenSettings 
           {answer && (
             <>
               <div className="av-answer">{renderAnswer(answer)}</div>
+              {/* The Documents section renders what THIS browser holds, while
+                  a server answer draws on everything synced. When they differ
+                  the user sees the app and the AI contradict each other, so
+                  say why rather than leaving a dead grey citation to explain
+                  itself. */}
+              {sources.some((s) => !s.local) && (
+                <div className="av-note av-warn">
+                  {sources.filter((s) => !s.local).length} of these are synced to your account but
+                  not in this browser, so they won&rsquo;t appear in your sections here.{" "}
+                  <button className="av-link" onClick={() => { onClose(); onOpenSettings(); }}>
+                    Restore this browser from the backend
+                  </button>{" "}to bring them down.
+                </div>
+              )}
               <div className="av-sources">
                 {/* Keyed by position, not item id: one item legitimately
                     returns several chunks — that is what document extraction

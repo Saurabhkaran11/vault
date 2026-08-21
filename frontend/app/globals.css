@@ -1092,3 +1092,10 @@ button:disabled{opacity:.5; cursor:not-allowed}
   font-size: 11px;
 }
 .av-src:disabled { opacity: .6; cursor: default; }
+
+/* A cited source the browser does not hold — the app and the AI would
+   otherwise silently disagree about what is in the vault. */
+.av-note.av-warn {
+  background: color-mix(in srgb, var(--gold) 12%, transparent);
+  border-left: 2px solid var(--gold);
+}
