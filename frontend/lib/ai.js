@@ -1,6 +1,7 @@
 "use client";
 
 import Anthropic from "@anthropic-ai/sdk";
+import { api, backendOn } from "./api";
 
 /* AI service layer — the single seam between Vault's UI and Claude.
  *
@@ -232,4 +233,65 @@ export async function askJSON(prompt, schema, opts = {}) {
     try { return JSON.parse(cand); } catch {}
   }
   throw new AIError("parse", "The model's response wasn't valid JSON — try again (larger open models are more reliable at this).");
+}
+
+
+/* ------------------------------------------------------- server-side route
+ *
+ * When the backend has a provider configured it answers, and the browser
+ * needs no key at all. Two reasons this matters beyond convenience:
+ *
+ *   · Some providers cannot be called from a browser however valid the key.
+ *     NVIDIA NIM sends no `access-control-allow-origin`, so the request is
+ *     blocked before it is sent. Server to server has no such restriction,
+ *     which makes every OpenAI-compatible provider reachable — including a
+ *     model you host yourself with no third party involved at all.
+ *   · A browser-held key sits in localStorage on every device the user signs
+ *     in from. A server-held one does not.
+ */
+let _serverAI = null;
+
+export function resetServerAICache() { _serverAI = null; }
+
+export async function serverAIStatus() {
+  if (!backendOn()) return { server_completion: false };
+  if (_serverAI) return _serverAI;
+  try {
+    _serverAI = await api("/ai/status");
+  } catch {
+    _serverAI = { server_completion: false };
+  }
+  return _serverAI;
+}
+
+async function completeViaServer({ system, messages, maxTokens }) {
+  const payload = [];
+  if (system) payload.push({ role: "system", content: system });
+  payload.push(...messages);
+  const res = await api("/ai/complete", {
+    method: "POST",
+    body: { messages: payload, max_tokens: maxTokens },
+  });
+  return res?.text || "";
+}
+
+/**
+ * Ask whichever route is available, preferring the server.
+ * Returns { text, via } so the UI can be honest about what answered.
+ */
+export async function askAnywhere(prompt, { system, maxTokens = 4000 } = {}) {
+  const status = await serverAIStatus();
+  if (status.server_completion) {
+    return {
+      text: await completeViaServer({ system, messages: [{ role: "user", content: prompt }], maxTokens }),
+      via: status.model || "server",
+    };
+  }
+  return { text: await askText(prompt, { system, maxTokens }), via: "browser" };
+}
+
+/** True when an answer can be produced by EITHER route. */
+export async function answersPossible() {
+  if (aiEnabled()) return true;
+  return (await serverAIStatus()).server_completion === true;
 }

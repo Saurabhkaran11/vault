@@ -32,6 +32,21 @@ services:
       MINIO_ROOT_PASSWORD: vaultminio
     ports: ["9000:9000", "9001:9001"]
 
+  # A self-hosted open-weights model, so the whole stack can run with no
+  # third-party AI provider and no API key: prompts and vault contents never
+  # leave this machine. Opt in with the "selfhosted" profile, because the
+  # image and model weights are several GB and most dev work does not need
+  # them:  docker compose --profile selfhosted up -d
+  #
+  # First run needs the weights pulling once, e.g.
+  #   docker compose exec ollama ollama pull gemma2:2b
+  # then point the API at it: CHAT_URL=http://ollama:11434/v1
+  ollama:
+    image: ollama/ollama
+    profiles: ["selfhosted"]
+    ports: ["11434:11434"]
+    volumes: [ollama:/root/.ollama]
+
   # Migrations run once, as their own service, before anything that touches
   # the schema. The API refuses to boot against an unmigrated database, and
   # the worker queries the same tables — so both wait for this to succeed
@@ -73,3 +88,4 @@ services:
 
 volumes:
   pgdata:
+  ollama:

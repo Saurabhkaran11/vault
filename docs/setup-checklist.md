@@ -285,6 +285,36 @@ adding a provider is choosing a preset — not new code.
 | Together AI | <https://api.together.xyz/settings/api-keys> | |
 | OpenRouter | <https://openrouter.ai/keys> | One key reaches most providers |
 
+### Providers a browser cannot reach
+
+Some providers send no CORS headers, so the browser is blocked before the
+request is even sent — no key fixes that. **NVIDIA NIM** (100+ open models) is
+one. For those, configure the provider on the **backend** instead:
+
+```bash
+CHAT_URL=https://integrate.api.nvidia.com/v1     # check the current base URL in their docs
+CHAT_API_KEY=nvapi-...
+CHAT_MODEL=meta/llama-3.3-70b-instruct
+```
+
+The app asks `/ai/status` and routes through the server automatically, so no
+key is needed in the browser at all — which is also the better place for it.
+
+### Running the model yourself (no provider, no key)
+
+`docker compose --profile selfhosted up -d` starts Ollama alongside the rest
+of the stack. Pull a model once and point the API at it:
+
+```bash
+docker compose exec ollama ollama pull gemma2:2b
+CHAT_URL=http://ollama:11434/v1
+CHAT_MODEL=gemma2:2b
+```
+
+Prompts and vault contents then never leave your infrastructure, and there is
+nothing to pay. `gemma2:2b` is ~1.6 GB and runs on modest hardware; larger
+models are better but want more RAM.
+
 Settings → **AI assistant** → *Another provider* → pick one. The model name
 fills in automatically and can be changed; anything unlisted works through
 **Custom server** as long as it speaks `/chat/completions`.

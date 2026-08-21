@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { SECTIONS, fmtStamp } from "@/lib/seed";
-import { askText, aiEnabled } from "@/lib/ai";
+import { askAnywhere, aiEnabled, serverAIStatus } from "@/lib/ai";
 import { SCOPES, FORMATS, buildPrompt, canUseServerSearch, retrieveFromServer } from "@/lib/ask";
 import { Ic } from "./Icons";
 
@@ -68,6 +68,8 @@ export default function AskVault({ items, open, onClose, onGoto, onOpenSettings 
   const [scope, setScope] = useState("all");
   const [format, setFormat] = useState("prose");
   const [serverSearch, setServerSearch] = useState(false);
+  const [answeredBy, setAnsweredBy] = useState(null);
+  const [serverAI, setServerAI] = useState(false);
   const [busy, setBusy] = useState(false);
   const [answer, setAnswer] = useState(null);
   const [sources, setSources] = useState([]);
@@ -76,6 +78,17 @@ export default function AskVault({ items, open, onClose, onGoto, onOpenSettings 
 
   useEffect(() => {
     if (open) setTimeout(() => inputRef.current?.focus(), 30);
+  }, [open]);
+
+  /* Probe once per open: when the server can answer, the browser needs no key
+     of its own, and asking for one would be actively misleading. */
+  useEffect(() => {
+    if (!open) return;
+    let live = true;
+    serverAIStatus()
+      .then((st) => { if (live) setServerAI(!!st.server_completion); })
+      .catch(() => {});
+    return () => { live = false; };
   }, [open]);
 
   useEffect(() => {
@@ -137,7 +150,9 @@ export default function AskVault({ items, open, onClose, onGoto, onOpenSettings 
 
     try {
       const { system, user } = buildPrompt(question, picked, format);
-      setAnswer(await askText(user, { system, maxTokens: 16000 }));
+      const { text, via } = await askAnywhere(user, { system, maxTokens: 16000 });
+      setAnswer(text);
+      setAnsweredBy(via);
     } catch (e) {
       setError(e);
     } finally {
@@ -194,7 +209,7 @@ export default function AskVault({ items, open, onClose, onGoto, onOpenSettings 
         </div>
 
         <div className="av-body">
-          {!aiEnabled() && (
+          {!aiEnabled() && !serverAI && (
             <div className="av-note">
               🔑 AI is off — <button className="av-link" onClick={() => { onClose(); onOpenSettings(); }}>add your Anthropic API key in Settings</button> to ask questions.
               Your key stays in this browser only.
@@ -206,8 +221,11 @@ export default function AskVault({ items, open, onClose, onGoto, onOpenSettings 
             <>
               <div className="av-answer">{renderAnswer(answer)}</div>
               <div className="av-sources">
+                {/* Keyed by position, not item id: one item legitimately
+                    returns several chunks — that is what document extraction
+                    produces — and sharing an id made React drop rows. */}
                 {sources.map((s, i) => (
-                  <button key={s.id} className="av-src" disabled={!s.local}
+                  <button key={`${s.id}-${i}`} className="av-src" disabled={!s.local}
                     onClick={() => { if (s.local) { onGoto(s); onClose(); } }}
                     title={s.local ? `Open in ${SECTIONS[s.type]?.label || s.type}`
                                    : "Stored on the server — not in this browser"}>
@@ -218,7 +236,7 @@ export default function AskVault({ items, open, onClose, onGoto, onOpenSettings 
               </div>
             </>
           )}
-          {!answer && !busy && !error && aiEnabled() && (
+          {!answer && !busy && !error && (aiEnabled() || serverAI) && (
             <div className="av-note">
               {canUseServerSearch()
                 ? "Answers come only from what you've saved — including the text inside uploaded PDFs and Word files — with citations you can click."

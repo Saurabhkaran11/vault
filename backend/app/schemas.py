@@ -192,3 +192,21 @@ class AskOut(BaseModel):
     sources: list[AskSource]
     prompt: str        # v0: the assembled RAG prompt (frontend keeps calling its model);
                        # phase 3 adds server-side completion via the key vault.
+
+
+class ChatMessage(BaseModel):
+    role: str = Field(pattern="^(system|user|assistant)$")
+    content: str = Field(min_length=1, max_length=200_000)
+
+
+class CompleteIn(BaseModel):
+    # Bounded so one request cannot hand a provider an unbounded bill or
+    # stall a worker: the prompt is assembled from retrieved sources, which
+    # are already capped, so a long conversation here is a bug or an abuse.
+    messages: list[ChatMessage] = Field(min_length=1, max_length=20)
+    max_tokens: int | None = Field(None, ge=1, le=32_000)
+
+
+class CompleteOut(BaseModel):
+    text: str
+    model: str

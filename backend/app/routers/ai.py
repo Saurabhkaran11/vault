@@ -12,7 +12,7 @@ import hashlib
 import math
 
 import httpx
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -22,7 +22,7 @@ from ..deps import current_user_id
 from ..events import enqueue
 from ..extract import chunk_text
 from ..models import Embedding, Item
-from ..schemas import AskIn, AskOut, AskSource
+from ..schemas import AskIn, AskOut, AskSource, CompleteIn, CompleteOut
 
 router = APIRouter(prefix="/ai", tags=["ai"])
 
@@ -184,3 +184,67 @@ async def ask(body: AskIn, session: AsyncSession = Depends(get_session), user: s
         f"SOURCES:\n{numbered}\n\nQUESTION: {body.question}"
     )
     return AskOut(sources=sources, prompt=prompt)
+
+
+@router.get("/status")
+async def ai_status():
+    """Whether the server can generate answers itself.
+
+    The frontend asks before offering server-side completion, so it can fall
+    back to the browser's own key rather than failing at the moment someone
+    presses Ask."""
+    return {
+        "server_completion": bool(settings.chat_url and settings.chat_model),
+        "model": settings.chat_model if settings.chat_url else None,
+    }
+
+
+@router.post("/complete", response_model=CompleteOut)
+async def complete(body: CompleteIn, user: str = Depends(current_user_id)):
+    """Generate an answer using the server's provider and the server's key.
+
+    This exists because the browser cannot reach every provider. NVIDIA NIM,
+    for one, returns no `access-control-allow-origin`, so a browser request is
+    blocked before it is ever sent — no key makes that work. Server to server
+    has no such restriction, which means ANY OpenAI-compatible provider
+    becomes usable, including the hundred-odd open models NIM hosts.
+
+    The second reason is arguably better: the key stays here. Browser-held
+    keys sit in localStorage on every device a user signs in from.
+    """
+    if not (settings.chat_url and settings.chat_model):
+        raise HTTPException(503, "Server-side AI is not configured — set CHAT_URL and CHAT_MODEL.")
+
+    headers = {"Content-Type": "application/json"}
+    if settings.chat_api_key:
+        headers["Authorization"] = f"Bearer {settings.chat_api_key}"
+
+    payload = {
+        "model": settings.chat_model,
+        "max_tokens": min(body.max_tokens or settings.chat_max_tokens, settings.chat_max_tokens),
+        "messages": [m.model_dump() for m in body.messages],
+    }
+    try:
+        async with httpx.AsyncClient(timeout=120) as client:
+            r = await client.post(f"{settings.chat_url.rstrip('/')}/chat/completions",
+                                  json=payload, headers=headers)
+    except httpx.RequestError as exc:
+        raise HTTPException(502, f"Could not reach the model provider: {type(exc).__name__}") from exc
+
+    if r.status_code >= 400:
+        # Surface the provider's status so a bad key reads as a bad key, but
+        # not its body — that can echo the prompt, and the prompt is the
+        # user's vault.
+        raise HTTPException(502, f"Model provider returned {r.status_code}.")
+
+    data = r.json()
+    try:
+        text = data["choices"][0]["message"]["content"] or ""
+    except (KeyError, IndexError, TypeError) as exc:
+        raise HTTPException(502, "Model provider returned an unexpected response shape.") from exc
+
+    # Reasoning models wrap their scratchpad in <think>…</think>; it is not
+    # part of the answer and reads as the model talking to itself.
+    import re
+    text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
+    return CompleteOut(text=text, model=settings.chat_model)
