@@ -3,7 +3,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { SECTIONS, fmtStamp } from "@/lib/seed";
 import { askAnywhere, aiEnabled, serverAIStatus } from "@/lib/ai";
-import { SCOPES, FORMATS, buildPrompt, canUseServerSearch, retrieveFromServer, isListingQuestion, catalogue } from "@/lib/ask";
+import { SCOPES, FORMATS, buildPrompt, canUseServerSearch, retrieveFromServer, isListingQuestion, catalogue, isFinanceQuestion, financeAnalysis, financeFacts } from "@/lib/ask";
 import { Ic } from "./Icons";
 
 /* "Ask your Vault" — retrieval, then a cited answer in the shape you asked for.
@@ -71,6 +71,7 @@ export default function AskVault({ items, open, onClose, onGoto, onOpenSettings 
   const [answeredBy, setAnsweredBy] = useState(null);
   const [serverAI, setServerAI] = useState(false);
   const [listing, setListing] = useState(null);   // exact list, no model involved
+  const [finance, setFinance] = useState(null);   // computed figures, not retrieved prose
   const [busy, setBusy] = useState(false);
   const [answer, setAnswer] = useState(null);
   const [sources, setSources] = useState([]);
@@ -104,7 +105,38 @@ export default function AskVault({ items, open, onClose, onGoto, onOpenSettings 
   const ask = async () => {
     const question = q.trim();
     if (!question || busy) return;
-    setBusy(true); setError(null); setAnswer(null); setListing(null);
+    setBusy(true); setError(null); setAnswer(null); setListing(null); setFinance(null);
+
+    /* Money questions are arithmetic over every expense against every budget,
+       and finance rows are not in the retrieval index at all. Compute the
+       figures here — exact and complete — then let the model advise on top of
+       numbers that are already right. */
+    if (isFinanceQuestion(question)) {
+      const analysis = financeAnalysis();
+      setFinance(analysis);
+      setSources([]);
+      try {
+        const { text, via } = await askAnywhere(
+          `MY FINANCES (already calculated — treat these numbers as authoritative and do not recompute them):\n\n${financeFacts(analysis)}\n\nQUESTION: ${question}`,
+          {
+            system:
+              "You advise on the user's own finances using ONLY the figures given, which are already correct. " +
+              "Never restate the full table — it is shown to them separately. " +
+              "Say what to deal with first and why, in at most four sentences. " +
+              "If nothing is over budget, say so plainly rather than inventing concerns.",
+            maxTokens: 1200,
+          }
+        );
+        setAnswer(text);
+        setAnsweredBy(via);
+      } catch (e) {
+        /* The table is the substance; advice is a bonus. Losing the model
+           must not lose the numbers. */
+        setError(e);
+      }
+      setBusy(false);
+      return;
+    }
 
     /* "List all my documents" is enumeration, not similarity. Answer it from
        the data directly: complete and exact, where retrieval would hand the
@@ -228,6 +260,43 @@ export default function AskVault({ items, open, onClose, onGoto, onOpenSettings 
           )}
           {busy && <div className="av-note">Searching your vault…</div>}
           {error && <div className="av-note av-err">⚠ {error.message}</div>}
+          {finance && (
+            <div className="av-listing">
+              <div className="av-note">
+                {finance.month} — calculated from your Finance data, so the figures are exact.
+                {finance.overspent.length
+                  ? ` ${finance.overspent.length} categor${finance.overspent.length === 1 ? "y is" : "ies are"} over budget.`
+                  : " Nothing is over budget."}
+              </div>
+              <table className="av-table">
+                <thead><tr><th>Category</th><th>Spent</th><th>Budget</th><th>Over / Under</th><th>Status</th></tr></thead>
+                <tbody>
+                  {finance.rows.map((r) => (
+                    <tr key={r.category}>
+                      <td>{r.category}</td>
+                      <td>{r.spent.toFixed(2)}</td>
+                      <td>{r.budget === null ? <span className="av-dim">—</span> : r.budget.toFixed(2)}</td>
+                      <td className={r.difference > 0 ? "av-over" : undefined}>
+                        {r.difference === null ? <span className="av-dim">—</span>
+                          : `${r.difference > 0 ? "+" : "−"}${Math.abs(r.difference).toFixed(2)}`}
+                      </td>
+                      <td>{r.status === "over" ? "⚠ over" : r.status === "within" ? "✓ within" : <span className="av-dim">no budget</span>}</td>
+                    </tr>
+                  ))}
+                  <tr className="av-total">
+                    <td><b>Total</b></td>
+                    <td><b>{finance.totals.spent.toFixed(2)}</b></td>
+                    <td>{finance.totals.budget === null ? <span className="av-dim">—</span> : <b>{finance.totals.budget.toFixed(2)}</b>}</td>
+                    <td className={finance.totals.difference > 0 ? "av-over" : undefined}>
+                      {finance.totals.difference === null ? <span className="av-dim">—</span>
+                        : <b>{`${finance.totals.difference > 0 ? "+" : "−"}${Math.abs(finance.totals.difference).toFixed(2)}`}</b>}
+                    </td>
+                    <td>{finance.totals.unpaidBills} unpaid bill{finance.totals.unpaidBills === 1 ? "" : "s"}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          )}
           {listing && (
             <div className="av-listing">
               <div className="av-note">

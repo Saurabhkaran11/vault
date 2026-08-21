@@ -1110,3 +1110,6 @@ button:disabled{opacity:.5; cursor:not-allowed}
 .av-table td { padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
 .av-table tr:last-child td { border-bottom: none; }
 .av-dim { color: var(--muted); }
+
+.av-table tr.av-total td { border-top: 2px solid var(--line); border-bottom: none; }
+.av-over { color: var(--stamp); font-weight: 600; }

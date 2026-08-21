@@ -152,3 +152,110 @@ export function catalogue(items, scope = "all") {
       local: true,
     }));
 }
+
+/* --------------------------------------------------------------- finance
+ *
+ * Money questions were unanswerable for a reason that no prompt or model
+ * could fix: finance rows are not in the RAG index at all. It holds notes,
+ * videos, books and documents — so "where did I overspend?" retrieved
+ * whatever prose was least unrelated and answered from that.
+ *
+ * They are also the wrong shape for retrieval even in principle. "Where did I
+ * overspend" is arithmetic over every expense against every budget: a
+ * complete, exact calculation, not a similarity match. Asking a language
+ * model to total 200 rows invites quiet arithmetic errors in the one place
+ * users can least afford them.
+ *
+ * So the numbers are computed here and handed to the model as facts. It does
+ * what it is actually good at — ordering, explaining, advising — on top of
+ * arithmetic that is already correct.
+ */
+
+const FINANCE_RE = /\b(spend|spent|spending|overspend|overspent|budget|budgets|expense|expenses|money|cost|costs|afford|finance|financial|bill|bills|income|savings?|save|cash)\b/i;
+
+export const isFinanceQuestion = (q) => FINANCE_RE.test(q || "");
+
+const money = (cents) => (cents / 100);
+
+/**
+ * Per-category spend against budget for a month, plus the totals that decide
+ * what to deal with first. Reads the same local store the Finance section
+ * renders, so the two can never disagree.
+ */
+export function financeAnalysis(month) {
+  let fin = {};
+  try { fin = JSON.parse(localStorage.getItem("vault.finance.v1") || "{}"); } catch { fin = {}; }
+
+  const ym = month || new Date().toISOString().slice(0, 7);
+  const inMonth = (d) => String(d || "").startsWith(ym);
+
+  const expenses = (fin.expenses || []).filter((e) => inMonth(e.date));
+  const incomes = (fin.incomes || []).filter((i) => inMonth(i.date));
+  const budgets = fin.budgets || { overall: null, byCat: {} };
+
+  const spentByCat = {};
+  for (const e of expenses) {
+    const c = e.cat || "Other";
+    spentByCat[c] = (spentByCat[c] || 0) + Math.round((+e.amount || 0) * 100);
+  }
+
+  const rows = Object.entries(spentByCat).map(([cat, spentCents]) => {
+    const capCents = budgets.byCat?.[cat] ? Math.round(budgets.byCat[cat] * 100) : null;
+    const diff = capCents === null ? null : spentCents - capCents;
+    return {
+      category: cat,
+      spent: money(spentCents),
+      budget: capCents === null ? null : money(capCents),
+      difference: diff === null ? null : money(diff),
+      pctUsed: capCents ? Math.round((spentCents / capCents) * 100) : null,
+      status: capCents === null ? "no budget set" : diff > 0 ? "over" : "within",
+    };
+  });
+
+  /* Worst overspend first — that is the thing to deal with. Categories with
+     no budget sort last: not a problem, just unmeasured. */
+  rows.sort((a, b) => {
+    const av = a.difference ?? -Infinity, bv = b.difference ?? -Infinity;
+    return bv - av;
+  });
+
+  const totalSpent = Object.values(spentByCat).reduce((a, b) => a + b, 0);
+  const totalIncome = incomes.reduce((a, i) => a + Math.round((+i.amount || 0) * 100), 0);
+  const overallCap = budgets.overall ? Math.round(budgets.overall * 100) : null;
+  const unpaidBills = (fin.bills || []).filter((b) => !b.paid);
+
+  return {
+    month: ym,
+    rows,
+    totals: {
+      spent: money(totalSpent),
+      income: money(totalIncome),
+      budget: overallCap === null ? null : money(overallCap),
+      difference: overallCap === null ? null : money(totalSpent - overallCap),
+      unpaidBills: unpaidBills.length,
+      unpaidTotal: money(unpaidBills.reduce((a, b) => a + Math.round((+b.amount || 0) * 100), 0)),
+    },
+    overspent: rows.filter((r) => r.status === "over"),
+    unbudgeted: rows.filter((r) => r.status === "no budget set"),
+  };
+}
+
+/** Computed facts for the model — so advice sits on correct arithmetic. */
+export function financeFacts(a) {
+  const line = (r) =>
+    `${r.category}: spent ${r.spent.toFixed(2)}` +
+    (r.budget === null ? ", no budget set" :
+      `, budget ${r.budget.toFixed(2)}, ${r.difference > 0 ? "OVER by " : "under by "}${Math.abs(r.difference).toFixed(2)} (${r.pctUsed}% used)`);
+
+  return [
+    `Month: ${a.month}`,
+    `Total spent: ${a.totals.spent.toFixed(2)}`,
+    `Total income: ${a.totals.income.toFixed(2)}`,
+    a.totals.budget === null ? "No overall budget set."
+      : `Overall budget ${a.totals.budget.toFixed(2)} — ${a.totals.difference > 0 ? "OVER" : "under"} by ${Math.abs(a.totals.difference).toFixed(2)}`,
+    `Unpaid bills: ${a.totals.unpaidBills} totalling ${a.totals.unpaidTotal.toFixed(2)}`,
+    "",
+    "Per category:",
+    ...a.rows.map(line),
+  ].join("\n");
+}
