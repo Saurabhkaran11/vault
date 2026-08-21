@@ -1113,3 +1113,7 @@ button:disabled{opacity:.5; cursor:not-allowed}
 
 .av-table tr.av-total td { border-top: 2px solid var(--line); border-bottom: none; }
 .av-over { color: var(--stamp); font-weight: 600; }
+
+/* Restore confirmation — replacing a whole vault deserves a look first. */
+.restoredlg { padding: 20px 22px 18px; max-width: 520px; }
+.restore-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }

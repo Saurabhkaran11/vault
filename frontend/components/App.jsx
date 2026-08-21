@@ -24,6 +24,7 @@ import CustomBoards from "./CustomBoards";
 import FinanceBoard from "./FinanceBoard";
 import AskVault from "./AskVault";
 import { emptyBlock } from "./NoteBlocks";
+import { downloadBackup, inspectBackup, applyBackup } from "@/lib/backup";
 import { AI_MODELS, OSS_PRESETS, OSS_MODEL_SUGGESTIONS, presetById, getAIConfig, setAIConfig, aiEnabled, askText, askJSON } from "@/lib/ai";
 import { getBackend, setBackend, backendHealthy, fullSync, flushQueue, pendingMirrors, pullAll, applyPulled, hydrateIfEmpty, hasVerifiedIdentity } from "@/lib/api";
 import { storeFile } from "@/lib/files";
@@ -578,7 +579,23 @@ export default function App() {
   /* ---- first-run onboarding (returning browsers are grandfathered) ---- */
   const [ob, setObState] = useState(undefined);   // undefined = not decided yet
   useEffect(() => { setObState(initOnboarding()); }, []);
-  const doExport = () => { exportJson(); setObState(setOB({ exported: true })); };
+  /* Whole vault, not just items — see lib/backup.js for why that distinction
+     cost four of five stores. */
+  const [restore, setRestore] = useState(null);   // inspected file awaiting confirmation
+  /* Short status line for backup/restore. Replaces alert(), which is blocked
+     outright in embedded browsers — the export "not working" was partly this:
+     it had run, and said nothing. */
+  const [toast, setToast] = useState(null);
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 6000);
+    return () => clearTimeout(t);
+  }, [toast]);
+  const doExport = () => {
+    const c = downloadBackup();
+    setObState(setOB({ exported: true }));
+    setToast(`Backup saved — ${c.items} items, ${c.todos} to-dos, ${c.finance} finance records, ${c.boards} boards.`);
+  };
 
   /* ---- universal quick capture + notification bell ---- */
   const [capOpen, setCapOpen] = useState(false);
@@ -1332,6 +1349,47 @@ export default function App() {
             </div>
           )}
         </div>
+        {toast && <div className="toast" role="status">{toast}</div>}
+
+        {restore && (
+          <div className="pal-overlay" onClick={() => setRestore(null)} role="dialog" aria-label="Restore backup">
+            <div className="pal restoredlg" onClick={(e) => e.stopPropagation()}>
+              <h3 style={{ margin: "0 0 4px" }}>Restore this backup?</h3>
+              <p className="sub" style={{ margin: "0 0 14px" }}>
+                {restore.exportedAt
+                  ? `Saved ${fmtStamp(restore.exportedAt.slice(0, 10))}.`
+                  : "An older export, which held items only."}
+                {" "}This replaces everything currently in this browser.
+              </p>
+              <table className="av-table">
+                <thead><tr><th>Contents</th><th style={{ textAlign: "right" }}>In the file</th></tr></thead>
+                <tbody>
+                  <tr><td>Items — notes, videos, library, documents</td><td style={{ textAlign: "right" }}>{restore.counts.items}</td></tr>
+                  <tr><td>To-dos</td><td style={{ textAlign: "right" }}>{restore.counts.todos}</td></tr>
+                  <tr><td>Finance records</td><td style={{ textAlign: "right" }}>{restore.counts.finance}</td></tr>
+                  <tr><td>Boards</td><td style={{ textAlign: "right" }}>{restore.counts.boards} ({restore.counts.cards} cards)</td></tr>
+                </tbody>
+              </table>
+              {restore.legacy && (
+                <div className="av-note av-warn" style={{ marginTop: 10 }}>
+                  This is an older backup, from before to-dos, finance and boards were
+                  included. Restoring it brings your items back and leaves everything
+                  else in this browser untouched.
+                </div>
+              )}
+              <div className="restore-actions">
+                <button className="btn ghost sm" onClick={() => setRestore(null)}>Cancel</button>
+                <button className="btn sm" onClick={() => {
+                  const c = applyBackup(restore);
+                  setRestore(null);
+                  setToast(`Restored ${c.items} items, ${c.todos} to-dos, ${c.finance} finance records, ${c.boards} boards — reloading…`);
+                  setTimeout(() => window.location.reload(), 1400);
+                }}>Replace my vault</button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {undoItem && (
           <div className="toast" role="status">
             Moved “{(undoItem.alias || undoItem.title).slice(0, 40)}” to Recently deleted
