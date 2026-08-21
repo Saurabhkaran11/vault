@@ -220,6 +220,21 @@ which breaks asyncpg's prepared statements.
 
 ## 4. Hosting
 
+### Vercel preview deployments
+
+Every branch push gets its own origin — `vault-git-branch-you.vercel.app` —
+so an exact `CORS_ORIGINS` list can never contain the preview you are
+actually looking at, and every API call from it fails. Use a pattern:
+
+```bash
+CORS_ORIGINS=https://vault.vercel.app,https://*.vercel.app
+```
+
+The wildcard matches a single label only, and every other character is
+escaped, so `https://*.vercel.app` accepts `vault-git-main-you.vercel.app`
+and rejects `evil-vercelXapp.com`. A naive glob-to-regex would accept both,
+because an unescaped dot matches any character.
+
 ### Railway first *(recommended)*
 
 Shake out configuration somewhere cheap before committing to AWS.

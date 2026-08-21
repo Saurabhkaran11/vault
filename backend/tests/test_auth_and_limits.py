@@ -229,3 +229,35 @@ async def test_a_500_is_traceable_by_the_id_the_caller_receives():
     error_lines = [json.loads(line) for line in logged if '"ERROR"' in line]
     assert error_lines, "the traceback must be logged"
     assert error_lines[0]["request_id"] == rid, "the log line must carry the id the user was given"
+
+
+def test_wildcard_cors_matches_previews_but_not_lookalikes():
+    """Vercel mints a new origin per branch push, so an exact list can never
+    contain the preview you are looking at. The wildcard must cover those
+    WITHOUT becoming a hole: a naive glob-to-regex turns the dots into
+    'any character' and would then accept evil-vercelXapp.com.
+    """
+    import re
+
+    s = _settings(cors_origins="https://vault.vercel.app,https://*.vercel.app")
+    assert s.cors_origin_list == ["https://vault.vercel.app"], "patterns must not be exact origins"
+
+    pattern = re.compile(s.cors_origin_regex)
+
+    # Real preview URLs
+    for ok in ("https://vault-git-main-saurabh.vercel.app",
+               "https://vault-abc123.vercel.app"):
+        assert pattern.fullmatch(ok), f"{ok} should be allowed"
+
+    # Lookalikes that a sloppy pattern would let through
+    for bad in ("https://evil-vercelXapp.com",
+                "https://vercel.app.attacker.com",
+                "http://vault.vercel.app",           # wrong scheme
+                "https://a.b.vercel.app"):           # wildcard spans one label only
+        assert not pattern.fullmatch(bad), f"{bad} must NOT be allowed"
+
+
+def test_no_wildcard_means_no_regex():
+    """A plain list must not accidentally produce a permissive pattern."""
+    s = _settings(cors_origins="https://vault.vercel.app,http://localhost:3100")
+    assert s.cors_origin_regex is None
