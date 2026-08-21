@@ -71,6 +71,14 @@ def main(raw: str) -> int:
         return 1
 
     # 4 — auth + database + extension
+    try:
+        import sqlalchemy  # noqa: F401
+    except ModuleNotFoundError:
+        print("  ! AUTH     skipped — this Python has no sqlalchemy installed.")
+        print(f"             Everything up to TLS is fine. Re-run with the venv:")
+        print(f"               .venv/bin/python scripts/db-check.py '<url>'")
+        return 0
+
     async def probe():
         from sqlalchemy.ext.asyncio import create_async_engine
         from sqlalchemy import text

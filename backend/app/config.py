@@ -71,6 +71,12 @@ class Settings(BaseSettings):
 
     class Config:
         env_file = ".env"
+        # Ignore environment variables that are not settings, rather than
+        # refusing to start. Every real host sets its own: Render adds PORT and
+        # RENDER_SERVICE_ID, AWS adds task metadata, a shell adds VIRTUAL_ENV.
+        # Forbidding extras turns any of those into a crash at boot, with an
+        # error naming a variable that has nothing to do with the app.
+        extra = "ignore"
 
 
 settings = Settings()
