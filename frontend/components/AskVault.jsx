@@ -142,10 +142,16 @@ export default function AskVault({ items, open, onClose, onGoto, onOpenSettings 
        the data directly: complete and exact, where retrieval would hand the
        model its top 8 and let it present those as the whole set. */
     if (isListingQuestion(question)) {
-      setListing({ rows: catalogue(items, scope), scope });
-      setSources([]);
-      setBusy(false);
-      return;
+      const rows = catalogue(items, scope);
+      if (rows) {
+        setListing({ rows, scope });
+        setSources([]);
+        setBusy(false);
+        return;
+      }
+      /* No catalogue for to-dos or boards — they live in their own sections,
+         so fall through to search rather than showing an empty table that
+         would read as "you have none". */
     }
 
     /* Server retrieval when it is available, because only it can see inside

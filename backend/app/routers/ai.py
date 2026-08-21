@@ -245,7 +245,15 @@ async def ask(body: AskIn, session: AsyncSession = Depends(get_session), user: s
     if body.item_ids:
         stmt = stmt.where(Item.id.in_(body.item_ids))
     if body.types:
-        stmt = stmt.where(Item.type.in_(body.types))
+        # `types` spans two different columns: item kinds live on the item row,
+        # while to-dos and cards have no item row and are identified by
+        # source_type. Filtering only on Item.type silently returned nothing
+        # for "task" and "card", because Item.type is NULL for them and
+        # NULL IN (...) is never true.
+        stmt = stmt.where(or_(
+            Item.type.in_(body.types),
+            Embedding.source_type.in_(body.types),
+        ))
     rows = (await session.execute(stmt.order_by(dist).limit(body.k))).all()
     sources = [AskSource(item_id=item.id if item else 0,
                          client_id=item.client_id if item else emb.source_ref,

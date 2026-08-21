@@ -244,3 +244,39 @@ async def test_a_card_carries_its_board_and_column(client, pfx):
         )).scalars().first()
 
     assert "Roadmap" in chunk and "Done" in chunk
+
+
+async def test_scoping_reaches_todos_and_cards(client, pfx):
+    """`types` spans two columns: item kinds live on the item row, while
+    to-dos and cards have none. Filtering only on Item.type returned nothing
+    for them, because NULL IN (...) is never true — so the scope silently
+    produced an empty result rather than the to-dos it named.
+    """
+    from app.db import SessionLocal
+    from app.routers.ai import index_cards, index_tasks
+
+    uid = client.headers["X-User-Id"]
+    await client.post("/todos", json={
+        "id": f"{pfx}-scope-t", "text": "Book the dentist appointment", "created_on": "2026-08-20"})
+    await client.put(f"/boards/{pfx}-sb/snapshot", json={
+        "id": f"{pfx}-sb", "name": "Ops", "seq": 1, "current": f"{pfx}-s",
+        "sprints": [{"id": f"{pfx}-s", "name": "S", "ended": None}],
+        "cols": [{"id": f"{pfx}-col", "title": "Doing",
+                  "cards": [{"id": f"{pfx}-cd", "num": 1, "text": "Rotate the signing keys"}]}]})
+    async with SessionLocal() as s:
+        await index_tasks(s, uid)
+        await index_cards(s, uid)
+        await s.commit()
+
+    only_tasks = (await client.post("/ai/ask", json={
+        "question": "dentist appointment", "types": ["task"]})).json()["sources"]
+    assert only_tasks and all(s["type"] == "task" for s in only_tasks)
+
+    only_cards = (await client.post("/ai/ask", json={
+        "question": "rotate signing keys", "types": ["card"]})).json()["sources"]
+    assert only_cards and all(s["type"] == "card" for s in only_cards)
+
+    # And an item scope must still exclude both.
+    only_docs = (await client.post("/ai/ask", json={
+        "question": "dentist appointment", "types": ["doc"]})).json()["sources"]
+    assert all(s["type"] == "doc" for s in only_docs)

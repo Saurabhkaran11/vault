@@ -27,6 +27,10 @@ export const SCOPES = [
   { id: "note", label: "Notes", types: ["note"], hint: "only your written notes" },
   { id: "book", label: "Library", types: ["book"], hint: "only saved reading" },
   { id: "video", label: "YouTube", types: ["video"], hint: "only saved videos" },
+  /* These two are not item kinds — they filter on the embedding's source_type,
+     because to-dos and cards live in their own tables. */
+  { id: "task", label: "To-dos", types: ["task"], hint: "only your to-do list" },
+  { id: "card", label: "Boards", types: ["card"], hint: "only kanban cards" },
 ];
 
 /* --------------------------------------------------------------- formats */
@@ -140,6 +144,10 @@ export function isListingQuestion(q) {
 /** The complete, scoped list — no model, no ranking, no truncation. */
 export function catalogue(items, scope = "all") {
   const types = SCOPES.find((s) => s.id === scope)?.types || [];
+  /* Listing is served from the items store, which has no to-dos or cards —
+     those sections own their own data. Returning an empty table would read as
+     "you have none", so the caller is told to look elsewhere instead. */
+  if (types.some((t) => t === "task" || t === "card")) return null;
   return items
     .filter((i) => !i.deleted && (!types.length || types.includes(i.type)))
     .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")))
