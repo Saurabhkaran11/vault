@@ -837,8 +837,13 @@ export default function App() {
     setPageId(id); // open the fresh note as a full page, ready to fill in
   };
 
+  /* A "document" is one of three things: an uploaded file, a cloud link
+   * (Google Doc, Drive…), or a written/generated text doc with neither.
+   * Categorise all three so every doc is reachable by a filter and the
+   * storage meter isn't blind to two-thirds of them. */
   const docCategory = (it) => {
-    if (!it.file) return "Other";
+    if (it.cloud || (it.url && !it.file)) return "Links";
+    if (!it.file) return "Text";
     const ext = (it.file.name.split(".").pop() || "").toLowerCase();
     if (ext === "pdf") return "PDF";
     if (/^docx?$|^txt$|^md$/.test(ext)) return "Word";
@@ -846,6 +851,13 @@ export default function App() {
     if (/^png$|^jpe?g$|^webp$|^gif$/.test(ext)) return "Image";
     return "Other";
   };
+  const DOC_CATS = ["PDF", "Word", "Sheet", "Image", "Links", "Text", "Other"];
+  // If the active doc filter drains to empty (last of its kind deleted), its
+  // tab disappears — fall back to All so the view isn't stuck showing nothing.
+  useEffect(() => {
+    if (docFilter !== "All" && !items.some((i) => i.type === "doc" && docCategory(i) === docFilter))
+      setDocFilter("All");
+  }, [items, docFilter]);
   const openTag = (t) => { setTag(t); setView("tag"); setAdding(false); setQ(""); setDateFilter(""); setPageId(null); };
   const openSection = (k) => { setView(k); setTag(null); setAdding(false); setQ(""); setDateFilter(""); setPageId(null); };
   /* jump to a specific item in its own section, scroll to it and flash it */
@@ -1716,15 +1728,27 @@ export default function App() {
             )}
 
             {view === "doc" && (() => {
-              const files = items.filter((i) => i.type === "doc" && i.file);
-              const bytes = files.reduce((a, b) => a + b.file.size, 0);
+              const docs = items.filter((i) => i.type === "doc");
+              const files = docs.filter((i) => i.file);
+              const bytes = files.reduce((a, b) => a + (b.file?.size || 0), 0);
+              const size = bytes > 1048576 ? `${(bytes / 1048576).toFixed(1)} MB` : `${Math.round(bytes / 1024)} KB`;
+              const counts = {};
+              docs.forEach((d) => { const c = docCategory(d); counts[c] = (counts[c] || 0) + 1; });
+              // Only offer a filter tab for a category that actually has docs,
+              // so no tab ever leads to an empty view.
+              const tabs = ["All", ...DOC_CATS.filter((c) => counts[c])];
               return (
                 <div className="doclib-head">
-                  <span className="doclib-meta mono">{files.length} file{files.length === 1 ? "" : "s"} · {bytes > 1048576 ? `${(bytes / 1048576).toFixed(1)} MB` : `${Math.round(bytes / 1024)} KB`} used</span>
-                  <div className="doctabs" role="tablist" aria-label="Filter by file type">
-                    {["All", "PDF", "Word", "Sheet", "Image"].map((f) => (
+                  <span className="doclib-meta mono">
+                    {docs.length} document{docs.length === 1 ? "" : "s"}
+                    {bytes > 0 && ` · ${size} in ${files.length} file${files.length === 1 ? "" : "s"}`}
+                  </span>
+                  <div className="doctabs" role="tablist" aria-label="Filter documents">
+                    {tabs.map((f) => (
                       <button key={f} className={docFilter === f ? "on" : ""} role="tab"
-                        aria-selected={docFilter === f} onClick={() => setDocFilter(f)}>{f}</button>
+                        aria-selected={docFilter === f} onClick={() => setDocFilter(f)}>
+                        {f}{f !== "All" && counts[f] ? ` · ${counts[f]}` : ""}
+                      </button>
                     ))}
                   </div>
                 </div>
