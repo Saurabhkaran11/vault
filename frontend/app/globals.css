@@ -1151,3 +1151,23 @@ button:disabled{opacity:.5; cursor:not-allowed}
 .sync-dot.checking { background: var(--line); animation: sync-pulse 1.2s ease-in-out infinite; }
 @keyframes sync-pulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
 @media (prefers-reduced-motion: reduce) { .sync-dot { animation: none !important; } }
+
+/* ---- Adaptive add form (item 2): show the shape you're adding, hide the rest ---- */
+.addform2 .addf-primary { font-size: 15px; }
+.addform2 .addf-or {
+  text-align: center; font-size: 12px; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .08em; margin: 2px 0;
+}
+.addf-more {
+  background: none; border: none; cursor: pointer; font: inherit; font-size: 13px;
+  color: var(--blue); padding: 4px 0; text-align: left; display: inline-flex;
+  align-items: center; gap: 8px; width: fit-content;
+}
+.addf-more-hint { color: var(--muted); font-size: 12px; }
+.addf-advanced {
+  display: flex; flex-direction: column; gap: 12px;
+  padding: 12px; margin-top: 2px;
+  background: var(--card-soft, rgba(0,0,0,.02)); border-radius: 10px;
+}
+.addf-field { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--muted); }
+.addf-field select { font: inherit; }

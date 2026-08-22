@@ -89,6 +89,19 @@ export default function AddForm({ section, existingTags = [], onAdd, onClose }) 
   useEffect(() => { let live = true; fileStorageEnabled().then((on) => live && setStorageOn(on)); return () => { live = false; }; }, []);
   const [dragOver, setDragOver] = useState(false);
   const fileRef = useRef(null);
+  /* You arrived from a section, so the SHAPE of what you're adding is already
+     known. Show only that shape's primary input; everything else — section,
+     tags, folder — lives behind "More options". This is item 2: a note asked
+     for a Link, a Section, a Status and a Folder before you could write a word. */
+  const [more, setMore] = useState(false);
+
+  const NEEDS = {
+    note:  { link: false, file: false },   // just write
+    video: { link: true,  file: false },   // paste the URL
+    book:  { link: true,  file: true  },   // a title, plus a file or link
+    doc:   { link: true,  file: true  },   // upload, or link
+  };
+  const needs = NEEDS[type] || NEEDS.note;
 
   const selected = useMemo(() => new Set(tags), [tags]);
   const suggestions = useMemo(() => {
@@ -190,28 +203,39 @@ export default function AddForm({ section, existingTags = [], onAdd, onClose }) 
   };
 
   return (
-    <div className="form">
-      <input className="full" placeholder="Paste a link here to auto-fill everything ↓ (or fill by hand)"
-        value={url} onChange={(e) => onUrl(e.target.value)} aria-label="Link" />
-      {hint && <div className={`hint ${hintOk ? "ok" : ""}`}>{hint}</div>}
+    <div className="form addform2">
+      {/* Primary input, chosen by what you're adding. */}
+      {needs.link && (
+        <>
+          <input className="full addf-primary" autoFocus={type === "video"}
+            placeholder={type === "video" ? "Paste a YouTube link…" : "Paste a link — we'll fill in the title"}
+            value={url} onChange={(e) => onUrl(e.target.value)} aria-label="Link" />
+          {hint && <div className={`hint ${hintOk ? "ok" : ""}`}>{hint}</div>}
+        </>
+      )}
 
-      <div className={`dropzone full ${dragOver ? "over" : ""}`} role="button" tabIndex={0}
-        onClick={() => fileRef.current?.click()}
-        onKeyDown={(e) => e.key === "Enter" && fileRef.current?.click()}
-        onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-        onDragLeave={() => setDragOver(false)}
-        onDrop={(e) => { e.preventDefault(); setDragOver(false); handleFiles(e.dataTransfer.files); }}
-        aria-label="Upload a file: drag it here or press Enter to browse">
-        <div className="dz-main">
-          {fileBusy ? "⏳ Saving file…" : <>⬆ <b>Drag a file here</b> or click to browse</>}
-        </div>
-        <div className="dz-types">
-          <span>▨ PDF</span><span>❏ DOC/DOCX</span><span>▤ EPUB</span><span>▦ CSV</span><span>≡ TXT/MD</span><span>▣ PNG/JPG</span>
-          <span className="dz-cap">{storageOn ? "· up to 25 MB" : "· max 2 MB in this browser"}</span>
-        </div>
-        <input ref={fileRef} type="file" hidden onChange={(e) => { handleFiles(e.target.files); e.target.value = ""; }}
-          accept=".pdf,.doc,.docx,.rtf,.odt,.txt,.md,.csv,.json,.log,.epub,.xls,.xlsx,.ppt,.pptx,.png,.jpg,.jpeg,.webp,.gif,.svg,.mp3,.m4a,.wav,.mp4,.webm" />
-      </div>
+      {needs.file && (
+        <>
+          {(type === "doc" || type === "book") && needs.link && <div className="addf-or">or</div>}
+          <div className={`dropzone full ${dragOver ? "over" : ""}`} role="button" tabIndex={0}
+            onClick={() => fileRef.current?.click()}
+            onKeyDown={(e) => e.key === "Enter" && fileRef.current?.click()}
+            onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={(e) => { e.preventDefault(); setDragOver(false); handleFiles(e.dataTransfer.files); }}
+            aria-label="Upload a file: drag it here or press Enter to browse">
+            <div className="dz-main">
+              {fileBusy ? "⏳ Saving file…" : <>⬆ <b>Drag a file here</b> or click to browse</>}
+            </div>
+            <div className="dz-types">
+              <span>PDF</span><span>DOC</span><span>EPUB</span><span>CSV</span><span>TXT</span><span>IMG</span>
+              <span className="dz-cap">{storageOn ? "· up to 25 MB" : "· max 2 MB in this browser"}</span>
+            </div>
+            <input ref={fileRef} type="file" hidden onChange={(e) => { handleFiles(e.target.files); e.target.value = ""; }}
+              accept=".pdf,.doc,.docx,.rtf,.odt,.txt,.md,.csv,.json,.log,.epub,.xls,.xlsx,.ppt,.pptx,.png,.jpg,.jpeg,.webp,.gif,.svg,.mp3,.m4a,.wav,.mp4,.webm" />
+          </div>
+        </>
+      )}
       {file && (
         <div className="fileprev full">
           <span className="fico" aria-hidden="true">{fileIcon(file.name)}</span>
@@ -222,41 +246,67 @@ export default function AddForm({ section, existingTags = [], onAdd, onClose }) 
       )}
       {fileErr && <div className="hint full" style={{ color: "var(--stamp)" }}>{fileErr}</div>}
 
-      <input className="full" placeholder="Title — what is this item?" value={title}
+      {/* Title: primary for a note, secondary (auto-filled) for the rest. */}
+      <input className="full addf-primary" autoFocus={type === "note"}
+        placeholder={type === "note" ? "Title" : "Title (auto-filled from the link or file)"}
+        value={title}
         onChange={(e) => { setTitle(e.target.value); setErr(""); }} aria-label="Title" />
       {err && <div className="hint" style={{ color: "var(--stamp)" }}>{err}</div>}
-      <input placeholder="Short note / why it matters" value={meta} onChange={(e) => setMeta(e.target.value)} aria-label="Note" />
-      <select value={type} onChange={(e) => setType(e.target.value)} aria-label="Section">
-        {Object.entries(SECTIONS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-      </select>
 
-      <div className="full">
-        <div className="hint" style={{ marginBottom: 6, display: "flex", alignItems: "center", gap: 8 }}>
-          Tags — type your own (Enter to create) or tap a suggestion:
-          <button type="button" className="aibtn" disabled={suggBusy || !aiEnabled()} onClick={suggestTags}
-            title={aiEnabled() ? "Let Claude suggest tags (reuses your existing tags first)" : "Needs an API key — Settings → AI"}>
-            {suggBusy ? "Suggesting…" : "✦ Suggest tags"}
-          </button>
-          {suggErr && <span className="aierr">⚠ {suggErr}</span>}
+      <input className="full" placeholder={type === "note" ? "Start writing, or add a one-line summary…" : "Short note / why it matters"}
+        value={meta} onChange={(e) => setMeta(e.target.value)} aria-label="Note" />
+
+      {/* Everything optional lives here, closed by default. */}
+      <button type="button" className="addf-more" onClick={() => setMore((m) => !m)} aria-expanded={more}>
+        {more ? "Fewer options" : "More options"}
+        <span aria-hidden="true">{more ? " ▴" : " ▾"}</span>
+        {!more && (tags.length > 0 || SECTIONS[type]) && (
+          <span className="addf-more-hint">{SECTIONS[type].label}{tags.length ? ` · ${tags.length} tag${tags.length === 1 ? "" : "s"}` : ""}</span>
+        )}
+      </button>
+
+      {more && (
+        <div className="addf-advanced full">
+          <label className="addf-field">
+            <span>Section</span>
+            <select value={type} onChange={(e) => setType(e.target.value)} aria-label="Section">
+              {Object.entries(SECTIONS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+            </select>
+          </label>
+
+          <div className="addf-field">
+            <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              Tags
+              <button type="button" className="aibtn" disabled={suggBusy || !aiEnabled()} onClick={suggestTags}
+                title={aiEnabled() ? "Suggest tags from what you've written" : "Choose an AI model in Settings to enable"}>
+                {suggBusy ? "Suggesting…" : "✦ Suggest"}
+              </button>
+              {suggErr && <span className="aierr">⚠ {suggErr}</span>}
+            </span>
+            <TagInput tags={tags} setTags={setTags} existing={suggestions} />
+            <div className="quicktags" style={{ marginTop: 8 }}>
+              {suggestions.slice(0, 10).map((t) => (
+                <button key={t} type="button"
+                  className={`qtag ${selected.has(t) ? "on" : ""}`}
+                  onClick={() => toggleTag(t)}
+                  aria-pressed={selected.has(t)}>#{t}</button>
+              ))}
+            </div>
+          </div>
         </div>
-        <TagInput tags={tags} setTags={setTags} existing={suggestions} />
-        <div className="quicktags" style={{ marginTop: 8 }}>
-          {suggestions.slice(0, 12).map((t) => (
-            <button key={t} type="button"
-              className={`qtag ${selected.has(t) ? "on" : ""}`}
-              onClick={() => toggleTag(t)}
-              aria-pressed={selected.has(t)}>#{t}</button>
-          ))}
-        </div>
-      </div>
+      )}
 
       <div className="actions">
         <button className="btn ghost" onClick={onClose}>Cancel</button>
-        <button className="btn ghost" onClick={() => save(true)}
-          title="Creates an empty document with a block editor — like a new Notion page">
-          ✎ New blank document
+        {type === "note" && (
+          <button className="btn ghost" onClick={() => save(true)}
+            title="Creates an empty page with a block editor">
+            ✎ Blank page
+          </button>
+        )}
+        <button className="btn" onClick={() => save(false)}>
+          {type === "note" ? "Create note" : type === "video" ? "Save video" : type === "book" ? "Add to library" : "Add"}
         </button>
-        <button className="btn" onClick={() => save(false)}>Save item — stamps today's date</button>
       </div>
     </div>
   );
