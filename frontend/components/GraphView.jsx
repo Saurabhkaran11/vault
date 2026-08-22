@@ -95,7 +95,7 @@ function layout(items, query) {
     (i.links || []).forEach((id) => renderedItems.has(id) && edges.push({ a: `i${i.id}`, b: `i${id}`, rest: 90, direct: true, visible: true }));
   });
 
-  return { tags, hubs, nodes, edges, counts, totalTags: allTags.length, totalMatching, shownItems: renderedItems.size, totalItems: items.length };
+  return { tags, hubs, nodes, edges, counts, untagged: untagged.length, totalTags: allTags.length, totalMatching, shownItems: renderedItems.size, totalItems: items.length };
 }
 
 export default function GraphView({ items, onOpenTag, onOpenSection }) {
@@ -355,14 +355,35 @@ export default function GraphView({ items, onOpenTag, onOpenSection }) {
             );
           })}
 
+          {/* The untagged items get a hub of their own so they read as a
+           * deliberate group ("Untagged") rather than orphans drifting around
+           * an invisible centre. Muted, and inert on click — it's a category,
+           * not a real tag with a page to open — but it still hover-spotlights
+           * its items. Only present when !q (search hides the untagged pile). */}
+          {g.untagged > 0 && (() => {
+            const key = "t__untagged";
+            const h = at(key, g.hubs.__untagged);
+            if (!h) return null;
+            return (
+              <g key={key} className="gnode gdraggable" opacity={dimmed(key) ? 0.25 : 1}
+                onMouseEnter={() => setHover(key)} onMouseLeave={() => setHover(null)}
+                onPointerDown={onNodeDown(key)}>
+                <title>{`${g.untagged} untagged item${g.untagged === 1 ? "" : "s"} — add a #tag to file them`}</title>
+                <circle cx={h.x} cy={h.y} r={24} fill="var(--ink-soft)" stroke="var(--panel)" strokeWidth="3" strokeDasharray="4 4" />
+                <text x={h.x} y={h.y + 4} textAnchor="middle" fontSize="12" fontFamily="IBM Plex Mono" fontWeight="600" fill="#fff" style={{ pointerEvents: "none" }}>{g.untagged}</text>
+                <text x={h.x} y={h.y - 33} textAnchor="middle" fontSize="14" fontFamily="Fraunces" fontWeight="650" fill="var(--ink-soft)" style={{ pointerEvents: "none" }}>Untagged</text>
+              </g>
+            );
+          })()}
+
           {g.nodes.map((n) => {
             const p = at(n.key, n);
             if (n.kind === "more") {
               return (
                 <g key={n.key} className="gnode gdraggable"
                   onPointerDown={onNodeDown(n.key)}
-                  onClick={onNodeClick(n.key, () => (n.tag ? onOpenTag(n.tag) : onOpenSection("note")))}>
-                  <title>{`${n.count} more item${n.count === 1 ? "" : "s"} — open ${n.tag ? `#${n.tag}` : "the list"}`}</title>
+                  onClick={onNodeClick(n.key, () => n.tag && onOpenTag(n.tag))}>
+                  <title>{n.tag ? `${n.count} more item${n.count === 1 ? "" : "s"} — open #${n.tag}` : `${n.count} more untagged item${n.count === 1 ? "" : "s"}`}</title>
                   <circle cx={p.x} cy={p.y} r={11} fill="var(--field)" stroke="var(--ink-soft)" strokeWidth="1.5" strokeDasharray="3 3" />
                   <text x={p.x} y={p.y + 3.5} textAnchor="middle" fontSize="8.5" fontFamily="IBM Plex Mono" fill="var(--ink-soft)" style={{ pointerEvents: "none" }}>+{n.count}</text>
                 </g>
