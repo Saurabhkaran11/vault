@@ -1,0 +1,80 @@
+name: backup
+
+# Scheduled database backup that proves itself. A backup you have never
+# restored is a hypothesis, not a backup — so every dump is immediately
+# restored into a throwaway Postgres and its tables asserted, and only a dump
+# that actually loads is kept.
+#
+# Setup: add ONE repository secret, NEON_DATABASE_URL, in the libpq form
+#   postgresql://USER:PASSWORD@HOST/DB?sslmode=require
+# (note: libpq form — NOT SQLAlchemy's postgresql+asyncpg://). No S3 or AWS
+# account is needed: the verified dump is stored as a retained GitHub artifact.
+
+on:
+  schedule:
+    - cron: "0 4 * * *"        # 04:00 UTC daily
+  workflow_dispatch:
+
+jobs:
+  backup:
+    # Scheduled runs no-op cleanly until the secret exists, so an unconfigured
+    # repo doesn't turn red every night. A manual run always executes and the
+    # guard step below gives a clear error if the secret is still missing.
+    if: ${{ github.event_name == 'workflow_dispatch' || secrets.NEON_DATABASE_URL != '' }}
+    runs-on: ubuntu-latest
+
+    services:
+      # A throwaway server to restore INTO — the dump is verified here, never
+      # against Neon. pg17 matches Neon's client tooling; pgvector so the
+      # schema's vector extension exists on restore.
+      scratch:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_PASSWORD: scratch
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 3s --health-timeout 5s --health-retries 20
+
+    env:
+      DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Guard — the backup secret must be set
+        run: |
+          if [ -z "${DATABASE_URL}" ]; then
+            echo "✗ NEON_DATABASE_URL secret is not set."
+            echo "  Add it in Settings → Secrets and variables → Actions, libpq form:"
+            echo "    postgresql://USER:PASSWORD@HOST/DB?sslmode=require"
+            exit 1
+          fi
+
+      - name: Install PostgreSQL 17 client
+        run: |
+          sudo sh -c 'echo "deb https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/pgdg.gpg
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-17
+
+      - name: Back up the database
+        # BACKUP_BUCKET deliberately unset: the dump is left on disk so it can
+        # be verified and archived as an artifact, no S3 required.
+        run: |
+          bash backend/scripts/backup.sh
+          echo "DUMP_FILE=$(ls -t /tmp/vault-*.dump | head -1)" >> "$GITHUB_ENV"
+
+      - name: Verify the dump restores
+        env:
+          # Restore into the scratch server, using the dump just produced.
+          DATABASE_URL: postgresql://postgres:scratch@localhost:5432/postgres
+        run: bash backend/scripts/restore-check.sh
+
+      - name: Archive the verified dump
+        uses: actions/upload-artifact@v4
+        with:
+          name: vault-db-backup-${{ github.run_id }}
+          path: ${{ env.DUMP_FILE }}
+          retention-days: 30
+          if-no-files-found: error
