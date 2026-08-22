@@ -92,11 +92,15 @@ The day a second person's data is in there, these stop being optional.
 
 ### Operational
 
-- **Schedule `backup.sh` daily.** It exists and nothing runs it. An unrun
-  backup is not a backup.
-- **Schedule `restore-check.sh` weekly.** It restores the newest dump into a
-  throwaway database and asserts the contents. The failure that hurts is not
-  "we had no backups", it is "the backups were never going to restore".
+- **Backups run daily in CI** via `.github/workflows/backup.yml`. It dumps
+  the database, immediately restores that dump into a throwaway Postgres and
+  asserts the tables (so only a dump that actually loads is kept), and stores
+  it as a 30-day GitHub artifact — no S3 account required. To turn it on, add
+  one repository secret, `NEON_DATABASE_URL`, in the **libpq** form
+  (`postgresql://…?sslmode=require`, not `postgresql+asyncpg://`). Until the
+  secret exists, scheduled runs no-op instead of failing nightly.
+- **For longer retention**, `backend/scripts/backup.sh` also uploads to S3
+  when `BACKUP_BUCKET` + AWS creds are set; pair it with an S3 lifecycle rule.
 - **Uptime check on `/health/ready`** — free via UptimeRobot.
 - **Watch the worker.** If it dies, indexing silently stops and nothing says
   so. A stale-job alert or a heartbeat is enough.
