@@ -8,9 +8,10 @@ import { uid } from "@/lib/id";
  * this week's chores. Custom columns, cards with inline editing, drag &
  * drop between columns. Versioned storage (vault.boards.v1), seeded once.
  *
- * Rendered inside the Projects view: the first tab is the automatic
- * "Vault items" board (passed in as itemsBoard); every other tab is a
- * user-created board. */
+ * Rendered inside the Boards view: tabs are the boards you make. The
+ * automatic "Vault items" board (passed in as itemsBoard) is opt-in — off
+ * by default, added from the tab bar when you want an everything-by-status
+ * view. */
 
 const KEY = "vault.boards.v1";
 
@@ -120,20 +121,33 @@ const ensureKeys = (boards) => {
 };
 
 export default function CustomBoards({ itemsBoard }) {
-  const [store, setStore] = useState({ version: 1, seeded: true, boards: seedBoards() });
+  // showItems: the automatic "Vault items" board is opt-in, off by default —
+  // Boards is for the kanbans you make; the everything-by-status view is a
+  // thing you choose to add, not something shipped on top of your own boards.
+  const [store, setStore] = useState({ version: 1, seeded: true, showItems: false, boards: seedBoards() });
   const [hydrated, setHydrated] = useState(false);
-  const [active, setActive] = useState("items");   // "items" | board id
+  const [active, setActive] = useState(null);      // "items" | board id | null (empty state)
 
   useEffect(() => {
     try {
       const raw = localStorage.getItem(KEY);
       if (raw) {
         const saved = JSON.parse(raw);
-        setStore({ version: 1, seeded: true, ...saved, boards: ensureKeys(saved.boards || []) });
+        setStore({ version: 1, seeded: true, showItems: false, ...saved, boards: ensureKeys(saved.boards || []) });
       }
     } catch (e) { console.error(e); }
     setHydrated(true);
   }, []);
+
+  // Resolve the active tab once hydrated and whenever it becomes invalid
+  // (items hidden, or the active board was deleted): fall back to the items
+  // board if shown, else the first board, else null (empty state).
+  useEffect(() => {
+    if (!hydrated) return;
+    const ids = store.boards.map((b) => b.id);
+    const valid = active === "items" ? store.showItems : (active != null && ids.includes(active));
+    if (!valid) setActive(store.showItems ? "items" : (store.boards[0]?.id ?? null));
+  }, [hydrated, store.showItems, store.boards, active]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -168,6 +182,12 @@ export default function CustomBoards({ itemsBoard }) {
   const setBoards = (fn) => setStore((s) => ({ ...s, boards: typeof fn === "function" ? fn(s.boards) : fn }));
   const board = boards.find((b) => b.id === active);
 
+  const showItemsBoard = () => { setStore((s) => ({ ...s, showItems: true })); setActive("items"); };
+  const hideItemsBoard = () => {
+    setStore((s) => ({ ...s, showItems: false }));
+    if (active === "items") setActive(boards[0]?.id ?? null);
+  };
+
   /* ---------- board CRUD
    * No window.prompt/confirm here: native dialogs are blocked in embedded
    * browsers and webviews, which silently kills the feature. Naming is an
@@ -198,7 +218,7 @@ export default function CustomBoards({ itemsBoard }) {
   const deleteBoard = (b) => {
     if (arm !== `board:${b.id}`) { setArm(`board:${b.id}`); return; }
     setBoards((bs) => bs.filter((x) => x.id !== b.id));
-    setActive("items");
+    setActive(null);   // effect re-resolves to items (if shown) / first board / empty
     setArm(null);
   };
 
@@ -347,12 +367,14 @@ export default function CustomBoards({ itemsBoard }) {
       {/* board tabs */}
       <div className="btabs">
         <div className="doctabs" role="tablist" aria-label="Boards">
-          <button className={active === "items" ? "on" : ""} role="tab" aria-selected={active === "items"}
-            onClick={() => setActive("items")} title="Automatic board of every vault item by status">▦ Vault items</button>
           {boards.map((b) => (
             <button key={b.id} className={active === b.id ? "on" : ""} role="tab" aria-selected={active === b.id}
               onClick={() => setActive(b.id)}>{b.name.length > 22 ? b.name.slice(0, 20) + "…" : b.name}</button>
           ))}
+          {store.showItems && (
+            <button className={active === "items" ? "on" : ""} role="tab" aria-selected={active === "items"}
+              onClick={() => setActive("items")} title="Automatic board of every vault item by status">▦ Vault items</button>
+          )}
         </div>
         {naming ? (
           <input ref={nameRef} className="tadd bname-input" placeholder="Board name — a feature, a sprint…  (Enter to create, Esc to cancel)"
@@ -363,9 +385,27 @@ export default function CustomBoards({ itemsBoard }) {
             }}
             onBlur={(e) => createBoard(e.target.value)} />
         ) : (
-          <button className="btn ghost sm" onClick={() => setNaming(true)} title="Create a custom kanban — any columns, any cards">＋ New board</button>
+          <div className="btabs-actions">
+            <button className="btn ghost sm" onClick={() => setNaming(true)} title="Create a custom kanban — any columns, any cards">＋ New board</button>
+            {store.showItems
+              ? <button className="btn ghost sm" onClick={hideItemsBoard} title="Hide the automatic Vault items board">Hide Vault items</button>
+              : <button className="btn ghost sm" onClick={showItemsBoard} title="Add an automatic board of every saved item, grouped by status">＋ Vault items board</button>}
+          </div>
         )}
       </div>
+
+      {active == null && (
+        <div className="board-empty">
+          <div className="board-empty-title">No boards yet</div>
+          <div className="board-empty-sub">Boards are Jira-style kanbans for anything — a feature, a sprint, this week's chores.</div>
+          <div className="board-empty-actions">
+            <button className="btn" onClick={() => setNaming(true)}>＋ New board</button>
+            {!store.showItems && (
+              <button className="btn ghost" onClick={showItemsBoard}>Add the Vault items board</button>
+            )}
+          </div>
+        </div>
+      )}
 
       {active === "items" && itemsBoard}
 
