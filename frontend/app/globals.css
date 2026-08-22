@@ -1113,3 +1113,61 @@ button:disabled{opacity:.5; cursor:not-allowed}
 
 .av-table tr.av-total td { border-top: 2px solid var(--line); border-bottom: none; }
 .av-over { color: var(--stamp); font-weight: 600; }
+
+/* Restore confirmation — replacing a whole vault deserves a look first. */
+.restoredlg { padding: 20px 22px 18px; max-width: 520px; }
+.restore-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+
+/* ---- Settings: account identity ---- */
+.acct-card { display: flex; align-items: center; gap: 12px; padding: 4px 0 10px; }
+.acct-avatar {
+  width: 40px; height: 40px; border-radius: 50%;
+  display: grid; place-items: center;
+  background: var(--blue); color: #fff;
+  font-weight: 650; font-size: 17px; flex: 0 0 auto;
+}
+.acct-id { min-width: 0; }
+.acct-name { font-weight: 600; color: var(--ink); }
+.acct-email {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: none; border: none; padding: 2px 0; cursor: pointer;
+  font: inherit; font-size: 13px; color: var(--muted);
+}
+.acct-reveal {
+  font-size: 10px; text-transform: uppercase; letter-spacing: .05em;
+  color: var(--blue); border: 1px solid var(--line); border-radius: 4px;
+  padding: 1px 5px;
+}
+.acct-email:hover .acct-reveal { border-color: var(--blue); }
+
+/* ---- Settings: sync status dot ---- */
+.sync-dot {
+  display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+  margin-right: 6px; vertical-align: middle;
+}
+.sync-dot.ok { background: var(--moss, #3a8); }
+.sync-dot.pending { background: var(--gold, #d90); animation: sync-pulse 1.2s ease-in-out infinite; }
+.sync-dot.off { background: var(--muted); }
+.sync-dot.checking { background: var(--line); animation: sync-pulse 1.2s ease-in-out infinite; }
+@keyframes sync-pulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .sync-dot { animation: none !important; } }
+
+/* ---- Adaptive add form (item 2): show the shape you're adding, hide the rest ---- */
+.addform2 .addf-primary { font-size: 15px; }
+.addform2 .addf-or {
+  text-align: center; font-size: 12px; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .08em; margin: 2px 0;
+}
+.addf-more {
+  background: none; border: none; cursor: pointer; font: inherit; font-size: 13px;
+  color: var(--blue); padding: 4px 0; text-align: left; display: inline-flex;
+  align-items: center; gap: 8px; width: fit-content;
+}
+.addf-more-hint { color: var(--muted); font-size: 12px; }
+.addf-advanced {
+  display: flex; flex-direction: column; gap: 12px;
+  padding: 12px; margin-top: 2px;
+  background: var(--card-soft, rgba(0,0,0,.02)); border-radius: 10px;
+}
+.addf-field { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--muted); }
+.addf-field select { font: inherit; }
