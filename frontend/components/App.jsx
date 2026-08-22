@@ -880,7 +880,7 @@ export default function App() {
 
   const nav = [
     { k: "dash", label: "Dashboard", ic: "home" },
-    { k: "board", label: "Projects", ic: "board" },
+    { k: "board", label: "Boards", ic: "board" },
     { k: "finance", label: "Finance", ic: "finance" },
     { k: "todos", label: "To-dos", ic: "todos" },
     { k: "graph", label: "Graph", ic: "graph" },
@@ -1340,7 +1340,7 @@ export default function App() {
               const steps = [
                 { id: "cap", label: "Capture your first item — a link, a thought, an expense", hint: "Press C and type anything; Vault files it for you", key: "C", done: items.some((i) => +i.id > 1e12), go: () => setCapOpen(true) },
                 { id: "name", label: "Make it yours — add your name", hint: "Settings → Profile", done: !!profile.name?.trim() && profile.name.trim() !== "You", go: () => setSettingsOpen(true) },
-                { id: "board", label: "Plan something — create your own board", hint: "Projects → ＋ New board", done: boardsOwn, go: () => { setView("board"); setTag(null); setAdding(false); setPageId(null); } },
+                { id: "board", label: "Plan something — create your own board", hint: "Boards → ＋ New board", done: boardsOwn, go: () => { setView("board"); setTag(null); setAdding(false); setPageId(null); } },
                 { id: "backup", label: "Own your data — export a backup", hint: "One click, one JSON file — your insurance", key: "E", done: !!ob.exported, go: doExport },
                 { id: "ai", label: "Optional: connect AI — Claude or an open-source model", hint: "Settings → AI assistant", done: aiEnabled(), go: () => setSettingsOpen(true) },
               ];
@@ -1548,9 +1548,9 @@ export default function App() {
 
         {view === "board" && (
           <>
-            <div className="crumb">Projects</div>
+            <div className="crumb">Boards</div>
             <h2 className="display">Boards</h2>
-            <p className="sub">"Vault items" tracks everything you've saved, by status. Create your own boards — a feature, a sprint, this week — with any columns you like.</p>
+            <p className="sub">Jira-style kanbans for anything — a feature, a sprint, this week — with any columns you like. Want an automatic board of everything you've saved, by status? Add the Vault items board from the tab bar.</p>
             <CustomBoards itemsBoard={<ProjectBoard items={items} onUpdate={updateStamped} onGoto={goto} onTag={openTag} />} />
           </>
         )}
