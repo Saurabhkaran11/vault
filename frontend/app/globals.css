@@ -92,7 +92,7 @@ button.stampbtn.static:hover{transform:rotate(-3deg)}
 @media (prefers-reduced-motion: reduce){button.stampbtn:hover{transform:rotate(-3deg)}}
 
 /* ---------- toolbar / forms */
-.bar{display:flex; gap:10px; margin-bottom:16px}
+.bar{display:flex; flex-wrap:wrap; gap:10px; margin-bottom:16px}
 .bar input{flex:1; border:1px solid var(--line); border-radius:9px; padding:10px 14px; font-family:'Public Sans',sans-serif; font-size:14px; background:var(--panel); color:var(--ink)}
 .bar input:focus{outline:2px solid var(--moss); outline-offset:1px}
 .btn{background:var(--moss); color:#fff; border:none; border-radius:9px; padding:9px 15px; font-family:'Public Sans',sans-serif; font-size:14px; font-weight:600; cursor:pointer}
@@ -411,6 +411,10 @@ img.fpreview{height:auto}
 [data-theme="dark"] .tchip{color:#16233A}
 [data-theme="dark"] .tchip button{color:#16233A}
 [data-theme="dark"] .btn{color:#0F1928}
+/* Ghost buttons are transparent, so the dark override above (near-black text
+   meant for the filled button's light background) makes their label vanish.
+   Keep them on the accent colour, which reads on the dark ground. */
+[data-theme="dark"] .btn.ghost{color:var(--moss)}
 [data-theme="dark"] .avatar{color:#0F1928}
 [data-theme="dark"] .gnode circle{stroke:var(--panel)}
 
