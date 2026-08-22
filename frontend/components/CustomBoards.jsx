@@ -51,6 +51,41 @@ const labelColor = (s) => {
 };
 const parseLabels = (raw) =>
   [...new Set(raw.split(",").map((x) => x.trim().toLowerCase().replace(/^#/, "").replace(/\s+/g, "-")).filter(Boolean))];
+
+/* Jira-style label editor: a real token field, not a comma-separated string.
+ * Type and press Enter (or comma) to add a chip; Backspace on an empty field
+ * removes the last one; each chip has its own remove control. The old raw
+ * "design, urgent, v2" input was the least Jira-like thing in the card. */
+function LabelChips({ labels = [], onChange }) {
+  const [draft, setDraft] = useState("");
+  const add = (raw) => {
+    const next = [...new Set([...labels, ...parseLabels(raw)])];
+    if (next.length !== labels.length) onChange(next);
+    setDraft("");
+  };
+  const remove = (l) => onChange(labels.filter((x) => x !== l));
+  return (
+    <div className="cd-chips" onClick={(e) => e.currentTarget.querySelector("input")?.focus()}>
+      {labels.map((l) => {
+        const [bg, fg] = labelColor(l);
+        return (
+          <span key={l} className="cd-chip mono" style={{ background: bg, color: fg }}>
+            {l}
+            <button type="button" aria-label={`Remove label ${l}`} onClick={() => remove(l)}>×</button>
+          </span>
+        );
+      })}
+      <input className="cd-chip-input" value={draft} aria-label="Add a label"
+        placeholder={labels.length ? "" : "add a label…"}
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === ",") { e.preventDefault(); add(draft); }
+          else if (e.key === "Backspace" && !draft && labels.length) remove(labels[labels.length - 1]);
+        }}
+        onBlur={() => draft.trim() && add(draft)} />
+    </div>
+  );
+}
 const DONE_RE = /done|complete|shipped|finished/i;
 
 /* Migration: older saves get card numbers backfilled and a default
@@ -460,55 +495,86 @@ export default function CustomBoards({ itemsBoard }) {
               </div>
               {cdMode === "edit" ? (
                 <div className="cd-body">
-                  <textarea className="cd-title" value={card.text} rows={2} aria-label="Card title"
-                    placeholder="Card title"
-                    onChange={(e) => patchCard(col.id, card.id, { text: e.target.value })} />
-                  <div className="cd-row">
-                    <label className="cd-field">
-                      <span className="cd-lbl mono">SPRINT</span>
-                      <select className="status" style={{ marginTop: 0 }} value={card.sprint} aria-label="Sprint"
-                        title="Move this task to another sprint — it lands in the backlog there"
-                        onChange={(e) => moveCardSprint(col.id, card.id, e.target.value)}>
-                        {board.sprints.map((s) => <option key={s.id} value={s.id}>{s.name}{s.ended ? " · closed" : ""}</option>)}
-                      </select>
-                    </label>
-                    <label className="cd-field">
-                      <span className="cd-lbl mono">⏱ HOURS TO COMPLETE</span>
-                      <input className="status cd-hours" type="number" min="0" step="0.5" value={card.hours ?? ""}
-                        placeholder="e.g. 3.5" aria-label="Hours to complete"
-                        onChange={(e) => patchCard(col.id, card.id, { hours: e.target.value === "" ? undefined : Math.max(0, +e.target.value) })} />
-                    </label>
-                    <label className="cd-field" style={{ flex: 1, minWidth: 180 }}>
-                      <span className="cd-lbl mono"># LABELS</span>
-                      <input className="status" key={card.id} defaultValue={(card.labels || []).join(", ")}
-                        placeholder="your own tags — design, urgent, v2…" aria-label="Labels (comma separated)"
-                        onBlur={(e) => patchCard(col.id, card.id, { labels: parseLabels(e.target.value) })}
-                        onKeyDown={(e) => e.key === "Enter" && patchCard(col.id, card.id, { labels: parseLabels(e.target.value) })} />
-                    </label>
+                  <div className="cd-panes">
+                    <div className="cd-main">
+                      <textarea className="cd-title" value={card.text} rows={2} aria-label="Card title"
+                        placeholder="Card title"
+                        onChange={(e) => patchCard(col.id, card.id, { text: e.target.value })} />
+                      <div className="cd-section-lbl mono">DESCRIPTION</div>
+                      <textarea className="cd-desc" value={card.desc || ""} rows={12} aria-label="In-depth description"
+                        placeholder={"Write the full story of this task…\n\nContext, acceptance criteria, links, decisions — everything the card title can't hold."}
+                        onChange={(e) => patchCard(col.id, card.id, { desc: e.target.value })} />
+                    </div>
+                    <aside className="cd-side">
+                      <label className="cd-field">
+                        <span className="cd-lbl mono">STATUS</span>
+                        <select className="status" style={{ marginTop: 0 }} value={col.id}
+                          aria-label="Status — move to column"
+                          onChange={(e) => moveCardCol(col.id, card.id, e.target.value)}>
+                          {board.cols.map((c) => <option key={c.id} value={c.id}>{c.title}</option>)}
+                        </select>
+                      </label>
+                      <label className="cd-field">
+                        <span className="cd-lbl mono">SPRINT</span>
+                        <select className="status" style={{ marginTop: 0 }} value={card.sprint} aria-label="Sprint"
+                          title="Move this task to another sprint — it lands in the backlog there"
+                          onChange={(e) => moveCardSprint(col.id, card.id, e.target.value)}>
+                          {board.sprints.map((sp) => <option key={sp.id} value={sp.id}>{sp.name}{sp.ended ? " · closed" : ""}</option>)}
+                        </select>
+                      </label>
+                      <label className="cd-field">
+                        <span className="cd-lbl mono">LABELS</span>
+                        <LabelChips labels={card.labels || []}
+                          onChange={(labels) => patchCard(col.id, card.id, { labels })} />
+                      </label>
+                      <label className="cd-field">
+                        <span className="cd-lbl mono">HOURS TO COMPLETE</span>
+                        <input className="status cd-hours" type="number" min="0" step="0.5" value={card.hours ?? ""}
+                          placeholder="e.g. 3.5" aria-label="Hours to complete"
+                          onChange={(e) => patchCard(col.id, card.id, { hours: e.target.value === "" ? undefined : Math.max(0, +e.target.value) })} />
+                      </label>
+                    </aside>
                   </div>
-                  <textarea className="cd-desc" value={card.desc || ""} rows={10} aria-label="In-depth description"
-                    placeholder={"Write the full story of this task…\n\nContext, acceptance criteria, links, decisions — everything the card title can't hold."}
-                    onChange={(e) => patchCard(col.id, card.id, { desc: e.target.value })} />
                 </div>
               ) : (
                 <div className="cd-body">
-                  <h3 className="cd-rtitle display">{card.text || "Untitled card"}</h3>
-                  <div className="cd-rmeta mono">
-                    {board.sprints.find((s) => s.id === card.sprint)?.name || "No sprint"}
-                    {card.hours != null && ` · ⏱ ${card.hours}h to complete`}
-                  </div>
-                  {(card.labels || []).length > 0 && (
-                    <div className="bcard-labels">
-                      {card.labels.map((l) => {
-                        const [bg, fg] = labelColor(l);
-                        return <span key={l} className="blabel mono" style={{ background: bg, color: fg }}>{l}</span>;
-                      })}
+                  <div className="cd-panes">
+                    <div className="cd-main">
+                      <h3 className="cd-rtitle display">{card.text || "Untitled card"}</h3>
+                      <div className="cd-section-lbl mono">DESCRIPTION</div>
+                      <div className="cd-rdesc">
+                        {card.desc
+                          ? card.desc
+                          : <span style={{ color: "var(--ink-soft)" }}>No details yet — switch to ✎ Edit to write the in-depth description.</span>}
+                      </div>
                     </div>
-                  )}
-                  <div className="cd-rdesc">
-                    {card.desc
-                      ? card.desc
-                      : <span style={{ color: "var(--ink-soft)" }}>No details yet — switch to ✎ Edit to write the in-depth description.</span>}
+                    <aside className="cd-side">
+                      <div className="cd-field">
+                        <span className="cd-lbl mono">STATUS</span>
+                        <span className="cd-side-val">{col.title}</span>
+                      </div>
+                      <div className="cd-field">
+                        <span className="cd-lbl mono">SPRINT</span>
+                        <span className="cd-side-val">{board.sprints.find((sp) => sp.id === card.sprint)?.name || "No sprint"}</span>
+                      </div>
+                      <div className="cd-field">
+                        <span className="cd-lbl mono">LABELS</span>
+                        {(card.labels || []).length > 0 ? (
+                          <div className="bcard-labels">
+                            {card.labels.map((l) => {
+                              const [bg, fg] = labelColor(l);
+                              return <span key={l} className="blabel mono" style={{ background: bg, color: fg }}>{l}</span>;
+                            })}
+                          </div>
+                        ) : <span className="cd-side-val" style={{ color: "var(--ink-soft)" }}>None</span>}
+                      </div>
+                      {card.hours != null && (
+                        <div className="cd-field">
+                          <span className="cd-lbl mono">HOURS TO COMPLETE</span>
+                          <span className="cd-side-val">{card.hours}h</span>
+                        </div>
+                      )}
+                    </aside>
                   </div>
                 </div>
               )}
