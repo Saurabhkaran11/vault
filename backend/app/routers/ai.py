@@ -128,6 +128,32 @@ def item_chunks(item: Item) -> list[str]:
     return [p for p in parts if len(p.strip(" .:,-")) >= _MIN_CHUNK_CHARS]
 
 
+async def index_item_inline(session: AsyncSession, item: Item):
+    """Extract an uploaded file's text (if it has one and hasn't been read) and
+    then embed the item — all in the request. Used when INLINE_INDEXING is on
+    so RAG works without a background worker. Mirrors the worker's extract_item
+    + embed_item, minus the queue."""
+    import asyncio
+    from datetime import datetime, timezone
+
+    needs_text = bool((item.file_meta or {}).get("s3_key")) and item.extracted_at is None
+    if needs_text:
+        from ..extract import Unsupported, extract_text
+        from ..storage import get_object_bytes, storage_enabled
+        if storage_enabled():
+            meta = item.file_meta or {}
+            try:
+                data = await asyncio.to_thread(get_object_bytes, meta.get("s3_key"))
+                item.extracted_text = extract_text(data, filename=meta.get("name", ""), content_type=meta.get("type", ""))
+                item.extract_error = None
+            except Unsupported as exc:
+                item.extracted_text, item.extract_error = None, str(exc)
+            except Exception as exc:  # noqa: BLE001 — record and move on; the item still embeds
+                item.extracted_text, item.extract_error = None, f"{type(exc).__name__}: {exc}"
+            item.extracted_at = datetime.now(timezone.utc)
+    await index_item(session, item)
+
+
 async def index_item(session: AsyncSession, item: Item):
     await session.execute(delete(Embedding).where(Embedding.item_id == item.id))
     chunks = item_chunks(item)
@@ -212,14 +238,16 @@ async def reindex(session: AsyncSession = Depends(get_session), user: str = Depe
     )).scalars().all()
     ids = [i.id for i in items]
     queued = 0
-    for it in items:
-        needs_text = bool((it.file_meta or {}).get("s3_key")) and it.extracted_at is None
-        if await enqueue("extract_item" if needs_text else "embed_item", it.id):
-            queued += 1
-    if queued == 0:  # no Redis (dev): index inline so the feature still works
-        items = (await session.execute(select(Item).where(Item.id.in_(ids)))).scalars().all()
+    # INLINE_INDEXING (or no Redis at all): do the work here rather than queue
+    # jobs a worker would have to pick up.
+    if not settings.inline_indexing:
         for it in items:
-            await index_item(session, it)
+            needs_text = bool((it.file_meta or {}).get("s3_key")) and it.extracted_at is None
+            if await enqueue("extract_item" if needs_text else "embed_item", it.id):
+                queued += 1
+    if queued == 0:
+        for it in items:
+            await index_item_inline(session, it)
         await session.commit()
     # To-dos and cards are small and embed in one batch each, so they are done
     # inline rather than queued — waiting on a worker to make a to-do

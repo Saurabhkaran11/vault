@@ -58,6 +58,11 @@ class Settings(BaseSettings):
     chat_model: str | None = None          # e.g. meta/llama-3.3-70b-instruct
     chat_max_tokens: int = 4096
     # Any OpenAI-compatible embeddings endpoint (Ollama, Together, OpenAI…).
+    # When true, the API embeds items and extracts documents synchronously in
+    # the request instead of handing the work to the ARQ worker. Lets a
+    # single-user deployment run RAG with no worker (no paid background service)
+    # at the cost of a little latency on save/upload.
+    inline_indexing: bool = False
     embeddings_url: str | None = None
     embeddings_api_key: str | None = None
     embeddings_model: str = "nomic-embed-text"

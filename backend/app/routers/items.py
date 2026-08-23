@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..config import settings
 from ..db import get_session
 from ..deps import current_user_id
 from ..pagination import Page, page_params, paginate
@@ -12,15 +13,23 @@ from ..models import Item
 from ..schemas import ItemIn, ItemOut
 
 
-async def _queue_indexing(item: Item) -> None:
-    """Index the item, and read its file first when there is one to read.
+async def _queue_indexing(session: AsyncSession, item: Item) -> None:
+    """Make the item searchable, reading its file first when there is one.
 
-    A document with a stored file needs extraction BEFORE embedding, or it is
-    indexed as a bare filename and the contents stay invisible. extract_item
-    reindexes when it finishes, so only one job is queued in that case.
-    Re-extraction is skipped once attempted — the file is immutable under its
-    key, so the answer cannot change.
+    Normally this hands the work to the ARQ worker. With INLINE_INDEXING on
+    (no worker), it extracts + embeds right here instead — never letting an
+    indexing hiccup fail the user's write. A stored document needs extraction
+    BEFORE embedding, or its contents stay invisible; re-extraction is skipped
+    once attempted, since the file is immutable under its key.
     """
+    if settings.inline_indexing:
+        from .ai import index_item_inline
+        try:
+            await index_item_inline(session, item)
+            await session.commit()
+        except Exception:  # noqa: BLE001 — indexing must never break the write
+            await session.rollback()
+        return
     needs_text = bool((item.file_meta or {}).get("s3_key")) and item.extracted_at is None
     await enqueue("extract_item" if needs_text else "embed_item", item.id)
 
@@ -78,7 +87,7 @@ async def create_item(body: ItemIn, session: AsyncSession = Depends(get_session)
     await emit(session, user, "item.created", {"type": body.type, "title": body.title})
     await session.commit()
     await session.refresh(item)
-    await _queue_indexing(item)
+    await _queue_indexing(session, item)
     return item
 
 
@@ -101,7 +110,7 @@ async def upsert_item(body: ItemUpsert, session: AsyncSession = Depends(get_sess
         await emit(session, user, "item.created", {"type": body.type, "title": body.title})
     await session.commit()
     await session.refresh(item)
-    await _queue_indexing(item)
+    await _queue_indexing(session, item)
     return item
 
 
@@ -156,7 +165,7 @@ async def update_item(item_id: int, body: ItemIn, session: AsyncSession = Depend
         setattr(item, k, v)
     await session.commit()
     await session.refresh(item)
-    await _queue_indexing(item)
+    await _queue_indexing(session, item)
     return item
 
 
