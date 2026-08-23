@@ -212,18 +212,29 @@ async function completeAnthropic({ system, prompt, maxTokens = 16000, effort, ou
   }
 }
 
-/** Free-text answer. */
-export function askText(prompt, opts = {}) {
+/** Free-text answer. Prefers the server (no browser key, and reaches
+ * CORS-blocked providers like NVIDIA); falls back to a browser key. */
+export async function askText(prompt, opts = {}) {
+  const status = await serverAIStatus();
+  if (status.server_completion) {
+    return completeViaServer({ system: opts.system, messages: [{ role: "user", content: prompt }], maxTokens: opts.maxTokens || 4000 });
+  }
   return complete({ prompt, ...opts });
 }
 
-/** Structured answer, constrained to a JSON schema and parsed. */
+/** Structured answer, constrained to a JSON schema and parsed. Same
+ * server-first routing; the server can't enforce a schema, so we ask for
+ * JSON in the prompt and rely on the tolerant parse below. */
 export async function askJSON(prompt, schema, opts = {}) {
-  const text = await complete({
-    prompt,
-    ...opts,
-    outputFormat: { type: "json_schema", schema },
-  });
+  const status = await serverAIStatus();
+  let text;
+  if (status.server_completion) {
+    const system = [opts.system, "Respond with ONLY valid JSON — no prose, no code fences — matching this JSON schema: " + JSON.stringify(schema)]
+      .filter(Boolean).join(" ");
+    text = await completeViaServer({ system, messages: [{ role: "user", content: prompt }], maxTokens: opts.maxTokens || 4000 });
+  } else {
+    text = await complete({ prompt, ...opts, outputFormat: { type: "json_schema", schema } });
+  }
   try { return JSON.parse(text); } catch {}
   // open models often wrap JSON in ``` fences or add prose — dig it out
   const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/);
