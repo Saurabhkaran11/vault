@@ -825,7 +825,7 @@ export default function App() {
     { group: "GO TO", label: "Dashboard", hint: `G ${navKeyFor("dash")}`, keywords: "home overview", run: () => { setView("dash"); setTag(null); setAdding(false); setPageId(null); } },
     { group: "GO TO", label: "Project board", hint: `G ${navKeyFor("board")}`, keywords: "kanban status progress projects", run: () => { setView("board"); setTag(null); setAdding(false); setPageId(null); } },
     { group: "GO TO", label: "Finance", hint: `G ${navKeyFor("finance")}`, keywords: "money expenses bills payments credit card", run: () => { setView("finance"); setTag(null); setAdding(false); setPageId(null); } },
-    { group: "GO TO", label: "To-dos", hint: `G ${navKeyFor("todos")}`, keywords: "tasks board", run: () => { setView("todos"); setTag(null); setAdding(false); setPageId(null); } },
+    { group: "GO TO", label: "Tasks", hint: `G ${navKeyFor("todos")}`, keywords: "tasks board", run: () => { setView("todos"); setTag(null); setAdding(false); setPageId(null); } },
     { group: "GO TO", label: "Graph", hint: `G ${navKeyFor("graph")}`, keywords: "connections map", run: () => { setView("graph"); setTag(null); setAdding(false); setPageId(null); } },
     { group: "GO TO", label: "Content — all saved items", hint: `G ${navKeyFor("all")}`, keywords: "everything notes videos library documents collection", run: () => { setView("all"); setTag(null); setAdding(false); setPageId(null); setQ(""); } },
     { group: "GO TO", label: "Notes", hint: `G ${navKeyFor("note")}`, keywords: "section", run: () => openSection("note") },
@@ -924,7 +924,7 @@ export default function App() {
     { k: "dash", label: "Dashboard", ic: "home" },
     { k: "board", label: "Boards", ic: "board" },
     { k: "finance", label: "Finance", ic: "finance" },
-    { k: "todos", label: "To-dos", ic: "todos" },
+    { k: "todos", label: "Tasks", ic: "todos" },
     // Notes, YouTube, Library and Documents are the same thing — saved items —
     // so they live behind one "Content" section with a type switcher inside.
     { k: "all", label: "Content", ic: "note" },
@@ -1173,7 +1173,7 @@ export default function App() {
                   ＋ Link a Google Doc / Sheet / Drive / Excel file <span className="menukey">→ Documents</span>
                 </button>
                 <button className="menu-item" onClick={() => { setSettingsOpen(false); setView("todos"); setTag(null); setAdding(false); setPageId(null); }}>
-                  ＋ Import Google / Apple calendar (.ics) <span className="menukey">→ To-dos</span>
+                  ＋ Import Google / Apple calendar (.ics) <span className="menukey">→ Tasks</span>
                 </button>
                 <div className="menu-foot" style={{ border: "none", marginTop: 4, paddingTop: 0 }}>
                   Google Calendar connects above for live sync. Docs, Sheets and Drive are linked — paste a link in Documents; they open in their own app.
@@ -1343,7 +1343,7 @@ export default function App() {
                 <thead><tr><th>Contents</th><th style={{ textAlign: "right" }}>In the file</th></tr></thead>
                 <tbody>
                   <tr><td>Items — notes, videos, library, documents</td><td style={{ textAlign: "right" }}>{restore.counts.items}</td></tr>
-                  <tr><td>To-dos</td><td style={{ textAlign: "right" }}>{restore.counts.todos}</td></tr>
+                  <tr><td>Tasks</td><td style={{ textAlign: "right" }}>{restore.counts.todos}</td></tr>
                   <tr><td>Finance records</td><td style={{ textAlign: "right" }}>{restore.counts.finance}</td></tr>
                   <tr><td>Boards</td><td style={{ textAlign: "right" }}>{restore.counts.boards} ({restore.counts.cards} cards)</td></tr>
                 </tbody>
@@ -1429,7 +1429,7 @@ export default function App() {
                       const sym = ins.money.sym;
                       const cardsOpen = Math.max(0, ins.boards.total - ins.boards.done);
                       const rows = [
-                        pulse.overdueTasks && { k: "od", label: "Overdue to-dos", n: pulse.overdueTasks, tone: "red", go: () => goView("todos") },
+                        pulse.overdueTasks && { k: "od", label: "Overdue tasks", n: pulse.overdueTasks, tone: "red", go: () => goView("todos") },
                         pulse.dueToday && { k: "dt", label: "Due today", n: pulse.dueToday, tone: "amber", go: () => goView("todos") },
                         pulse.pendingBills && { k: "bill", label: "Unpaid bills", sub: pulse.overdueBills ? `${pulse.overdueBills} overdue` : null, n: `${sym}${Math.round(pulse.pendingBillsTotal).toLocaleString()}`, tone: pulse.overdueBills ? "red" : "amber", go: () => goView("finance") },
                         cardsOpen && { k: "cards", label: "Cards in progress", n: cardsOpen, tone: "neutral", go: () => goView("board") },
@@ -1455,7 +1455,7 @@ export default function App() {
                       const sym = ins.money.sym;
                       const readingBooks = items.filter((i) => i.type === "book" && (i.progress || 0) > 0 && (i.progress || 0) < 100).slice(0, 2);
                       const rows = [
-                        { k: "todo", label: "To-dos this week", val: `${ins.todos.doneWeek} done · ${ins.todos.open} open`, pct: ins.todos.pct, color: "var(--moss)" },
+                        { k: "todo", label: "Tasks this week", val: `${ins.todos.doneWeek} done · ${ins.todos.open} open`, pct: ins.todos.pct, color: "var(--moss)" },
                         ins.boards.total > 0 && { k: "sprint", label: "Sprint", val: `${ins.boards.done}/${ins.boards.total} done`, pct: ins.boards.pct, color: "var(--azure)" },
                         ...readingBooks.map((b) => ({ k: `bk-${b.id}`, label: `Reading · ${b.alias || b.title}`, val: `${b.progress || 0}%`, pct: b.progress || 0, color: "var(--gold)" })),
                         ins.money.budget > 0 && { k: "budget", label: "Budget used", val: `${sym}${Math.round(ins.money.spent).toLocaleString()} / ${sym}${Math.round(ins.money.budget).toLocaleString()}`, pct: Math.min(100, ins.money.pct), color: ins.money.pct > 100 ? "var(--stamp)" : "var(--gold)" },
@@ -1575,8 +1575,8 @@ export default function App() {
                       <span className="tl-bar"><span className="tl-bar-fill" style={{ width: `${ins.watching.pct}%` }} /></span>
                       <span className="ins-d">{ins.watching.total - ins.watching.done} still in the queue</span>
                     </button>
-                    <button className="insight" onClick={() => go("todos")} title="Open To-dos">
-                      <span className="ins-k" style={{ color: "var(--moss)" }}>☑ To-dos</span>
+                    <button className="insight" onClick={() => go("todos")} title="Open Tasks">
+                      <span className="ins-k" style={{ color: "var(--moss)" }}>☑ Tasks</span>
                       <span className="ins-n">{ins.todos.doneWeek}<small> done this week</small></span>
                       <span className="tl-bar"><span className="tl-bar-fill" style={{ width: `${ins.todos.pct}%` }} /></span>
                       <span className="ins-d">{ins.todos.open} still open</span>
@@ -1639,8 +1639,8 @@ export default function App() {
         {view === "todos" && (
           <>
             <div className="crumb">Tasks</div>
-            <h2 className="display">To-dos</h2>
-            <p className="sub">One box, zero setup — type a to-do and it sorts itself into Overdue, Today, Upcoming or Someday. ⚑ marks priority; click a date chip to reschedule.</p>
+            <h2 className="display">Tasks</h2>
+            <p className="sub">One box, zero setup — type a task and it sorts itself into Overdue, Today, Upcoming or Someday. ⚑ marks priority; click a date chip to reschedule.</p>
             <TodoBoard key={`tb-${capBump}`} />
           </>
         )}
