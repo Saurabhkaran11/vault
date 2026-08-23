@@ -21,7 +21,7 @@ export const NAV_ACTIONS = [
   { id: "navDash", label: "Dashboard", def: "d", view: "dash" },
   { id: "navBoard", label: "Projects", def: "p", view: "board" },
   { id: "navFinance", label: "Finance", def: "f", view: "finance" },
-  { id: "navTodos", label: "To-dos", def: "t", view: "todos" },
+  { id: "navTodos", label: "Tasks", def: "t", view: "todos" },
   { id: "navGraph", label: "Graph", def: "r", view: "graph" },
   { id: "navContent", label: "Content (all saved items)", def: "c", view: "all" },
   { id: "navNotes", label: "· Notes", def: "n", view: "note" },

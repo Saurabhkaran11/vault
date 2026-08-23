@@ -27,6 +27,16 @@ const toApi = (t) => ({
 
 const dRel = (days) => { const t = new Date(); t.setDate(t.getDate() + days); return t.toISOString().slice(0, 10); };
 
+/* Next occurrence of a recurring task, from its current due date. */
+const advanceDue = (due, recur) => {
+  const d = new Date((due || new Date().toISOString().slice(0, 10)) + "T00:00:00");
+  if (recur === "daily") d.setDate(d.getDate() + 1);
+  else if (recur === "weekly") d.setDate(d.getDate() + 7);
+  else if (recur === "monthly") d.setMonth(d.getMonth() + 1);
+  return d.toISOString().slice(0, 10);
+};
+const nextRecur = (r) => (r === "daily" ? "weekly" : r === "weekly" ? "monthly" : r === "monthly" ? null : "daily");
+
 const seedTasks = () => ([
   { id: uid(), text: "Watch FastAPI course — section 3", done: false, due: dRel(0), high: true, created: dRel(0) },
   { id: uid(), text: "Push Vault to GitHub", done: false, due: dRel(0), high: false, created: dRel(0) },
@@ -98,13 +108,14 @@ export default function TodoBoard() {
   const [dueChip, setDueChip] = useState("today");
   const [customDue, setCustomDue] = useState("");
   const [high, setHigh] = useState(false);
+  const [recur, setRecur] = useState(null);       // null | daily | weekly | monthly
   const add = () => {
     if (!text.trim()) return;
     const due = customDue || chipToDate(dueChip);
-    const task = { id: uid(), text: text.trim(), done: false, due, high, created: today() };
+    const task = { id: uid(), text: text.trim(), done: false, due, high, recur: recur || undefined, created: today() };
     setTasks((ts) => [task, ...ts]);
     mirror("/todos", { method: "POST", body: toApi(task) });
-    setText(""); setHigh(false);
+    setText(""); setHigh(false); setRecur(null);
   };
 
   /* ---------- task ops — every mutation also mirrors to the backend when
@@ -119,7 +130,17 @@ export default function TodoBoard() {
     setTasks((ts) => ts.filter((t) => t.id !== id));
     mirror("/todos/" + id, { method: "DELETE" });
   };
-  const toggle = (t) => patch(t.id, { done: !t.done, doneAt: !t.done ? today() : undefined });
+  const toggle = (t) => {
+    const nowDone = !t.done;
+    patch(t.id, { done: nowDone, doneAt: nowDone ? today() : undefined });
+    // Completing a recurring task spawns its next occurrence.
+    if (nowDone && t.recur && t.due) {
+      const next = { id: uid(), text: t.text, done: false, due: advanceDue(t.due, t.recur),
+                     high: t.high, recur: t.recur, label: t.label, created: today() };
+      setTasks((ts) => [next, ...ts]);
+      mirror("/todos", { method: "POST", body: toApi(next) });
+    }
+  };
   const clearDone = () => {
     for (const t of tasks) if (t.done) mirror("/todos/" + t.id, { method: "DELETE" });
     setTasks((ts) => ts.filter((t) => !t.done));
@@ -231,11 +252,12 @@ export default function TodoBoard() {
       <input type="checkbox" checked={t.done} aria-label="Done" onChange={() => toggle(t)} />
       <button className={`tflag ${t.high ? "on" : ""}`} title={t.high ? "High priority — click to unset" : "Mark high priority"}
         aria-pressed={t.high} onClick={() => patch(t.id, { high: !t.high })}>⚑</button>
-      <input className="tr-text" value={t.text} aria-label="To-do text"
+      <input className="tr-text" value={t.text} aria-label="Task text"
         style={{ textDecoration: t.done ? "line-through" : "none", opacity: t.done ? 0.55 : 1 }}
         onChange={(e) => patch(t.id, { text: e.target.value })}
         onKeyDown={(e) => { if (e.key === "Backspace" && !t.text) { e.preventDefault(); del(t.id); } }} />
       {t.label && <span className="tlabel mono">{t.label}</span>}
+      {t.recur && <span className="tlabel mono" title={`Repeats ${t.recur}`}>↻ {t.recur}</span>}
       {showDue && !t.done && (
         <button className={`tduechip mono ${t.due && t.due < today() ? "late" : ""}`}
           title="Change the due date"
@@ -243,7 +265,7 @@ export default function TodoBoard() {
           {t.due ? dueLabel(t.due) : "no date"}
         </button>
       )}
-      <button className="tr-del" title="Delete to-do" aria-label="Delete to-do" onClick={() => del(t.id)}>✕</button>
+      <button className="tr-del" title="Delete task" aria-label="Delete task" onClick={() => del(t.id)}>✕</button>
     </div>
   );
 
@@ -261,8 +283,8 @@ export default function TodoBoard() {
     <div className="todosimple">
       {/* quick add — the only input you need */}
       <div className="tquick">
-        <input className="tquick-input" placeholder="Add a to-do and press Enter — that's it"
-          value={text} aria-label="Add a to-do"
+        <input className="tquick-input" placeholder="Add a task and press Enter — that's it"
+          value={text} aria-label="Add a task"
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && add()} />
         <button className={`tflag big ${high ? "on" : ""}`} title="High priority" aria-pressed={high}
@@ -277,6 +299,8 @@ export default function TodoBoard() {
         ))}
         <input type="date" value={customDue} aria-label="Custom due date"
           onChange={(e) => setCustomDue(e.target.value)} />
+        <button className={`qtag ${recur ? "on" : ""}`} title="Repeat this task — completing it creates the next one"
+          onClick={() => setRecur(nextRecur)}>↻ {recur || "once"}</button>
         {todayTotal > 0 && (
           <span className="tprog">
             <span className="mono">{todayDone}/{todayTotal} today</span>
@@ -287,7 +311,7 @@ export default function TodoBoard() {
 
       {/* time views + navigation */}
       <div className="tmodebar">
-        <div className="doctabs" role="tablist" aria-label="To-do views">
+        <div className="doctabs" role="tablist" aria-label="Task views">
           {[["list", "☰ List"], ["day", "Day"], ["week", "Week"], ["month", "▦ Month"], ["year", "Year"]].map(([m, l]) => (
             <button key={m} className={mode === m ? "on" : ""} role="tab" aria-selected={mode === m}
               onClick={() => setMode(m)}>{l}</button>
@@ -396,7 +420,7 @@ export default function TodoBoard() {
       ))}
 
       {sections.every((s) => s.tasks.length === 0) && (
-        <div className="empty">All clear 🎉 — add a to-do above, or enjoy the quiet.</div>
+        <div className="empty">All clear 🎉 — add a task above, or enjoy the quiet.</div>
       )}
         </>
       )}
@@ -409,7 +433,7 @@ export default function TodoBoard() {
             <span className="tsec-title" style={{ color: "var(--ink-soft)" }}>Done</span>
             <span className="kcount mono">{doneTasks.length}</span>
             <button className="kbtn kdel" style={{ marginLeft: "auto" }} onClick={clearDone}
-              title="Remove all completed to-dos">Clear all</button>
+              title="Remove all completed tasks">Clear all</button>
           </div>
           {showDone && doneTasks.map((t) => <Row key={t.id} t={t} showDue={false} />)}
         </div>
@@ -419,7 +443,7 @@ export default function TodoBoard() {
         <details className="seclc">
           <summary className="seclc-head">
             <span>📈 Your pace</span>
-            <span className="cardsub mono">to-dos finished per week · last 8 weeks</span>
+            <span className="cardsub mono">tasks finished per week · last 8 weeks</span>
           </summary>
           <MiniBars height={120} labels={weekLabels(8)} color="var(--moss)"
             values={weekSeries(tasks.filter((t) => t.done && t.doneAt).map((t) => t.doneAt))} />
