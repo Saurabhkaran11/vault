@@ -630,6 +630,8 @@ export default function App() {
   const [focusId, setFocusId] = useState(null);
   const [pageId, setPageId] = useState(null);          // full-page note view
   const [notesLayout, setNotesLayout] = useState("list"); // list | grid
+  const [expandedId, setExpandedId] = useState(null);     // compact list: which row is open
+  const clistRef = useRef(null);
   const [showTemplates, setShowTemplates] = useState(false);
   const [docFilter, setDocFilter] = useState("All"); // All | PDF | Word | Sheet | Image
   const [helpOpen, setHelpOpen] = useState(false);     // "?" shortcuts sheet
@@ -900,11 +902,12 @@ export default function App() {
     { k: "board", label: "Boards", ic: "board" },
     { k: "finance", label: "Finance", ic: "finance" },
     { k: "todos", label: "To-dos", ic: "todos" },
-    { k: "graph", label: "Graph", ic: "graph" },
     // Notes, YouTube, Library and Documents are the same thing — saved items —
     // so they live behind one "Content" section with a type switcher inside.
     { k: "all", label: "Content", ic: "note" },
     { k: "tags", label: "Tags", ic: "tag" },
+    // Graph is an explore-it view, not a daily destination — keep it last.
+    { k: "graph", label: "Graph", ic: "graph" },
   ].map((n) => ({ ...n, hint: `G then ${navKeyFor(n.k)}` }));
 
   const onImport = (e) => {
@@ -1875,7 +1878,7 @@ export default function App() {
                   {showTemplates ? "Close templates" : "▦ Templates"}
                 </button>
               )}
-              {view === "note" && (
+              {view === "note" && profile.density !== "compact" && (
                 <div className="layouttoggle" role="group" aria-label="Layout">
                   <button className={notesLayout === "list" ? "on" : ""} title="List view"
                     onClick={() => setNotesLayout("list")}>☰</button>
@@ -1883,6 +1886,10 @@ export default function App() {
                     onClick={() => setNotesLayout("grid")}>▦</button>
                 </div>
               )}
+              <button className="btn ghost" title={profile.density === "compact" ? "Switch to comfortable cards" : "Switch to a compact, scannable list"}
+                onClick={() => setProfile((p) => ({ ...p, density: p.density === "compact" ? "cards" : "compact" }))}>
+                {profile.density === "compact" ? "▦ Cards" : "☰ Compact"}
+              </button>
               <button className="btn" title="New item (N)" onClick={() => setAdding((a) => !a)}>{adding ? "Close (Esc)" : "+ Add item"}</button>
             </div>
 
@@ -1913,9 +1920,54 @@ export default function App() {
                 onClose={() => setAdding(false)} />
             )}
 
-            {/* the card grid is a NOTES gallery; Documents always use the list,
-                where files get their View / Open / Write actions */}
-            {view === "note" && notesLayout === "grid" ? (
+            {/* Compact list — a dense, scannable row per item, click (or Enter)
+                to expand its full card in place. ↑/↓ move between rows, "/"
+                focuses the filter. Fast to scan and act on a big vault. */}
+            {profile.density === "compact" ? (
+              visible.length ? (
+                <div className="clist" ref={clistRef} role="list"
+                  onKeyDown={(e) => {
+                    if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+                    const rows = [...(clistRef.current?.querySelectorAll(".crow") || [])];
+                    const cur = rows.indexOf(document.activeElement);
+                    e.preventDefault();
+                    const next = e.key === "ArrowDown" ? (rows[cur + 1] || rows[0]) : (rows[cur - 1] || rows[rows.length - 1]);
+                    next?.focus();
+                  }}>
+                  {visible.map((it) => {
+                    const s = SECTIONS[it.type] || {};
+                    const open = expandedId === it.id;
+                    return (
+                      <div key={it.id} className="citem">
+                        <div className={`crow ${open ? "open" : ""} ${focusId === it.id ? "flash" : ""}`}
+                          role="button" tabIndex={0} aria-expanded={open}
+                          onClick={() => setExpandedId((id) => (id === it.id ? null : it.id))}
+                          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setExpandedId((id) => (id === it.id ? null : it.id)); } }}
+                          title={it.alias || it.title}>
+                          <span className="crow-ic" style={{ color: s.color }} aria-hidden="true">{s.icon}</span>
+                          <span className="crow-title">{it.pinned && <span style={{ color: "var(--gold)" }}>★ </span>}{it.alias || it.title || "(untitled)"}</span>
+                          <span className="crow-tags mono">{(it.tags || []).slice(0, 2).map((t) => `#${t}`).join(" ")}</span>
+                          <span className="crow-date mono">{fmtStamp(it.date)}</span>
+                          <span className="crow-acts">
+                            <button title={it.pinned ? "Unpin" : "Pin"} onClick={(e) => { e.stopPropagation(); updateStamped({ ...it, pinned: !it.pinned }); }}>★</button>
+                            <button title="Delete" onClick={(e) => { e.stopPropagation(); removeWithUndo(it); }}>✕</button>
+                            <span className="crow-chev" aria-hidden="true">{open ? "▾" : "▸"}</span>
+                          </span>
+                        </div>
+                        {open && (
+                          <div className="crow-detail">
+                            <ItemRow it={it} onTag={openTag} onUpdate={updateStamped} onRemove={removeWithUndo}
+                              allItems={items} onGoto={goto} focus={false} onOpen={() => setPageId(it.id)} folders={folders} />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : <div className="empty">{dateFilter || q || (view === "doc" && docFilter !== "All")
+                    ? <>{dateFilter ? <>Nothing added on <b>{fmtStamp(dateFilter)}</b></> : (view === "doc" && docFilter !== "All") ? <>No <b>{docFilter}</b> documents yet</> : "Nothing matching your filter"} — <button className="av-link" onClick={() => { setDateFilter(""); setQ(""); setDocFilter("All"); }}>clear filters</button>.</>
+                    : <>Nothing here yet. Tap <b>+ Add item</b> to save your first.</>}</div>
+            ) : view === "note" && notesLayout === "grid" ? (
               visible.length ? (
                 <div className="notegrid">
                   {visible.map((it) => {

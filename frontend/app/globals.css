@@ -792,6 +792,26 @@ img.fpreview{height:auto}
 .prog-top b{color:var(--ink); font-weight:600; font-size:12px}
 .prog-track{height:7px; background:var(--field); border-radius:20px; overflow:hidden}
 .prog-fill{height:100%; border-radius:20px; transition:width .3s}
+
+/* Content compact list — dense scannable rows, expand in place */
+.clist{border:1px solid var(--line); border-radius:12px; overflow:hidden; background:var(--panel)}
+.crow{display:flex; align-items:center; gap:12px; padding:9px 12px; cursor:pointer; border-bottom:1px solid var(--line); font-size:14px; color:var(--ink)}
+.citem:last-child .crow{border-bottom:none}
+.crow:hover{background:var(--field)}
+.crow:focus{outline:none; background:var(--field); box-shadow:inset 3px 0 0 var(--moss)}
+.crow.open{background:var(--field)}
+.crow.flash{background:var(--gold-soft)}
+.crow-ic{width:20px; text-align:center; font-size:15px; flex:none}
+.crow-title{flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.crow-tags{font-size:11px; color:var(--moss); white-space:nowrap; flex:none}
+.crow-date{font-size:11px; color:var(--ink-soft); width:66px; text-align:right; white-space:nowrap; flex:none}
+.crow-acts{display:flex; align-items:center; gap:4px; flex:none}
+.crow-acts button{opacity:0; background:none; border:none; color:var(--ink-soft); cursor:pointer; font-size:13px; padding:2px 6px; border-radius:5px}
+.crow:hover .crow-acts button, .crow:focus .crow-acts button{opacity:1}
+.crow-acts button:hover{background:var(--line); color:var(--ink)}
+.crow-chev{color:var(--ink-soft); font-size:11px; width:14px; text-align:center}
+.crow-detail{padding:6px 10px 12px; border-bottom:1px solid var(--line)}
+@media (max-width:700px){.crow-tags{display:none}}
 .board-empty{display:flex; flex-direction:column; align-items:center; gap:8px; text-align:center; padding:48px 20px; border:1px dashed var(--line); border-radius:14px; background:var(--paper-2,transparent); margin-top:4px}
 .board-empty-title{font-family:'Fraunces',serif; font-size:19px; font-weight:650; color:var(--ink)}
 .board-empty-sub{font-size:13px; color:var(--ink-soft); max-width:440px; line-height:1.5}
