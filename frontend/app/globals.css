@@ -560,6 +560,16 @@ img.fpreview{height:auto}
 .av-note.av-err{color:var(--stamp)}
 .av-link{background:none; border:none; padding:0; color:var(--violet); font-size:13px; font-weight:600; cursor:pointer; text-decoration:underline}
 .av-answer{font-size:14px; line-height:1.75; color:var(--ink); white-space:pre-wrap}
+.av-answer-head{font-size:10.5px; letter-spacing:.09em; text-transform:uppercase; color:var(--moss); margin-bottom:8px}
+.av-model{display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-top:12px}
+.av-model-pill{display:inline-flex; align-items:center; gap:6px; font-family:'IBM Plex Mono',monospace; font-size:11px; border-radius:20px; padding:4px 11px; background:#E6F3EC; color:#2E7D4F; white-space:nowrap}
+[data-theme="dark"] .av-model-pill{background:#16301F; color:#6FC38F}
+.av-model-pill.srv{background:var(--moss-soft); color:var(--moss)}
+.av-model-note{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--ink-soft)}
+.av-empty{display:flex; flex-direction:column; gap:12px}
+.av-suggests{display:flex; flex-wrap:wrap; gap:8px}
+.av-suggest{font-size:12.5px; color:var(--ink); background:var(--field); border:1px solid var(--line); border-radius:20px; padding:6px 12px; cursor:pointer; transition:border-color .12s, background .12s}
+.av-suggest:hover{border-color:var(--moss); background:var(--moss-soft)}
 .cite{display:inline-flex; align-items:center; justify-content:center; min-width:18px; height:18px; margin:0 2px; padding:0 4px; border:none; border-radius:5px; background:var(--violet); color:#fff; font-family:'IBM Plex Mono',monospace; font-size:10px; font-weight:600; cursor:pointer; vertical-align:middle}
 [data-theme="dark"] .cite{color:#16233A}
 .cite:hover{transform:scale(1.12)}
@@ -802,6 +812,15 @@ img.fpreview{height:auto}
 .need-cnt.amber{background:var(--gold-soft); color:var(--gold)}
 .need-cnt.neutral{background:var(--field); color:var(--ink-soft)}
 .allclear{color:var(--ink-soft); font-size:14px; padding:14px 6px}
+.needcards{display:flex; flex-direction:column; gap:8px}
+.needcard{display:flex; align-items:center; justify-content:space-between; gap:10px; width:100%; text-align:left; background:var(--field); border:1px solid var(--line); border-left:3px solid var(--line); border-radius:10px; padding:11px 13px; cursor:pointer; font-family:inherit; color:var(--ink); transition:border-color .12s, background .12s, transform .12s}
+.needcard:hover{background:var(--panel); transform:translateY(-1px)}
+.needcard.tone-red{border-left-color:var(--stamp)}
+.needcard.tone-amber{border-left-color:var(--gold)}
+.needcard.tone-neutral{border-left-color:var(--blue)}
+.need-lead{display:flex; flex-direction:column; gap:2px; min-width:0}
+.need-label{font-size:14px; font-weight:600}
+.need-sub{font-size:11.5px; color:var(--stamp)}
 .proglist{display:flex; flex-direction:column; gap:13px; padding-top:4px}
 .prog-top{display:flex; justify-content:space-between; gap:10px; font-size:13px; color:var(--ink-soft); margin-bottom:5px}
 .prog-top b{color:var(--ink); font-weight:600; font-size:12px}
@@ -1048,6 +1067,22 @@ img{max-width:100%}
 *::-webkit-scrollbar-track{background:transparent}
 *::-webkit-scrollbar-thumb{background:var(--line); border-radius:99px; border:2px solid var(--bg)}
 *::-webkit-scrollbar-thumb:hover{background:var(--ink-soft)}
+
+/* ---- accent colour picker (Settings → Preferences) */
+.accent-pick{padding:6px 2px 2px}
+.accent-lead{display:flex; align-items:baseline; justify-content:space-between; font-size:14px; font-weight:500; color:var(--ink); padding:2px 0 8px}
+.accent-swatches{display:flex; gap:10px; flex-wrap:wrap}
+.accent-sw{width:26px; height:26px; border-radius:50%; border:2px solid var(--line); cursor:pointer; padding:0; transition:box-shadow .12s ease, transform .12s ease}
+.accent-sw:hover{transform:translateY(-1px)}
+.accent-sw.on{box-shadow:0 0 0 2px var(--panel), 0 0 0 4px var(--ink)}
+.accent-sw:focus-visible{outline:2px solid var(--ink); outline-offset:3px}
+
+/* ---- sidebar trust chips (local-first · your data / AI on your key) */
+.trust-chips{display:flex; flex-direction:column; gap:6px; margin-bottom:12px}
+.trust-chip{display:flex; align-items:center; gap:7px; font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:.03em; text-transform:uppercase; color:#9DB2C8; border:1px solid rgba(255,255,255,.10); border-radius:8px; padding:6px 9px}
+.tc-dot{width:6px; height:6px; border-radius:50%; flex-shrink:0}
+.tc-dot.ok{background:#4FB477}
+.tc-dot.accent{background:var(--moss)}
 
 /* ---- keyboard focus: visible ring on anything focusable, never on click */
 button:focus-visible, a:focus-visible, summary:focus-visible,
