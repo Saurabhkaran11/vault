@@ -1463,37 +1463,6 @@ export default function App() {
               </div>
             )}
 
-            {pulse?.ins && (() => {
-              const usage = pulse.ins.usage;
-              const last30 = (d) => d && daysAgo(d) <= 30;
-              const used = [
-                { name: "Notes", color: "var(--moss)", n: items.filter((i) => i.type === "note" && last30(i.date)).length },
-                { name: "YouTube", color: "var(--azure)", n: items.filter((i) => i.type === "video" && last30(i.date)).length },
-                { name: "Library", color: "var(--gold)", n: items.filter((i) => i.type === "book" && last30(i.date)).length },
-                { name: "Documents", color: "var(--blue)", n: items.filter((i) => i.type === "doc" && last30(i.date)).length },
-                { name: "To-dos done", color: "var(--violet)", n: usage.todoDates.filter(last30).length },
-                { name: "Expenses", color: "var(--ink-soft)", n: usage.expenseDates.filter(last30).length },
-              ].sort((a, b) => b.n - a.n);
-              const maxUsed = Math.max(1, ...used.map((u) => u.n));
-              return (
-                <div className="card">
-                  <div className="wstrip-head">
-                    <h3 style={{ margin: 0 }}>Most used</h3>
-                    <span className="cardsub mono">actions per feature · last 30 days</span>
-                  </div>
-                  <div className="usedgrid">
-                    {used.map((u) => (
-                      <div key={u.name} className="catbar" title={`${u.name}: ${u.n} action${u.n === 1 ? "" : "s"} in the last 30 days`}>
-                        <span className="cb-name">{u.name}</span>
-                        <span className="cb-track"><span className="cb-fill" style={{ width: `${Math.max(3, (u.n / maxUsed) * 100)}%`, background: u.color }} /></span>
-                        <span className="cb-amt mono">{u.n}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              );
-            })()}
-
             <div className="bar">
               <input ref={filterRef} placeholder="Search your whole vault — notes, videos, books, docs, #tags…  ( / )"
                 value={dq} onChange={(e) => setDq(e.target.value)} aria-label="Search vault" />
