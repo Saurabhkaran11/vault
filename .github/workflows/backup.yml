@@ -17,10 +17,6 @@ on:
 
 jobs:
   backup:
-    # Scheduled runs no-op cleanly until the secret exists, so an unconfigured
-    # repo doesn't turn red every night. A manual run always executes and the
-    # guard step below gives a clear error if the secret is still missing.
-    if: ${{ github.event_name == 'workflow_dispatch' || secrets.NEON_DATABASE_URL != '' }}
     runs-on: ubuntu-latest
 
     services:
@@ -42,16 +38,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Guard — the backup secret must be set
+      # Graceful no-op until the secret exists: the job goes green with a
+      # notice rather than failing every night. The remaining steps are gated
+      # on env.DATABASE_URL so they only run once the secret is set. (secrets
+      # can't be used in an `if:` — gating on env derived from the secret can.)
+      - name: Check for the backup secret
         run: |
           if [ -z "${DATABASE_URL}" ]; then
-            echo "✗ NEON_DATABASE_URL secret is not set."
-            echo "  Add it in Settings → Secrets and variables → Actions, libpq form:"
-            echo "    postgresql://USER:PASSWORD@HOST/DB?sslmode=require"
-            exit 1
+            echo "NEON_DATABASE_URL is not set — skipping backup."
+            echo "Add it (Settings → Secrets and variables → Actions) in libpq form:"
+            echo "  postgresql://USER:PASSWORD@HOST/DB?sslmode=require"
+          else
+            echo "Secret present — running backup."
           fi
 
       - name: Install PostgreSQL 17 client
+        if: ${{ env.DATABASE_URL != '' }}
         run: |
           sudo sh -c 'echo "deb https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
           curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/pgdg.gpg
@@ -59,6 +61,7 @@ jobs:
           sudo apt-get install -y -qq postgresql-client-17
 
       - name: Back up the database
+        if: ${{ env.DATABASE_URL != '' }}
         # BACKUP_BUCKET deliberately unset: the dump is left on disk so it can
         # be verified and archived as an artifact, no S3 required.
         run: |
@@ -66,12 +69,14 @@ jobs:
           echo "DUMP_FILE=$(ls -t /tmp/vault-*.dump | head -1)" >> "$GITHUB_ENV"
 
       - name: Verify the dump restores
+        if: ${{ env.DATABASE_URL != '' }}
         env:
           # Restore into the scratch server, using the dump just produced.
           DATABASE_URL: postgresql://postgres:scratch@localhost:5432/postgres
         run: bash backend/scripts/restore-check.sh
 
       - name: Archive the verified dump
+        if: ${{ env.DATABASE_URL != '' }}
         uses: actions/upload-artifact@v4
         with:
           name: vault-db-backup-${{ github.run_id }}
