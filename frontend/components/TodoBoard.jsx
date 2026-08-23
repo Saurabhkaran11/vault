@@ -147,6 +147,19 @@ export default function TodoBoard() {
   };
 
   const [resched, setResched] = useState(null); // task id with the date editor open
+  const [subOpen, setSubOpen] = useState(null); // task id with its subtask checklist open
+  const [subDraft, setSubDraft] = useState(""); // new-subtask text (one panel open at a time)
+
+  /* Subtasks (checklist) — stored on the task; frontend-only for now (backup
+     covers them). patch() mirrors the parent; the backend just ignores subs. */
+  const addSub = (t) => {
+    const text = subDraft.trim();
+    if (!text) return;
+    patch(t.id, { subs: [...(t.subs || []), { id: uid(), text, done: false }] });
+    setSubDraft("");
+  };
+  const toggleSub = (t, sid) => patch(t.id, { subs: (t.subs || []).map((s) => (s.id === sid ? { ...s, done: !s.done } : s)) });
+  const delSub = (t, sid) => patch(t.id, { subs: (t.subs || []).filter((s) => s.id !== sid) });
 
   /* ---------- smart sections */
   const sections = useMemo(() => {
@@ -247,8 +260,12 @@ export default function TodoBoard() {
     : anchor.slice(0, 4);
   const openDay = (d) => { setAnchor(d); setMode("day"); };
 
-  const Row = ({ t, showDue = true }) => (
-    <div className={`trow ${t.done ? "tdone" : ""}`}>
+  const Row = ({ t, showDue = true }) => {
+    const subs = t.subs || [];
+    const subDone = subs.filter((s) => s.done).length;
+    return (
+    <div className="titem">
+      <div className={`trow ${t.done ? "tdone" : ""}`}>
       <input type="checkbox" checked={t.done} aria-label="Done" onChange={() => toggle(t)} />
       <button className={`tflag ${t.high ? "on" : ""}`} title={t.high ? "High priority — click to unset" : "Mark high priority"}
         aria-pressed={t.high} onClick={() => patch(t.id, { high: !t.high })}>⚑</button>
@@ -258,6 +275,10 @@ export default function TodoBoard() {
         onKeyDown={(e) => { if (e.key === "Backspace" && !t.text) { e.preventDefault(); del(t.id); } }} />
       {t.label && <span className="tlabel mono">{t.label}</span>}
       {t.recur && <span className="tlabel mono" title={`Repeats ${t.recur}`}>↻ {t.recur}</span>}
+      <button className={`tsub-toggle mono ${subOpen === t.id ? "on" : ""}`} title="Subtasks"
+        onClick={() => { setSubOpen(subOpen === t.id ? null : t.id); setSubDraft(""); }}>
+        ☑ {subs.length ? `${subDone}/${subs.length}` : "+"}
+      </button>
       {showDue && !t.done && (
         <button className={`tduechip mono ${t.due && t.due < today() ? "late" : ""}`}
           title="Change the due date"
@@ -266,8 +287,23 @@ export default function TodoBoard() {
         </button>
       )}
       <button className="tr-del" title="Delete task" aria-label="Delete task" onClick={() => del(t.id)}>✕</button>
+      </div>
+      {subOpen === t.id && (
+        <div className="tsubs">
+          {subs.map((s) => (
+            <div key={s.id} className="tsub">
+              <input type="checkbox" checked={s.done} aria-label="Subtask done" onChange={() => toggleSub(t, s.id)} />
+              <span style={{ textDecoration: s.done ? "line-through" : "none", opacity: s.done ? 0.55 : 1 }}>{s.text}</span>
+              <button className="tr-del" title="Delete subtask" aria-label="Delete subtask" onClick={() => delSub(t, s.id)}>✕</button>
+            </div>
+          ))}
+          <input className="tsub-input" value={subDraft} placeholder="Add a subtask…  (Enter)" aria-label="Add subtask"
+            onChange={(e) => setSubDraft(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addSub(t)} />
+        </div>
+      )}
     </div>
-  );
+    );
+  };
 
   const Resched = ({ t }) => (
     <div className="tresched">

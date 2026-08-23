@@ -632,6 +632,16 @@ img.fpreview{height:auto}
 .tduechip:hover{border-color:var(--moss); color:var(--moss)}
 .tduechip.late{color:var(--stamp); border-color:var(--stamp); background:var(--stamp-soft)}
 .tresched{display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin:-2px 0 8px 44px}
+
+/* Subtasks / checklist */
+.tsub-toggle{font-family:'IBM Plex Mono',monospace; font-size:10px; border:1px solid var(--line); border-radius:99px; background:none; color:var(--ink-soft); padding:3px 8px; cursor:pointer; flex-shrink:0}
+.tsub-toggle:hover, .tsub-toggle.on{border-color:var(--moss); color:var(--moss)}
+.tsubs{display:flex; flex-direction:column; gap:5px; margin:2px 0 8px 44px}
+.tsub{display:flex; align-items:center; gap:8px; font-size:13px; color:var(--ink)}
+.tsub input[type=checkbox]{width:14px; height:14px; accent-color:var(--moss); cursor:pointer}
+.tsub .tr-del{margin-left:auto}
+.tsub-input{border:1px solid var(--line); background:var(--field); border-radius:7px; padding:5px 9px; font-size:13px; color:var(--ink); font-family:'Public Sans',sans-serif; margin-left:22px; max-width:320px}
+.tsub-input:focus{outline:none; border-color:var(--moss)}
 .tresched input[type=date]{border:1px solid var(--line); border-radius:99px; padding:3px 9px; font-family:'IBM Plex Mono',monospace; font-size:10px; background:var(--field); color:var(--ink-soft)}
 .tdonesec{opacity:.85}
 
