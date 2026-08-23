@@ -232,6 +232,18 @@ export function financeAnalysis(month) {
   const overallCap = budgets.overall ? Math.round(budgets.overall * 100) : null;
   const unpaidBills = (fin.bills || []).filter((b) => !b.paid);
 
+  // All-time per-category totals over every expense, so a question that isn't
+  // about "this month" — "how much have I spent on Food?" — has real numbers
+  // to answer from instead of only the current month's slice.
+  const allByCat = {};
+  for (const e of (fin.expenses || [])) {
+    const c = e.cat || "Other";
+    allByCat[c] = (allByCat[c] || 0) + Math.round((+e.amount || 0) * 100);
+  }
+  const allTimeByCat = Object.entries(allByCat)
+    .map(([category, cents]) => ({ category, spent: money(cents) }))
+    .sort((x, y) => y.spent - x.spent);
+
   return {
     month: ym,
     rows,
@@ -245,6 +257,11 @@ export function financeAnalysis(month) {
     },
     overspent: rows.filter((r) => r.status === "over"),
     unbudgeted: rows.filter((r) => r.status === "no budget set"),
+    allTime: {
+      total: money(Object.values(allByCat).reduce((a, b) => a + b, 0)),
+      byCat: allTimeByCat,
+      months: [...new Set((fin.expenses || []).map((e) => String(e.date || "").slice(0, 7)).filter(Boolean))].length,
+    },
   };
 }
 
@@ -255,15 +272,22 @@ export function financeFacts(a) {
     (r.budget === null ? ", no budget set" :
       `, budget ${r.budget.toFixed(2)}, ${r.difference > 0 ? "OVER by " : "under by "}${Math.abs(r.difference).toFixed(2)} (${r.pctUsed}% used)`);
 
+  const allTime = a.allTime && a.allTime.byCat.length
+    ? ["",
+       `All-time spending across ${a.allTime.months} month(s), total ${a.allTime.total.toFixed(2)}:`,
+       ...a.allTime.byCat.map((r) => `${r.category}: ${r.spent.toFixed(2)}`)]
+    : [];
+
   return [
-    `Month: ${a.month}`,
+    `This month (${a.month}):`,
     `Total spent: ${a.totals.spent.toFixed(2)}`,
     `Total income: ${a.totals.income.toFixed(2)}`,
     a.totals.budget === null ? "No overall budget set."
       : `Overall budget ${a.totals.budget.toFixed(2)} — ${a.totals.difference > 0 ? "OVER" : "under"} by ${Math.abs(a.totals.difference).toFixed(2)}`,
     `Unpaid bills: ${a.totals.unpaidBills} totalling ${a.totals.unpaidTotal.toFixed(2)}`,
     "",
-    "Per category:",
+    "This month by category:",
     ...a.rows.map(line),
+    ...allTime,
   ].join("\n");
 }

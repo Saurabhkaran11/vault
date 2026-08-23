@@ -7,8 +7,20 @@ import { vi } from "vitest";
 vi.mock("@/lib/api", () => ({ api: vi.fn(), backendOn: () => false }));
 
 import {
-  AI_MODELS, OSS_PRESETS, presetById, getAIConfig, setAIConfig, aiEnabled,
+  AI_MODELS, OSS_PRESETS, presetById, getAIConfig, setAIConfig, aiEnabled, stripReasoning,
 } from "./ai";
+
+describe("stripReasoning", () => {
+  it("removes a <think> reasoning block, keeps the answer", () => {
+    expect(stripReasoning("<think>let me work it out step by step</think>You spent $42 on Food.")).toBe("You spent $42 on Food.");
+  });
+  it("removes <thinking> blocks too", () => {
+    expect(stripReasoning("<thinking>hmm</thinking>\n\nThe answer.")).toBe("The answer.");
+  });
+  it("leaves a clean answer untouched", () => {
+    expect(stripReasoning("You spent $42 on Food.")).toBe("You spent $42 on Food.");
+  });
+});
 
 describe("provider presets", () => {
   it("every OSS preset is well-formed", () => {

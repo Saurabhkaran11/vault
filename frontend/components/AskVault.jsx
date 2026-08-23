@@ -3,7 +3,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { SECTIONS, fmtStamp } from "@/lib/seed";
 import { askAnywhere, aiEnabled, serverAIStatus } from "@/lib/ai";
-import { SCOPES, FORMATS, buildPrompt, canUseServerSearch, retrieveFromServer, isListingQuestion, catalogue, isFinanceQuestion, financeAnalysis, financeFacts } from "@/lib/ask";
+import { SCOPES, FORMATS, formatById, buildPrompt, canUseServerSearch, retrieveFromServer, isListingQuestion, catalogue, isFinanceQuestion, financeAnalysis, financeFacts } from "@/lib/ask";
 import { Ic } from "./Icons";
 
 /* "Ask your Vault" — retrieval, then a cited answer in the shape you asked for.
@@ -120,10 +120,10 @@ export default function AskVault({ items, open, onClose, onGoto, onOpenSettings 
           `MY FINANCES (already calculated — treat these numbers as authoritative and do not recompute them):\n\n${financeFacts(analysis)}\n\nQUESTION: ${question}`,
           {
             system:
-              "You advise on the user's own finances using ONLY the figures given, which are already correct. " +
-              "Never restate the full table — it is shown to them separately. " +
-              "Say what to deal with first and why, in at most four sentences. " +
-              "If nothing is over budget, say so plainly rather than inventing concerns.",
+              "You answer questions about the user's own finances using ONLY the figures given, which are already correct — never recompute or invent a number. " +
+              "Answer the exact question asked and lead with the figure it asks for; if it's about one category, give that category's number first. " +
+              "Do not restate the question, and never restate the whole table — it is shown separately. " +
+              formatById(format).instruction,
             maxTokens: 1200,
           }
         );
