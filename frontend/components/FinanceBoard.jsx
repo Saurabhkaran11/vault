@@ -5,7 +5,8 @@ import { fmtStamp, today, daysAgo } from "@/lib/seed";
 import FinanceAnalytics from "./FinanceAnalytics";
 import FinanceBudgets from "./FinanceBudgets";
 import FinanceGoals from "./FinanceGoals";
-import { askJSON, aiEnabled } from "@/lib/ai";
+import { askJSON } from "@/lib/ai";
+import { useAiReady } from "@/hooks/useAiReady";
 import { mirror, toCents } from "@/lib/api";
 import { uid } from "@/lib/id";
 
@@ -431,6 +432,7 @@ export default function FinanceBoard() {
   const [tab, setTab] = useState("board"); // board | analytics
 
   /* ---------- ✦ natural-language smart add */
+  const aiReady = useAiReady();
   const [smartQ, setSmartQ] = useState("");
   const [smartBusy, setSmartBusy] = useState(false);
   const [smartMsg, setSmartMsg] = useState(null);
@@ -509,13 +511,13 @@ export default function FinanceBoard() {
       <div className="smartbar">
         <span className="av-spark" aria-hidden="true">✦</span>
         <input value={smartQ} onChange={(e) => setSmartQ(e.target.value)}
-          placeholder={aiEnabled()
+          placeholder={aiReady
             ? `Type it like you'd say it — "coffee 4.50 yesterday", "salary 3200", "netflix 15.99 monthly due 1st"`
-            : "✦ Smart add is off — add your API key in Settings (avatar menu)"}
-          disabled={!aiEnabled()}
+            : "✦ Smart add is off — set up an AI model in Settings"}
+          disabled={!aiReady}
           aria-label="Smart add expense, bill or income"
           onKeyDown={(e) => e.key === "Enter" && smartAdd()} />
-        <button className="btn sm" onClick={smartAdd} disabled={smartBusy || !smartQ.trim() || !aiEnabled()}>
+        <button className="btn sm" onClick={smartAdd} disabled={smartBusy || !smartQ.trim() || !aiReady}>
           {smartBusy ? "Parsing…" : "Add"}
         </button>
       </div>

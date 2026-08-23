@@ -2,7 +2,8 @@
 
 import React, { useMemo, useState } from "react";
 import { today } from "@/lib/seed";
-import { askText, aiEnabled } from "@/lib/ai";
+import { askText } from "@/lib/ai";
+import { useAiReady } from "@/hooks/useAiReady";
 
 /* Finance analytics: spending reports over daily / weekly / monthly / yearly
    periods, rendered as the chart type the user picks — bar, line, area, or
@@ -153,6 +154,7 @@ export default function FinanceAnalytics({ fin, fmt, spentByCat = {}, savingsRat
   const [chart, setChart] = useState("bar");
 
   /* ✦ AI monthly review */
+  const aiReady = useAiReady();
   const [review, setReview] = useState(null);
   const [reviewBusy, setReviewBusy] = useState(false);
   const genReview = async () => {
@@ -270,8 +272,8 @@ export default function FinanceAnalytics({ fin, fmt, spentByCat = {}, savingsRat
       )}
 
       <div className="fanal-review">
-        <button className="aibtn" disabled={reviewBusy || !aiEnabled()} onClick={genReview}
-          title={aiEnabled() ? "Claude reviews this month's numbers and suggests one change" : "Needs an API key — Settings → AI"}>
+        <button className="aibtn" disabled={reviewBusy || !aiReady} onClick={genReview}
+          title={aiReady ? "AI reviews this month's numbers and suggests one change" : "Set up an AI model in Settings"}>
           {reviewBusy ? "Reviewing…" : review ? "✦ Regenerate monthly review" : "✦ AI monthly review"}
         </button>
         {review && <div className="digest" style={{ marginTop: 10 }}>{review}</div>}

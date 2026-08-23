@@ -2,7 +2,8 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { SECTIONS, GENERIC_TAGS, today, ytId } from "@/lib/seed";
-import { askJSON, aiEnabled } from "@/lib/ai";
+import { askJSON } from "@/lib/ai";
+import { useAiReady } from "@/hooks/useAiReady";
 import { storeFile, fileStorageEnabled, formatSize } from "@/lib/files";
 
 /* Paste-a-link smart capture via the free noembed.com oEmbed proxy. */
@@ -112,6 +113,7 @@ export default function AddForm({ section, existingTags = [], onAdd, onClose }) 
     setTags(selected.has(t) ? tags.filter((x) => x !== t) : [...tags, t]);
 
   /* ✦ AI tag suggestions — reuses your existing tag vocabulary first */
+  const aiReady = useAiReady();
   const [suggBusy, setSuggBusy] = useState(false);
   const [suggErr, setSuggErr] = useState("");
   const suggestTags = async () => {
@@ -277,8 +279,8 @@ export default function AddForm({ section, existingTags = [], onAdd, onClose }) 
           <div className="addf-field">
             <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
               Tags
-              <button type="button" className="aibtn" disabled={suggBusy || !aiEnabled()} onClick={suggestTags}
-                title={aiEnabled() ? "Suggest tags from what you've written" : "Choose an AI model in Settings to enable"}>
+              <button type="button" className="aibtn" disabled={suggBusy || !aiReady} onClick={suggestTags}
+                title={aiReady ? "Suggest tags from what you've written" : "Set up an AI model in Settings to enable"}>
                 {suggBusy ? "Suggesting…" : "✦ Suggest"}
               </button>
               {suggErr && <span className="aierr">⚠ {suggErr}</span>}

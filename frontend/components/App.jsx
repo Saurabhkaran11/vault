@@ -25,7 +25,8 @@ import FinanceBoard from "./FinanceBoard";
 import AskVault from "./AskVault";
 import { emptyBlock } from "./NoteBlocks";
 import { downloadBackup, inspectBackup, applyBackup } from "@/lib/backup";
-import { AI_MODELS, OSS_PRESETS, OSS_MODEL_SUGGESTIONS, presetById, getAIConfig, setAIConfig, aiEnabled, askText, askJSON } from "@/lib/ai";
+import { AI_MODELS, OSS_PRESETS, OSS_MODEL_SUGGESTIONS, presetById, getAIConfig, setAIConfig, askText, askJSON } from "@/lib/ai";
+import { useAiReady } from "@/hooks/useAiReady";
 import { getBackend, setBackend, backendHealthy, fullSync, flushQueue, pendingMirrors, pullAll, applyPulled, hydrateIfEmpty, hasVerifiedIdentity } from "@/lib/api";
 import { storeFile } from "@/lib/files";
 import AccountSection from "./AccountSection";
@@ -138,6 +139,7 @@ function ReadBlocks({ blocks }) {
    Notion-style: big editable title, meta line, and the block editor. */
 function NotePage({ it, onBack, onUpdate, onTag, folders = [], allItems = [], onGoto }) {
   const s = SECTIONS[it.type];
+  const aiReady = useAiReady();
   const [aiBusy, setAiBusy] = useState(null);   // "summary" | "todos" | "continue"
   const [aiErr, setAiErr] = useState(null);
   const [dateEdit, setDateEdit] = useState(false);
@@ -278,17 +280,17 @@ function NotePage({ it, onBack, onUpdate, onTag, folders = [], allItems = [], on
 
       {pageMode === "edit" && (
       <div className="aibar">
-        <span className="aibar-label mono" title={aiEnabled() ? "AI actions for this note" : "Add your API key in Settings (avatar menu) to enable"}>✦ AI</span>
-        <button className="aibtn" disabled={!aiEnabled() || !!aiBusy} onClick={() => runAI("summary")}
-          title={aiEnabled() ? "Add a 2-4 sentence summary to the top of this note" : "Needs an API key — Settings → AI"}>
+        <span className="aibar-label mono" title={aiReady ? "AI actions for this note" : "Set up an AI model in Settings to enable"}>✦ AI</span>
+        <button className="aibtn" disabled={!aiReady || !!aiBusy} onClick={() => runAI("summary")}
+          title={aiReady ? "Add a 2-4 sentence summary to the top of this note" : "Set up an AI model in Settings"}>
           {aiBusy === "summary" ? "Summarizing…" : "Summarize"}
         </button>
-        <button className="aibtn" disabled={!aiEnabled() || !!aiBusy} onClick={() => runAI("todos")}
-          title={aiEnabled() ? "Pull every action item into a checklist" : "Needs an API key — Settings → AI"}>
+        <button className="aibtn" disabled={!aiReady || !!aiBusy} onClick={() => runAI("todos")}
+          title={aiReady ? "Pull every action item into a checklist" : "Set up an AI model in Settings"}>
           {aiBusy === "todos" ? "Extracting…" : "☑ Action items"}
         </button>
-        <button className="aibtn" disabled={!aiEnabled() || !!aiBusy} onClick={() => runAI("continue")}
-          title={aiEnabled() ? "Let Claude write the next block" : "Needs an API key — Settings → AI"}>
+        <button className="aibtn" disabled={!aiReady || !!aiBusy} onClick={() => runAI("continue")}
+          title={aiReady ? "Let AI write the next block" : "Set up an AI model in Settings"}>
           {aiBusy === "continue" ? "Writing…" : "Continue writing"}
         </button>
         {aiErr && <span className="aierr">⚠ {aiErr.message}</span>}
@@ -413,6 +415,7 @@ const isContentView = (v) => v === "all" || CONTENT_TYPES.includes(v);
 
 export default function App() {
   const { items: allItems, add, update, remove, exportJson, importJson, hydrated } = useStore();
+  const aiReady = useAiReady();   // browser key OR a provider configured on the backend
   /* Apple Notes-style trash: deleting sets a `deleted` stamp instead of
      removing. Everything below works on live items only.
      Memoized: effects depend on `items`, and a fresh array identity every
@@ -1400,7 +1403,7 @@ export default function App() {
                 { id: "name", label: "Make it yours — add your name", hint: "Settings → Profile", done: !!profile.name?.trim() && profile.name.trim() !== "You", go: () => setSettingsOpen(true) },
                 { id: "board", label: "Plan something — create your own board", hint: "Boards → ＋ New board", done: boardsOwn, go: () => { setView("board"); setTag(null); setAdding(false); setPageId(null); } },
                 { id: "backup", label: "Own your data — export a backup", hint: "One click, one JSON file — your insurance", key: "E", done: !!ob.exported, go: doExport },
-                { id: "ai", label: "Optional: connect AI — Claude or an open-source model", hint: "Settings → AI assistant", done: aiEnabled(), go: () => setSettingsOpen(true) },
+                { id: "ai", label: "Optional: connect AI — Claude or an open-source model", hint: "Settings → AI assistant", done: aiReady, go: () => setSettingsOpen(true) },
               ];
               return (
                 <ChecklistCard steps={steps} sampleMode={ob.choice === "sample"}
@@ -1592,16 +1595,16 @@ export default function App() {
 
             <div className="card" style={{ borderColor: "var(--violet)" }}>
               <h3>✦ Weekly digest
-                <button className="aibtn" style={{ marginLeft: 10 }} disabled={digestBusy || !aiEnabled()}
-                  title={aiEnabled() ? "Your AI reviews your week: what you saved, what's rotting, what to do next" : "Set up AI in Settings (avatar menu) to enable"}
+                <button className="aibtn" style={{ marginLeft: 10 }} disabled={digestBusy || !aiReady}
+                  title={aiReady ? "Your AI reviews your week: what you saved, what's rotting, what to do next" : "Set up an AI model in Settings to enable"}
                   onClick={genDigest}>{digestBusy ? "Writing…" : digest ? "Regenerate" : "Generate"}</button>
               </h3>
               {digest
                 ? <div className="digest">{digest}</div>
                 : <div className="m" style={{ color: "var(--ink-soft)" }}>
-                    {aiEnabled()
+                    {aiReady
                       ? "One click and your AI reviews your week — what you saved, what's going stale, and what to finish next."
-                      : "AI is off — connect Claude or an open-source model in Settings (avatar menu) to unlock the digest, Ask AI, summaries and more."}
+                      : "AI is off — connect Claude or an open-source model in Settings to unlock the digest, Ask AI, summaries and more."}
                   </div>}
             </div>
 
