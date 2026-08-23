@@ -18,7 +18,7 @@ from datetime import datetime, timedelta, timezone
 from urllib.parse import urlencode, urlparse
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Body, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -45,7 +45,10 @@ GOOGLE_EVENTS = "https://www.googleapis.com/calendar/v3/calendars/primary/events
 # existing calendar-only connection add Drive on the next reconnect.
 GOOGLE_SCOPES = [
     "openid", "email",
-    "https://www.googleapis.com/auth/calendar.readonly",
+    # calendar.events grants read AND write, so the event pull still works and
+    # we can push/complete/delete to-dos as events. drive.readonly is read-only
+    # file import. Changing scopes means existing connections reconnect once.
+    "https://www.googleapis.com/auth/calendar.events",
     "https://www.googleapis.com/auth/drive.readonly",
 ]
 
@@ -92,6 +95,15 @@ def google_auth_url(client_id: str, redirect_uri: str, state: str) -> str:
 def _require_google():
     if not google_configured():
         raise HTTPException(503, "Google Calendar sync is not configured on this server.")
+
+
+def _next_day(iso: str) -> str:
+    """Google all-day events use an EXCLUSIVE end date, so a one-day event on
+    D needs end = D+1. Falls back to the same day on a parse error."""
+    try:
+        return (datetime.fromisoformat(iso).date() + timedelta(days=1)).isoformat()
+    except Exception:
+        return iso
 
 
 def _parse_dt(s: str | None):
@@ -271,6 +283,75 @@ async def sync(session: AsyncSession = Depends(get_session), user: str = Depends
     for a in accts:
         synced += await _pull_google(session, a)
     return {"synced": synced, "accounts": len(accts)}
+
+
+@router.post("/push-todos")
+async def push_todos(body: dict = Body(...), session: AsyncSession = Depends(get_session),
+                     user: str = Depends(current_user_id)):
+    """Reflect the caller's to-dos into their Google Calendar (two-way write).
+
+    The frontend sends its authoritative task list; we reconcile: a to-do with
+    a due date and not done becomes/updates an all-day event; one that's done,
+    undated, or gone has its event deleted. The task↔event mapping lives in
+    calendar_events (source='vault', vault_ref=task id) so it's idempotent —
+    safe to call on every change. Read-scope-only connections get a clear 403.
+    """
+    _require_google()
+    acct = (await session.execute(select(CalendarAccount).where(
+        CalendarAccount.user_id == user, CalendarAccount.provider == "google"))).scalars().first()
+    if not acct:
+        raise HTTPException(400, "Connect your Google account first.")
+    token = await _fresh_access_token(session, acct)
+    if not token:
+        raise HTTPException(401, "Google access expired — reconnect your account.")
+
+    tasks = {str(t.get("id")): t for t in (body or {}).get("tasks", []) if t.get("id")}
+    existing = {e.vault_ref: e for e in (await session.execute(select(CalendarEvent).where(
+        CalendarEvent.account_id == acct.id, CalendarEvent.source == "vault"))).scalars().all()}
+
+    pushed, removed = 0, 0
+    scope_error = False
+    async with httpx.AsyncClient(timeout=20) as http:
+        headers = {"Authorization": f"Bearer {token}"}
+        # Create/update events for active dated to-dos.
+        for tid, t in tasks.items():
+            due, done = t.get("due"), t.get("done")
+            if not due or done:
+                continue
+            payload = {"summary": t.get("text") or "(task)",
+                       "start": {"date": due}, "end": {"date": _next_day(due)}}
+            ev = existing.get(tid)
+            if ev and ev.external_id:
+                r = await http.patch(f"{GOOGLE_EVENTS}/{ev.external_id}", headers=headers, json=payload)
+                if r.status_code == 200:
+                    ev.title, ev.starts_at, ev.all_day = payload["summary"], _parse_dt(due), True
+                    pushed += 1
+                elif r.status_code in (401, 403):
+                    scope_error = True
+            else:
+                r = await http.post(GOOGLE_EVENTS, headers=headers, json=payload)
+                if r.status_code in (200, 201):
+                    gid = r.json().get("id")
+                    session.add(CalendarEvent(id=new_id(), account_id=acct.id, external_id=gid,
+                                              source="vault", vault_ref=tid, title=payload["summary"],
+                                              starts_at=_parse_dt(due), all_day=True))
+                    pushed += 1
+                elif r.status_code in (401, 403):
+                    scope_error = True
+        # Delete events whose to-do is now done, undated, or gone.
+        for tid, ev in existing.items():
+            t = tasks.get(tid)
+            if t and t.get("due") and not t.get("done"):
+                continue
+            if ev.external_id:
+                await http.delete(f"{GOOGLE_EVENTS}/{ev.external_id}", headers=headers)
+            await session.delete(ev)
+            removed += 1
+
+    await session.commit()
+    if scope_error and pushed == 0:
+        raise HTTPException(403, "Reconnect Google to grant calendar write access.")
+    return {"pushed": pushed, "removed": removed}
 
 
 @router.get("/accounts")
