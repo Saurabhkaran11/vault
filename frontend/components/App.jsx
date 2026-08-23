@@ -29,7 +29,7 @@ import { AI_MODELS, OSS_PRESETS, OSS_MODEL_SUGGESTIONS, presetById, getAIConfig,
 import { useAiReady } from "@/hooks/useAiReady";
 import CalendarConnect from "./CalendarConnect";
 import GoogleDrivePicker from "./GoogleDrivePicker";
-import { getBackend, setBackend, backendHealthy, fullSync, flushQueue, pendingMirrors, pullAll, applyPulled, hydrateIfEmpty, hasVerifiedIdentity } from "@/lib/api";
+import { getBackend, setBackend, backendHealthy, fullSync, flushQueue, pendingMirrors, pullAll, applyPulled, hydrateIfEmpty, hasVerifiedIdentity, api } from "@/lib/api";
 import { storeFile } from "@/lib/files";
 import AccountSection from "./AccountSection";
 
@@ -146,6 +146,17 @@ function NotePage({ it, onBack, onUpdate, onTag, folders = [], allItems = [], on
   const [aiErr, setAiErr] = useState(null);
   const [dateEdit, setDateEdit] = useState(false);
   const [pageMode, setPageMode] = useState("edit"); // edit | read
+  const [gdocMsg, setGdocMsg] = useState(null);     // Google Doc write-back status
+  const pushToGoogleDoc = async () => {
+    setGdocMsg("Updating Google Doc…");
+    try {
+      await api("/google/drive/write-doc", { method: "POST", body: { file_id: it.gfile, text: noteToText(it) } });
+      setGdocMsg("✓ Saved to Google Docs");
+    } catch (e) {
+      setGdocMsg(e?.status === 403 ? "Reconnect Google to allow Docs editing (Settings → Connected apps)." : "Couldn't update the Google Doc — try again.");
+    }
+    setTimeout(() => setGdocMsg(null), 5000);
+  };
 
   /* related items — local similarity (shared tags + title word overlap), no API needed */
   const related = allItems
@@ -295,7 +306,12 @@ function NotePage({ it, onBack, onUpdate, onTag, folders = [], allItems = [], on
           title={aiReady ? "Let AI write the next block" : "Set up an AI model in Settings"}>
           {aiBusy === "continue" ? "Writing…" : "Continue writing"}
         </button>
+        {it.cloud === "gdoc" && it.gfile && (
+          <button className="aibtn" onClick={pushToGoogleDoc}
+            title="Write your edits back to the original Google Doc">↑ Update Google Doc</button>
+        )}
         {aiErr && <span className="aierr">⚠ {aiErr.message}</span>}
+        {gdocMsg && <span className="aierr" style={{ color: "var(--moss)" }}>{gdocMsg}</span>}
       </div>
       )}
 

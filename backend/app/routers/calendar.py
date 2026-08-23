@@ -46,10 +46,12 @@ GOOGLE_EVENTS = "https://www.googleapis.com/calendar/v3/calendars/primary/events
 GOOGLE_SCOPES = [
     "openid", "email",
     # calendar.events grants read AND write, so the event pull still works and
-    # we can push/complete/delete to-dos as events. drive.readonly is read-only
-    # file import. Changing scopes means existing connections reconnect once.
+    # we can push/complete/delete to-dos as events. drive.readonly imports file
+    # content; documents lets us write edits back to a Google Doc. Changing
+    # scopes means existing connections reconnect once to grant them.
     "https://www.googleapis.com/auth/calendar.events",
     "https://www.googleapis.com/auth/drive.readonly",
+    "https://www.googleapis.com/auth/documents",
 ]
 
 

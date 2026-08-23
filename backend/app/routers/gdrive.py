@@ -109,6 +109,46 @@ async def import_file(body: dict = Body(...), session: AsyncSession = Depends(ge
         "title": name,
         "text": (text or "").strip(),
         "mime": mime,
+        "file_id": file_id,
         "web_view_link": web,
         "cloud_kind": CLOUD_KIND.get(mime, "gdrive"),
     }
+
+
+DOCS_API = "https://docs.googleapis.com/v1/documents"
+
+
+@router.post("/write-doc")
+async def write_doc(body: dict = Body(...), session: AsyncSession = Depends(get_session),
+                    user: str = Depends(current_user_id)):
+    """Write edited text back to a Google Doc (replace the body). Only works on
+    Google Docs (not Sheets/PDFs). Needs the 'documents' scope — reconnect if
+    the connection predates it."""
+    _require_google()
+    file_id, text = (body or {}).get("file_id"), (body or {}).get("text", "")
+    if not file_id:
+        raise HTTPException(400, "file_id is required.")
+    token = await _token(session, user)
+    headers = {"Authorization": f"Bearer {token}"}
+    async with httpx.AsyncClient(timeout=30) as http:
+        doc = await http.get(f"{DOCS_API}/{file_id}", headers=headers)
+        if doc.status_code == 403:
+            raise HTTPException(403, "Reconnect Google to allow editing Docs.")
+        if doc.status_code != 200:
+            raise HTTPException(404, "That isn't an editable Google Doc.")
+        content = doc.json().get("body", {}).get("content", [])
+        end = max([el.get("endIndex", 1) for el in content] + [1])
+        # Replace all: delete everything but the final newline, then insert.
+        requests = []
+        if end > 2:
+            requests.append({"deleteContentRange": {"range": {"startIndex": 1, "endIndex": end - 1}}})
+        if text:
+            requests.append({"insertText": {"location": {"index": 1}, "text": text}})
+        if not requests:
+            return {"ok": True, "updated": False}
+        r = await http.post(f"{DOCS_API}/{file_id}:batchUpdate", headers=headers, json={"requests": requests})
+        if r.status_code == 403:
+            raise HTTPException(403, "Reconnect Google to allow editing Docs.")
+        if r.status_code != 200:
+            raise HTTPException(502, "Google rejected the update.")
+    return {"ok": True, "updated": True}
