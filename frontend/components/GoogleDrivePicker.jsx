@@ -44,6 +44,7 @@ export default function GoogleDrivePicker({ open, onClose, onImport }) {
       onImport({
         id: Date.now(), type: "doc", title: r.title || f.name,
         url: r.web_view_link || null, cloud: r.cloud_kind || "gdrive",
+        gfile: r.file_id || f.id,   // enables write-back for Google Docs
         meta: `${KIND_LABEL[r.cloud_kind] || "Drive file"} — imported from Google`,
         status: "Inbox", tags: [], date: today(),
         blocks: r.text ? [{ ...emptyBlock("text"), text: r.text }] : undefined,
