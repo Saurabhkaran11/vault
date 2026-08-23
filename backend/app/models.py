@@ -243,3 +243,46 @@ class Event(Base):
     payload: Mapped[dict] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+
+
+class CalendarAccount(Base, TimestampMixin):
+    """A connected external calendar (Google now, CalDAV later). Tokens are
+    encrypted at rest — never the plaintext — see routers/calendar.py. See
+    docs/calendar-sync.md for the full design."""
+
+    __tablename__ = "calendar_accounts"
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[str] = mapped_column(String(64), ForeignKey("users.id"), index=True)
+    provider: Mapped[str] = mapped_column(String(20), index=True)      # google | caldav
+    external_email: Mapped[str | None] = mapped_column(String(255))
+    access_token: Mapped[str | None] = mapped_column(Text)             # encrypted
+    refresh_token: Mapped[str | None] = mapped_column(Text)            # encrypted
+    token_expiry: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    caldav_url: Mapped[str | None] = mapped_column(Text)               # CalDAV only
+    sync_token: Mapped[str | None] = mapped_column(Text)               # provider incremental cursor
+
+    events = relationship("CalendarEvent", cascade="all, delete-orphan", back_populates="account")
+
+
+class CalendarEvent(Base):
+    """One event mirrored to/from a connected calendar. `source` records which
+    side owns it; `vault_ref` links back to the to-do/event when it is ours."""
+
+    __tablename__ = "calendar_events"
+    __table_args__ = (
+        Index("ix_calendar_events_account_external", "account_id", "external_id", unique=True),
+    )
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    account_id: Mapped[str] = mapped_column(
+        ForeignKey("calendar_accounts.id", ondelete="CASCADE"), index=True)
+    external_id: Mapped[str | None] = mapped_column(String(255))       # provider event id
+    etag: Mapped[str | None] = mapped_column(String(255))
+    source: Mapped[str] = mapped_column(String(10), default="external")  # vault | external
+    vault_ref: Mapped[str | None] = mapped_column(String(64), index=True)
+    title: Mapped[str] = mapped_column(Text, default="")
+    starts_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    all_day: Mapped[bool] = mapped_column(Boolean, default=False)
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    account = relationship("CalendarAccount", back_populates="events")

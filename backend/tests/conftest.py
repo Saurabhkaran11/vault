@@ -24,8 +24,8 @@ os.environ.setdefault("RATE_LIMIT_PER_MINUTE", "0")   # never throttle the suite
 from app.db import SessionLocal, engine  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models import (  # noqa: E402
-    Bill, Board, BoardColumn, Budget, Card, CustomTag, Embedding, Event,
-    Expense, Goal, Income, Item, PayMethod, Sprint, Task, User,
+    Bill, Board, BoardColumn, Budget, CalendarAccount, Card, CustomTag,
+    Embedding, Event, Expense, Goal, Income, Item, PayMethod, Sprint, Task, User,
 )
 from sqlalchemy import delete, select  # noqa: E402
 
@@ -92,7 +92,7 @@ async def _purge(uid: str) -> None:
             await s.execute(delete(BoardColumn).where(BoardColumn.board_id.in_(board_ids)))
             await s.execute(delete(Sprint).where(Sprint.board_id.in_(board_ids)))
         for model in (Board, Embedding, Item, Task, Expense, Bill, Income,
-                      PayMethod, Budget, Goal, CustomTag, Event):
+                      PayMethod, Budget, Goal, CustomTag, Event, CalendarAccount):
             await s.execute(delete(model).where(model.user_id == uid))
         await s.execute(delete(User).where(User.id == uid))
         await s.commit()

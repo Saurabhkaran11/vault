@@ -94,6 +94,16 @@ class Settings(BaseSettings):
     sentry_traces_sample_rate: float = 0.1
     release: str | None = None          # set to the git sha at deploy time
 
+    # ---- calendar sync (bug-list #4; see docs/calendar-sync.md) ----
+    # Inert until a Google OAuth client is configured. The redirect URI must
+    # match the one registered in Google Cloud exactly. calendar_token_key is
+    # a Fernet key (base64, 32 bytes) that encrypts refresh tokens at rest;
+    # without it the API refuses to store a token rather than persist it raw.
+    google_client_id: str | None = None
+    google_client_secret: str | None = None
+    google_redirect_uri: str | None = None
+    calendar_token_key: str | None = None
+
     class Config:
         env_file = ".env"
         # Ignore environment variables that are not settings, rather than
