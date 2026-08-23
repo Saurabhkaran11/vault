@@ -123,10 +123,9 @@ The day a second person's data is in there, these stop being optional.
   own id. UUIDs make a collision practically impossible and the API refuses
   cross-account ids with a 409, so this is contained — but it is the right
   normalisation before real multi-tenancy.
-- **Security headers on the frontend.** No CSP is configured. Add one, plus
-  `X-Frame-Options` and `Referrer-Policy`, in `next.config.mjs`.
-- **Frontend tests.** Still zero. The frontend is most of the product and is
-  currently verified only by hand.
+- **Frontend tests.** Vitest + React Testing Library cover the core logic
+  and flows, run in CI (`.github/workflows/frontend.yml`). Grow coverage as
+  features land.
 
 ---
 
@@ -193,7 +192,10 @@ Worth knowing so you do not redo it:
 ## Security: what is not
 
 - **No account export or delete** (above)
-- **No CSP or security headers** on the frontend
+- **Production Clerk domain in the CSP.** The frontend ships a CSP + security
+  headers (`next.config.mjs`); it allows Clerk *development* instances
+  (`*.clerk.accounts.dev`). A production Clerk instance on a custom domain
+  must add its `clerk.<domain>` to `script-src`/`frame-src` there.
 - **No audit log** — the `events` table is a delivery outbox, not a record of
   who did what. Fine for one user; expected once there are several.
 - **No secret rotation** — keys live in host environment variables with no
