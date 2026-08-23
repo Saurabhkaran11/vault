@@ -14,6 +14,7 @@ store a token rather than persist it in the clear.
 
 import json
 import uuid
+from datetime import datetime, timedelta, timezone
 from urllib.parse import urlencode, urlparse
 
 import httpx
@@ -36,6 +37,7 @@ router = APIRouter(prefix="/calendar", tags=["calendar"])
 GOOGLE_AUTH_ENDPOINT = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token"
 GOOGLE_USERINFO = "https://openidconnect.googleapis.com/v1/userinfo"
+GOOGLE_EVENTS = "https://www.googleapis.com/calendar/v3/calendars/primary/events"
 # Phase 1 is read-only: the narrowest scope that still shows external events,
 # which is also the fastest to get through Google verification.
 GOOGLE_SCOPES = ["openid", "email", "https://www.googleapis.com/auth/calendar.readonly"]
@@ -83,6 +85,78 @@ def google_auth_url(client_id: str, redirect_uri: str, state: str) -> str:
 def _require_google():
     if not google_configured():
         raise HTTPException(503, "Google Calendar sync is not configured on this server.")
+
+
+def _parse_dt(s: str | None):
+    """Google gives an event either a dateTime (timed) or a date (all-day).
+    Normalise both to a tz-aware datetime for the timestamptz column."""
+    if not s:
+        return None
+    try:
+        if len(s) == 10:  # YYYY-MM-DD, all-day
+            return datetime.fromisoformat(s).replace(tzinfo=timezone.utc)
+        return datetime.fromisoformat(s.replace("Z", "+00:00"))
+    except Exception:
+        return None
+
+
+async def _fresh_access_token(session: AsyncSession, acct: CalendarAccount) -> str | None:
+    """A usable access token, refreshed via the refresh token when expired.
+    Google access tokens last ~1h; the refresh token is long-lived."""
+    access = _decrypt(acct.access_token)
+    expired = acct.token_expiry is not None and acct.token_expiry <= datetime.now(timezone.utc)
+    refresh = _decrypt(acct.refresh_token)
+    if refresh and (not access or expired):
+        async with httpx.AsyncClient(timeout=15) as http:
+            r = await http.post(GOOGLE_TOKEN_ENDPOINT, data={
+                "client_id": settings.google_client_id,
+                "client_secret": settings.google_client_secret,
+                "refresh_token": refresh,
+                "grant_type": "refresh_token",
+            })
+        if r.status_code == 200:
+            p = r.json()
+            access = p.get("access_token") or access
+            acct.access_token = _encrypt(access)
+            if p.get("expires_in"):
+                acct.token_expiry = datetime.now(timezone.utc) + timedelta(seconds=int(p["expires_in"]))
+            await session.commit()
+    return access
+
+
+async def _pull_google(session: AsyncSession, acct: CalendarAccount) -> int:
+    """Pull this account's upcoming events into calendar_events (read-only,
+    idempotent by external id). Returns how many were upserted."""
+    access = await _fresh_access_token(session, acct)
+    if not access:
+        return 0
+    async with httpx.AsyncClient(timeout=20) as http:
+        r = await http.get(GOOGLE_EVENTS, headers={"Authorization": f"Bearer {access}"}, params={
+            "timeMin": datetime.now(timezone.utc).isoformat(),
+            "maxResults": 250, "singleEvents": "true", "orderBy": "startTime",
+        })
+    if r.status_code != 200:
+        return 0
+    n = 0
+    for ev in r.json().get("items", []):
+        ext = ev.get("id")
+        if not ext:
+            continue
+        start, end = ev.get("start", {}), ev.get("end", {})
+        existing = (await session.execute(select(CalendarEvent).where(
+            CalendarEvent.account_id == acct.id, CalendarEvent.external_id == ext))).scalar_one_or_none()
+        row = existing or CalendarEvent(id=new_id(), account_id=acct.id, external_id=ext, source="external")
+        row.title = ev.get("summary") or "(no title)"
+        row.starts_at = _parse_dt(start.get("dateTime") or start.get("date"))
+        row.ends_at = _parse_dt(end.get("dateTime") or end.get("date"))
+        row.all_day = "date" in start
+        row.etag = ev.get("etag")
+        row.updated_at = _parse_dt(ev.get("updated"))
+        if not existing:
+            session.add(row)
+        n += 1
+    await session.commit()
+    return n
 
 
 @router.get("/status")
@@ -156,6 +230,8 @@ async def google_callback(code: str | None = None, state: str | None = None,
     acct = existing or CalendarAccount(id=new_id(), user_id=user, provider="google")
     acct.external_email = email
     acct.access_token = _encrypt(access)
+    if payload.get("expires_in"):
+        acct.token_expiry = datetime.now(timezone.utc) + timedelta(seconds=int(payload["expires_in"]))
     # Google omits the refresh token on re-consent; keep the one we have.
     if payload.get("refresh_token"):
         acct.refresh_token = _encrypt(payload["refresh_token"])
@@ -163,12 +239,31 @@ async def google_callback(code: str | None = None, state: str | None = None,
         session.add(acct)
     await session.commit()
 
+    # First pull now so events show immediately, not only after a manual sync.
+    try:
+        await _pull_google(session, acct)
+    except Exception:  # noqa: BLE001 — connection succeeded; a pull hiccup can wait for /sync
+        pass
+
     # Back to the front end that started the flow (carried in state); fall back
     # to the first non-wildcard configured origin if it wasn't captured.
     if not dest:
         dest = next((o.strip() for o in settings.cors_origins.split(",")
                      if o.strip() and "*" not in o and o.strip().startswith("http")), "")
     return RedirectResponse(f"{dest.rstrip('/')}/?calendar=connected")
+
+
+@router.post("/sync")
+async def sync(session: AsyncSession = Depends(get_session), user: str = Depends(current_user_id)):
+    """Pull the latest events from every connected Google account. Runs
+    in-request (no worker needed); idempotent, so it's safe to call anytime."""
+    _require_google()
+    accts = (await session.execute(select(CalendarAccount).where(
+        CalendarAccount.user_id == user, CalendarAccount.provider == "google"))).scalars().all()
+    synced = 0
+    for a in accts:
+        synced += await _pull_google(session, a)
+    return {"synced": synced, "accounts": len(accts)}
 
 
 @router.get("/accounts")
