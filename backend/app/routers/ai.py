@@ -58,10 +58,18 @@ async def embed_texts(texts: list[str], kind: str = "document") -> list[list[flo
         headers = {"Content-Type": "application/json"}
         if settings.embeddings_api_key:
             headers["Authorization"] = f"Bearer {settings.embeddings_api_key}"
+        payload = {"model": settings.embeddings_model,
+                   "input": [prefix + t for t in texts]}
+        # NVIDIA NIM's embedding models reject a request without an input_type
+        # ("query" for the question, "passage" for stored documents) and want an
+        # explicit truncate policy. Other OpenAI-compatible providers (OpenAI,
+        # nomic) would 400 on these extra fields, so only send them for NVIDIA.
+        if "nvidia" in (settings.embeddings_url or "").lower():
+            payload["input_type"] = "query" if kind == "query" else "passage"
+            payload["truncate"] = "END"
         async with httpx.AsyncClient(timeout=30) as client:
             r = await client.post(f"{settings.embeddings_url.rstrip('/')}/embeddings",
-                                  json={"model": settings.embeddings_model,
-                                        "input": [prefix + t for t in texts]}, headers=headers)
+                                  json=payload, headers=headers)
             r.raise_for_status()
             return [d["embedding"][: settings.embedding_dim] for d in r.json()["data"]]
     return [_hash_embed(t, settings.embedding_dim) for t in texts]
