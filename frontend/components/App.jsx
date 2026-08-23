@@ -883,7 +883,7 @@ export default function App() {
     if (ext === "pdf") return "PDF";
     if (/^docx?$|^txt$|^md$/.test(ext)) return "Word";
     if (/^xlsx?$|^csv$/.test(ext)) return "Sheet";
-    if (/^png$|^jpe?g$|^webp$|^gif$/.test(ext)) return "Image";
+    if (/^png$|^jpe?g$|^webp$|^gif$|^svg$/.test(ext)) return "Image";
     return "Other";
   };
   const DOC_CATS = ["PDF", "Word", "Sheet", "Image", "Links", "Text", "Other"];

@@ -37,13 +37,48 @@ const advanceDue = (due, recur) => {
 };
 const nextRecur = (r) => (r === "daily" ? "weekly" : r === "weekly" ? "monthly" : r === "monthly" ? null : "daily");
 
+/* Sample tasks exercise every task feature — priorities, labels, a recurring
+ * task, subtasks — and spread finished work over days, weeks, months and
+ * years so the dashboard's momentum chart shows real hills and valleys in
+ * every range, not a flat line with one spike. */
+const DONE_RECENT = [
+  "Write portfolio README v2", "Fix CSP header on the frontend", "Reply to launch feedback",
+  "Clean the content inbox", "Update dependencies", "Review budget categories",
+  "Archive stale notes", "Set up error alerts", "Refactor sync queue",
+  "Draft privacy policy outline", "Test statement import", "Tune RAG chunking",
+];
+const DONE_OLDER = [
+  "Ship calendar two-way sync", "Add recurring tasks", "Build subtask checklists",
+  "Merge content sections", "Redesign the dashboard", "Wire NVIDIA NIM models",
+  "Set up S3 uploads", "Add account export", "Write the test suite",
+  "Deploy the backend", "Model the database", "Sketch the first prototype",
+];
 const seedTasks = () => ([
-  { id: uid(), text: "Watch FastAPI course — section 3", done: false, due: dRel(0), high: true, created: dRel(0) },
+  /* open — feeds Needs-you-now and the agenda buckets */
+  { id: uid(), text: "Watch FastAPI course — section 3", done: false, due: dRel(0), high: true, created: dRel(-1) },
   { id: uid(), text: "Push Vault to GitHub", done: false, due: dRel(0), high: false, created: dRel(0) },
   { id: uid(), text: "Finish DDIA chapter 5", done: false, due: dRel(2), high: false, created: dRel(-1) },
   { id: uid(), text: "Renew domain (overdue sample)", done: false, due: dRel(-2), high: true, created: dRel(-6) },
   { id: uid(), text: "Migrate file storage to IndexedDB", done: false, due: null, high: false, label: "Someday", created: dRel(-3) },
-  { id: uid(), text: "Write portfolio README v2", done: true, doneAt: dRel(0), due: dRel(0), high: false, created: dRel(-2) },
+  /* feature showcases: a recurring task and one broken into subtasks */
+  { id: uid(), text: "Weekly review — plan the week ahead", done: false, due: dRel(1), high: false, recur: "weekly", created: dRel(-13) },
+  { id: uid(), text: "Prepare the launch demo", done: false, due: dRel(3), high: true, created: dRel(-2),
+    subs: [
+      { id: uid(), text: "Write the 60-second script", done: true },
+      { id: uid(), text: "Record the screen capture", done: true },
+      { id: uid(), text: "Cut and caption the clip", done: false },
+    ] },
+  /* a fortnight of finished work with an uneven daily rhythm */
+  ...[[0, 2], [1, 1], [2, 3], [3, 0], [4, 1], [5, 2], [6, 0], [7, 1], [8, 3], [9, 0], [10, 2], [11, 1], [12, 0], [13, 1]]
+    .flatMap(([ago, n], di) => Array.from({ length: n }, (_, i) => ({
+      id: uid(), text: DONE_RECENT[(di * 2 + i) % DONE_RECENT.length], done: true,
+      doneAt: dRel(-ago), due: dRel(-ago), high: (ago + i) % 5 === 0, created: dRel(-ago - 2),
+    }))),
+  /* earlier weeks, months and years so Weekly/Monthly/Yearly ranges move too */
+  ...[-17, -20, -25, -32, -39, -46, -60, -85, -110, -150, -210, -280, -370, -430, -540].map((d, i) => ({
+    id: uid(), text: DONE_OLDER[i % DONE_OLDER.length], done: true,
+    doneAt: dRel(d), due: dRel(d), high: false, created: dRel(d - 3),
+  })),
 ]);
 
 /* v1 → v2 migration: flatten lists into tasks; list names inform dates/labels */

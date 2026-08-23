@@ -51,10 +51,16 @@ const emptyFinance = {
    budgets and bills always look alive. Delete anything freely. */
 const dRel = (days) => { const t = new Date(); t.setDate(t.getDate() + days); return t.toISOString().slice(0, 10); };
 const monthStart = (offset) => { const t = new Date(); return new Date(t.getFullYear(), t.getMonth() + offset, 1).toISOString().slice(0, 10); };
+/* one sample card so statement-import source tagging has something to show */
+const SAMPLE_CARD_ID = "pm-sample-meridian";
 const sampleFinance = () => ({
   expenses: [
-    { id: uid(), desc: "Groceries — weekly run", amount: 82.4, cat: "Food", date: dRel(-1) },
-    { id: uid(), desc: "Coffee", amount: 4.5, cat: "Food", date: dRel(0) },
+    { id: uid(), desc: "Groceries — weekly run", amount: 82.4, cat: "Food", date: dRel(-1), time: "18:42" },
+    { id: uid(), desc: "Coffee", amount: 4.5, cat: "Food", date: dRel(0), time: "08:15" },
+    /* rows "imported from a statement": tagged with the card + time of day */
+    { id: uid(), desc: "STARLIGHT COFFEE ROASTERS", amount: 5.75, cat: "Food", date: dRel(-2), time: "08:41", pay: SAMPLE_CARD_ID },
+    { id: uid(), desc: "UBER *TRIP", amount: 14.6, cat: "Transport", date: dRel(-2), time: "13:05", pay: SAMPLE_CARD_ID },
+    { id: uid(), desc: "NETFLIX.COM SUBSCRIPTION", amount: 15.99, cat: "Fun", date: dRel(-4), time: "21:47", pay: SAMPLE_CARD_ID },
     { id: uid(), desc: "Metro card top-up", amount: 25, cat: "Transport", date: dRel(-3) },
     { id: uid(), desc: "Gym membership", amount: 45, cat: "Health", date: dRel(-6) },
     { id: uid(), desc: "Movie night", amount: 28, cat: "Fun", date: dRel(-8) },
@@ -68,6 +74,13 @@ const sampleFinance = () => ({
     { id: uid(), desc: "Groceries", amount: 68, cat: "Food", date: dRel(-60) },
     { id: uid(), desc: "Taxi", amount: 18, cat: "Transport", date: dRel(-69) },
     { id: uid(), desc: "Books", amount: 42, cat: "Shopping", date: dRel(-55) },
+    /* deeper history so the yearly spending chart has real ups and downs */
+    { id: uid(), desc: "Flight — long weekend", amount: 240, cat: "Fun", date: dRel(-96) },
+    { id: uid(), desc: "Winter coat", amount: 145, cat: "Shopping", date: dRel(-128) },
+    { id: uid(), desc: "Annual insurance", amount: 380, cat: "Bills", date: dRel(-170) },
+    { id: uid(), desc: "Concert tickets", amount: 95, cat: "Fun", date: dRel(-214) },
+    { id: uid(), desc: "Dentist", amount: 160, cat: "Health", date: dRel(-260) },
+    { id: uid(), desc: "Groceries", amount: 71.3, cat: "Food", date: dRel(-300) },
   ],
   bills: [
     { id: uid(), title: "Rent", amount: 1200, due: monthStart(1), paid: false, recur: "monthly" },
@@ -81,7 +94,9 @@ const sampleFinance = () => ({
     { id: uid(), source: "Salary", amount: 4200, date: monthStart(0) },
     { id: uid(), source: "Freelance — landing page", amount: 350, date: dRel(-7) },
     { id: uid(), source: "Salary", amount: 4200, date: monthStart(-1) },
+    { id: uid(), source: "Freelance — logo refresh", amount: 220, date: dRel(-38) },
     { id: uid(), source: "Salary", amount: 4200, date: monthStart(-2) },
+    { id: uid(), source: "Marketplace payout", amount: 90, date: dRel(-75) },
   ],
   budgets: { overall: 2500, byCat: { Food: 300, Shopping: 150, Fun: 100, Transport: 80 } },
   goals: [
@@ -101,6 +116,8 @@ export const PAY_KINDS = [
 const DEFAULT_PAY_METHODS = [
   { id: "pm-" + uid(), name: "Cash", kind: "cash" },
   { id: "pm-" + uid(), name: "Visa ···· 4242", kind: "credit" },
+  /* matches the statement-import sample rows above (fictional bank) */
+  { id: SAMPLE_CARD_ID, name: "Meridian Bank ···· 4821", kind: "card" },
 ];
 
 /* migrate any stored shape (v1 or partial) up to schema v2.
