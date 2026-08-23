@@ -11,7 +11,7 @@ from .db import engine
 from .errors import init_error_reporting
 from .observability import configure_logging, log, request_context, unhandled_exception_handler
 from .ratelimit import close_redis, get_redis, rate_limit
-from .routers import account, ai, boards, files, finance, items, sync, tags, todos
+from .routers import account, ai, boards, calendar, files, finance, items, sync, tags, todos
 
 
 @asynccontextmanager
@@ -89,7 +89,8 @@ app.add_middleware(
 app.add_exception_handler(Exception, unhandled_exception_handler)
 
 for r in (items.router, todos.router, boards.router, finance.router,
-          tags.router, ai.router, sync.router, files.router, account.router):
+          tags.router, ai.router, sync.router, files.router, account.router,
+          calendar.router):
     app.include_router(r)
 
 

@@ -20,8 +20,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..db import get_session
 from ..deps import current_user_id
 from ..models import (
-    Bill, Board, BoardColumn, Budget, Card, CustomTag, Embedding, Event,
-    Expense, Goal, Income, Item, PayMethod, Sprint, Task, User,
+    Bill, Board, BoardColumn, Budget, CalendarAccount, Card, CustomTag,
+    Embedding, Event, Expense, Goal, Income, Item, PayMethod, Sprint, Task, User,
 )
 from ..storage import delete_object, storage_enabled
 
@@ -89,6 +89,13 @@ async def export_account(
         "budgets": _rows(await _all(session, Budget, Budget.user_id == user)),
         "goals": _rows(await _all(session, Goal, Goal.user_id == user)),
         "tags": _rows(await _all(session, CustomTag, CustomTag.user_id == user)),
+        # Connected calendars, without the tokens — those are credentials, not
+        # the user's own data, and never belong in an export.
+        "calendar_accounts": [
+            {"id": a.id, "provider": a.provider, "external_email": a.external_email,
+             "connected_at": a.created_at.isoformat() if a.created_at else None}
+            for a in await _all(session, CalendarAccount, CalendarAccount.user_id == user)
+        ],
     }
     counts = {k: len(v) for k, v in payload.items() if isinstance(v, list)}
     payload["counts"] = counts
@@ -146,8 +153,9 @@ async def delete_account(
             await session.execute(sql_delete(BoardColumn).where(BoardColumn.board_id.in_(board_ids)))
         await session.execute(sql_delete(Sprint).where(Sprint.board_id.in_(board_ids)))
 
+    # CalendarAccount deletes cascade their events (FK ON DELETE CASCADE).
     for model in (Board, Embedding, Item, Task, Expense, Bill, Income,
-                  PayMethod, Budget, Goal, CustomTag, Event):
+                  PayMethod, Budget, Goal, CustomTag, Event, CalendarAccount):
         res = await session.execute(sql_delete(model).where(model.user_id == user))
         counts[model.__tablename__] = res.rowcount
 
