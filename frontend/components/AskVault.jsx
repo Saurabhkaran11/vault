@@ -260,7 +260,7 @@ export default function AskVault({ items, open, onClose, onGoto, onOpenSettings 
         <div className="av-body">
           {!aiEnabled() && !serverAI && (
             <div className="av-note">
-              🔑 AI is off — <button className="av-link" onClick={() => { onClose(); onOpenSettings(); }}>add your Anthropic API key in Settings</button> to ask questions.
+              🔑 AI is off — <button className="av-link" onClick={() => { onClose(); onOpenSettings(); }}>set up an AI model in Settings</button> to ask questions.
               Your key stays in this browser only.
             </div>
           )}

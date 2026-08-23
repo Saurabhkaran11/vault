@@ -110,7 +110,7 @@ export function aiEnabled() {
 
 function client() {
   const { apiKey } = getAIConfig();
-  if (!apiKey) throw new AIError("no_key", "Add your Anthropic API key in Settings (avatar menu) to enable AI features.");
+  if (!apiKey) throw new AIError("no_key", "Set up an AI model in Settings to enable AI features.");
   return new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
 }
 

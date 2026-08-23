@@ -1289,7 +1289,7 @@ export default function App() {
               <button className="menu-item" onClick={() => { setHelpOpen(true); setMenuOpen(false); }}>
                 ⌨ Keyboard shortcuts <span className="menukey kbd">?</span>
               </button>
-              <div className="menu-foot">Vault · saved on this device and synced to your account</div>
+              <div className="menu-foot">{hasVerifiedIdentity() ? "Vault · saved on this device and synced to your account" : "Vault · saved in this browser only"}</div>
             </div>
           )}
         </div>
