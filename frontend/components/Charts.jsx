@@ -57,6 +57,46 @@ export function weekLabels(weeks = 8) {
   });
 }
 
+/* Bucket a list of ISO dates by the dashboard's selected range, returning
+ * {values, labels} ready for MiniBars. Day → last 14 days, week → last 8
+ * weeks, month → last 12 months, year → last 5 years. */
+const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+export function rangeSeries(dates, range = "week") {
+  const now = new Date();
+  const isoOf = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  if (range === "day") {
+    const buckets = Array.from({ length: 14 }, (_, i) => {
+      const d = new Date(now); d.setDate(now.getDate() - (13 - i));
+      return { iso: isoOf(d), label: `${d.getDate()}/${d.getMonth() + 1}`, count: 0 };
+    });
+    const map = Object.fromEntries(buckets.map((b) => [b.iso, b]));
+    dates.forEach((dt) => { if (map[dt]) map[dt].count++; });
+    return { values: buckets.map((b) => b.count), labels: buckets.map((b) => b.label) };
+  }
+  if (range === "month") {
+    const buckets = Array.from({ length: 12 }, (_, i) => {
+      const d = new Date(now.getFullYear(), now.getMonth() - (11 - i), 1);
+      return { y: d.getFullYear(), m: d.getMonth(), label: MON[d.getMonth()], count: 0 };
+    });
+    dates.forEach((dt) => {
+      const d = new Date(dt + "T00:00:00");
+      const k = buckets.findIndex((b) => b.y === d.getFullYear() && b.m === d.getMonth());
+      if (k >= 0) buckets[k].count++;
+    });
+    return { values: buckets.map((b) => b.count), labels: buckets.map((b) => b.label) };
+  }
+  if (range === "year") {
+    const buckets = Array.from({ length: 5 }, (_, i) => ({ y: now.getFullYear() - (4 - i), count: 0 }));
+    dates.forEach((dt) => {
+      const y = new Date(dt + "T00:00:00").getFullYear();
+      const k = buckets.findIndex((b) => b.y === y);
+      if (k >= 0) buckets[k].count++;
+    });
+    return { values: buckets.map((b) => b.count), labels: buckets.map((b) => String(b.y)) };
+  }
+  return { values: weekSeries(dates, 8), labels: weekLabels(8) };
+}
+
 /* Compact weekly bar chart — one series, aggregated per week, so it stays
  * readable no matter how many raw events land in a day. */
 export function MiniBars({ values, labels, color = "var(--moss)", height = 110 }) {

@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { SECTIONS, fmtStamp, daysAgo, today } from "@/lib/seed";
 import { useStore } from "@/hooks/useStore";
-import { Donut, MiniBars, weekSeries, weekLabels } from "./Charts";
+import { Donut, MiniBars, rangeSeries } from "./Charts";
 import GraphView from "./GraphView";
 import ItemRow, { TagAdder } from "./ItemRow";
 import { Ic } from "./Icons";
@@ -694,7 +694,8 @@ export default function App() {
         overdueBills: (fin.bills || []).filter((b) => !b.paid && daysAgo(b.due) > 0).length,
         pendingBillsTotal: (fin.bills || []).filter((b) => !b.paid).reduce((a, b) => a + (+b.amount || 0), 0),
         inbox: items.filter((i) => i.status === "Inbox").length,
-        doneWeeks: weekSeries(tasks.filter((t) => t.done && t.doneAt).map((t) => t.doneAt), 8),
+        doneDates: tasks.filter((t) => t.done && t.doneAt).map((t) => t.doneAt),
+        expensesRaw: (fin.expenses || []).map((e) => ({ date: e.date, amt: +e.amount || 0 })),
         ins: buildInsights(items, tasks, fin, t0),
       });
     } catch { setPulse(null); }
@@ -866,6 +867,22 @@ export default function App() {
   const openTag = (t) => { setTag(t); setView("tag"); setAdding(false); setQ(""); setDateFilter(""); setPageId(null); };
   const openSection = (k) => { setView(k); setTag(null); setAdding(false); setQ(""); setDateFilter(""); setPageId(null); };
   const goView = (v) => { setView(v); setTag(null); setAdding(false); setPageId(null); };
+
+  /* Dashboard time range — the Daily/Weekly/Monthly/Yearly tab. Drives the
+     activity chart's buckets and the "this period" rollup; "Needs you now"
+     ignores it because it's always about right now. */
+  const range = profile.range || "week";
+  const RANGES = [["day", "Daily"], ["week", "Weekly"], ["month", "Monthly"], ["year", "Yearly"]];
+  const RANGE_WORD = { day: "today", week: "this week", month: "this month", year: "this year" };
+  const RANGE_UNIT = { day: "day", week: "week", month: "month", year: "year" };
+  const inRange = (iso) => {
+    if (!iso) return false;
+    const d = new Date(iso + "T00:00:00"), n = new Date();
+    if (range === "day") return iso === today();
+    if (range === "week") return daysAgo(iso) < 7;
+    if (range === "month") return d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth();
+    return d.getFullYear() === n.getFullYear();
+  };
   /* jump to a specific item in its own section, scroll to it and flash it */
   const goto = (it) => {
     openSection(it.type);
@@ -1353,6 +1370,28 @@ export default function App() {
             <h2 className="display">Your collection, at a glance</h2>
             <p className="sub">Search everything with <span className="kbd">Ctrl</span>+<span className="kbd">K</span> — here's just what matters today.</p>
 
+            {pulse?.ins && (
+              <div className="rangebar">
+                <div className="doctabs" role="tablist" aria-label="Time range">
+                  {RANGES.map(([k, label]) => (
+                    <button key={k} className={range === k ? "on" : ""} role="tab" aria-selected={range === k}
+                      onClick={() => setProfile((p) => ({ ...p, range: k }))}>{label}</button>
+                  ))}
+                </div>
+                {(() => {
+                  const done = pulse.doneDates.filter(inRange).length;
+                  const saved = items.filter((i) => inRange(i.date)).length;
+                  const spent = pulse.expensesRaw.filter((e) => inRange(e.date)).reduce((a, e) => a + e.amt, 0);
+                  const sym = pulse.ins.money.sym;
+                  return (
+                    <span className="rangeroll mono">
+                      {RANGE_WORD[range]}: <b>{done}</b> finished · <b>{saved}</b> saved · <b>{sym}{Math.round(spent).toLocaleString()}</b> spent
+                    </span>
+                  );
+                })()}
+              </div>
+            )}
+
             {ob && !ob.dismissed && ob.choice && (() => {
               let boardsOwn = false;
               try { boardsOwn = (JSON.parse(localStorage.getItem("vault.boards.v1") || "{}").boards || []).some((b) => !b.seeded); } catch {}
@@ -1450,15 +1489,20 @@ export default function App() {
               );
             })()}
 
-            {pulse?.doneWeeks && pulse.doneWeeks.some((n) => n > 0) && (
-              <div className="card">
-                <div className="wstrip-head">
-                  <h3 style={{ margin: 0 }}>Tasks finished per week</h3>
-                  <span className="cardsub mono">last 8 weeks · your momentum</span>
+            {pulse?.doneDates && (() => {
+              const { values, labels } = rangeSeries(pulse.doneDates, range);
+              if (!values.some((n) => n > 0)) return null;
+              const span = { day: "last 14 days", week: "last 8 weeks", month: "last 12 months", year: "last 5 years" }[range];
+              return (
+                <div className="card">
+                  <div className="wstrip-head">
+                    <h3 style={{ margin: 0 }}>Tasks finished per {RANGE_UNIT[range]}</h3>
+                    <span className="cardsub mono">{span} · your momentum</span>
+                  </div>
+                  <MiniBars values={values} labels={labels} color="var(--moss)" />
                 </div>
-                <MiniBars values={pulse.doneWeeks} labels={weekLabels(8)} color="var(--moss)" />
-              </div>
-            )}
+              );
+            })()}
 
             <div className="bar">
               <input ref={filterRef} placeholder="Search your whole vault — notes, videos, books, docs, #tags…  ( / )"

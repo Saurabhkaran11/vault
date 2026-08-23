@@ -775,6 +775,11 @@ img.fpreview{height:auto}
 .btabs-actions{display:flex; align-items:center; gap:8px; flex-wrap:wrap}
 .ctype-tabs{margin-bottom:16px}
 
+/* Dashboard time-range tab + rollup */
+.rangebar{display:flex; align-items:center; gap:14px; flex-wrap:wrap; margin-bottom:16px}
+.rangeroll{font-size:12.5px; color:var(--ink-soft)}
+.rangeroll b{color:var(--ink); font-weight:650}
+
 /* Dashboard — "Needs you now" actionable list + "Your progress" bars */
 .needlist{display:flex; flex-direction:column}
 .needrow{display:flex; align-items:center; justify-content:space-between; gap:10px; width:100%; background:none; border:none; text-align:left; padding:10px 6px; cursor:pointer; font-family:inherit; color:var(--ink); border-radius:8px}
