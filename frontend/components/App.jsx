@@ -27,6 +27,7 @@ import { emptyBlock } from "./NoteBlocks";
 import { downloadBackup, inspectBackup, applyBackup } from "@/lib/backup";
 import { AI_MODELS, OSS_PRESETS, OSS_MODEL_SUGGESTIONS, presetById, getAIConfig, setAIConfig, askText, askJSON } from "@/lib/ai";
 import { useAiReady } from "@/hooks/useAiReady";
+import CalendarConnect from "./CalendarConnect";
 import { getBackend, setBackend, backendHealthy, fullSync, flushQueue, pendingMirrors, pullAll, applyPulled, hydrateIfEmpty, hasVerifiedIdentity } from "@/lib/api";
 import { storeFile } from "@/lib/files";
 import AccountSection from "./AccountSection";
@@ -1163,6 +1164,9 @@ export default function App() {
                   <span>📅 Calendar events imported</span>
                   <span className="mono">{(() => { try { return (JSON.parse(localStorage.getItem("vault.calendar.v1") || "{}").events || []).length; } catch { return 0; } })()}</span>
                 </div>
+
+                <CalendarConnect />
+
                 <button className="menu-item" onClick={() => { setSettingsOpen(false); openSection("doc"); }}>
                   ＋ Link a Google Doc / Sheet / Drive / Excel file <span className="menukey">→ Documents</span>
                 </button>
@@ -1170,7 +1174,7 @@ export default function App() {
                   ＋ Import Google / Apple calendar (.ics) <span className="menukey">→ To-dos</span>
                 </button>
                 <div className="menu-foot" style={{ border: "none", marginTop: 4, paddingTop: 0 }}>
-                  Links open in their own app; calendar imports show beside your to-dos. Live two-way sync (OAuth) arrives with the cloud release.
+                  Google Calendar connects above for live sync. Docs, Sheets and Drive are linked — paste a link in Documents; they open in their own app.
                 </div>
               </div>
 

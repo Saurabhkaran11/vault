@@ -12,11 +12,12 @@ touches the database. Without `calendar_token_key` the callback refuses to
 store a token rather than persist it in the clear.
 """
 
+import json
 import uuid
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -96,12 +97,19 @@ async def status(session: AsyncSession = Depends(get_session), user: str = Depen
 
 
 @router.get("/google/authorize")
-async def google_authorize(user: str = Depends(current_user_id)):
+async def google_authorize(request: Request, user: str = Depends(current_user_id)):
     """Start the Google consent flow. The callback arrives as a browser
-    redirect with no bearer token, so the caller's identity rides along in
-    `state` — encrypted, so it cannot be forged or read in transit."""
+    redirect with no bearer token, so the caller's identity AND the origin to
+    return them to ride along in `state` — encrypted, so neither can be forged
+    or read in transit. Carrying the origin means the callback lands back on
+    whatever front end started it (production or a preview URL), not a guess."""
     _require_google()
-    state = _fernet().encrypt(f"{user}".encode()).decode()
+    origin = request.headers.get("origin") or ""
+    if not origin:
+        ref = request.headers.get("referer") or ""
+        p = urlparse(ref)
+        origin = f"{p.scheme}://{p.netloc}" if p.scheme and p.netloc else ""
+    state = _fernet().encrypt(json.dumps({"u": user, "o": origin}).encode()).decode()
     return {"url": google_auth_url(settings.google_client_id, settings.google_redirect_uri, state)}
 
 
@@ -121,7 +129,8 @@ async def google_callback(code: str | None = None, state: str | None = None,
     if not code or not state:
         raise HTTPException(400, "Missing code or state.")
     try:
-        user = _fernet().decrypt(state.encode()).decode()
+        data = json.loads(_fernet().decrypt(state.encode()).decode())
+        user, dest = data["u"], (data.get("o") or "")
     except Exception:
         raise HTTPException(400, "Invalid state.")
 
@@ -154,9 +163,12 @@ async def google_callback(code: str | None = None, state: str | None = None,
         session.add(acct)
     await session.commit()
 
-    # Back to the app; the frontend reads /calendar/status to reflect it.
-    dest = settings.cors_origins.split(",")[0].strip() or "/"
-    return RedirectResponse(f"{dest}/?calendar=connected")
+    # Back to the front end that started the flow (carried in state); fall back
+    # to the first non-wildcard configured origin if it wasn't captured.
+    if not dest:
+        dest = next((o.strip() for o in settings.cors_origins.split(",")
+                     if o.strip() and "*" not in o and o.strip().startswith("http")), "")
+    return RedirectResponse(f"{dest.rstrip('/')}/?calendar=connected")
 
 
 @router.get("/accounts")
