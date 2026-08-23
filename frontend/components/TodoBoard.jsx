@@ -151,7 +151,10 @@ export default function TodoBoard() {
   const [anchor, setAnchor] = useState(today());
   const [calEvents, setCalEvents] = useState([]);
   const [calMsg, setCalMsg] = useState(null);
+  const [gCal, setGCal] = useState(false);        // a Google Calendar is connected
+  const [pushMsg, setPushMsg] = useState(null);
   const icsRef = React.useRef(null);
+  const pushTimer = React.useRef(null);
   /* Calendar events shown on the grid come from two places: imported .ics
      files (local) and a connected Google Calendar (backend). Both are mapped
      to the same {date, summary, cal, time} shape the views already render. */
@@ -160,6 +163,8 @@ export default function TodoBoard() {
     if (!backendOn() || !hasVerifiedIdentity()) return;
     (async () => {
       try {
+        const s = await api("/calendar/status");
+        if (s.connected_accounts > 0) setGCal(true);
         const g = await api("/calendar/events");
         const mapped = (g || []).filter((e) => e.starts_at).map((e) => {
           const d = new Date(e.starts_at);
@@ -174,6 +179,35 @@ export default function TodoBoard() {
       } catch { /* not connected / offline — the .ics events still show */ }
     })();
   }, []);
+
+  /* Two-way: once a Google Calendar is connected, mirror to-dos to it. Debounced
+     so ticking done, editing, or rescheduling pushes the change (create/update/
+     delete the matching event) without a call per keystroke. */
+  const pushPayload = () => ({ tasks: tasks.map((t) => ({ id: t.id, text: t.text, due: t.due, done: t.done })) });
+  useEffect(() => {
+    if (!gCal) return;
+    clearTimeout(pushTimer.current);
+    pushTimer.current = setTimeout(() => {
+      api("/calendar/push-todos", { method: "POST", body: pushPayload() }).catch(() => {});
+    }, 1500);
+    return () => clearTimeout(pushTimer.current);
+  }, [tasks, gCal]);
+
+  const pushToGoogle = async () => {
+    setPushMsg("Pushing to Google…");
+    try {
+      const r = await api("/calendar/push-todos", { method: "POST", body: pushPayload() });
+      setPushMsg(`Pushed ${r.pushed} to Google Calendar · removed ${r.removed}.`);
+      setGCal(true);
+    } catch (e) {
+      setPushMsg(e?.status === 403
+        ? "Reconnect Google to allow calendar writes (Settings → Connected apps)."
+        : e?.status === 400 ? "Connect Google Calendar first (Settings → Connected apps)."
+        : "Couldn't push to Google — try again.");
+    }
+    setTimeout(() => setPushMsg(null), 6000);
+  };
+
   const dueOnDay = tasks.filter((t) => !t.done && t.due === anchor).sort((a, b) => (b.high ? 1 : 0) - (a.high ? 1 : 0));
   const doneOnDay = tasks.filter((t) => t.done && (t.doneAt === anchor || t.due === anchor));
 
@@ -277,6 +311,12 @@ export default function TodoBoard() {
             title="Import your Google / Apple / Outlook calendar — export it as .ics there, drop it here; events appear beside your to-dos">
             📅 Import calendar
           </button>
+          {gCal && (
+            <button className="kbtn" onClick={pushToGoogle}
+              title="Push your dated to-dos to Google Calendar — completing or deleting one updates it there too">
+              ↑ Push to Google
+            </button>
+          )}
           <input ref={icsRef} type="file" accept=".ics,text/calendar" hidden
             onChange={(e) => {
               const f = e.target.files?.[0];
@@ -286,6 +326,7 @@ export default function TodoBoard() {
         </span>
       </div>
       {calMsg && <div className="m" style={{ color: "var(--moss)", fontSize: 12, marginBottom: 8 }}>✓ {calMsg} — they show in Day, Week and Month views.</div>}
+      {pushMsg && <div className="m" style={{ color: "var(--moss)", fontSize: 12, marginBottom: 8 }}>{pushMsg}</div>}
 
       {mode === "day" ? (
         <>
