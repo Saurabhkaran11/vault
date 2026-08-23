@@ -34,6 +34,9 @@ jobs:
 
     env:
       DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+      # Separate flag so a step that overrides DATABASE_URL (the verify step
+      # points it at the scratch server) can't accidentally satisfy the gate.
+      HAS_SECRET: ${{ secrets.NEON_DATABASE_URL != '' }}
 
     steps:
       - uses: actions/checkout@v4
@@ -53,7 +56,7 @@ jobs:
           fi
 
       - name: Install PostgreSQL 17 client
-        if: ${{ env.DATABASE_URL != '' }}
+        if: ${{ env.HAS_SECRET == 'true' }}
         run: |
           sudo sh -c 'echo "deb https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
           curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/pgdg.gpg
@@ -61,7 +64,7 @@ jobs:
           sudo apt-get install -y -qq postgresql-client-17
 
       - name: Back up the database
-        if: ${{ env.DATABASE_URL != '' }}
+        if: ${{ env.HAS_SECRET == 'true' }}
         # BACKUP_BUCKET deliberately unset: the dump is left on disk so it can
         # be verified and archived as an artifact, no S3 required.
         run: |
@@ -69,14 +72,14 @@ jobs:
           echo "DUMP_FILE=$(ls -t /tmp/vault-*.dump | head -1)" >> "$GITHUB_ENV"
 
       - name: Verify the dump restores
-        if: ${{ env.DATABASE_URL != '' }}
+        if: ${{ env.HAS_SECRET == 'true' }}
         env:
           # Restore into the scratch server, using the dump just produced.
           DATABASE_URL: postgresql://postgres:scratch@localhost:5432/postgres
         run: bash backend/scripts/restore-check.sh
 
       - name: Archive the verified dump
-        if: ${{ env.DATABASE_URL != '' }}
+        if: ${{ env.HAS_SECRET == 'true' }}
         uses: actions/upload-artifact@v4
         with:
           name: vault-db-backup-${{ github.run_id }}
