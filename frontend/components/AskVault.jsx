@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { SECTIONS, fmtStamp } from "@/lib/seed";
-import { askAnywhere, aiEnabled, serverAIStatus } from "@/lib/ai";
+import { askAnywhere, aiEnabled, serverAIStatus, getAIConfig } from "@/lib/ai";
 import { SCOPES, FORMATS, formatById, buildPrompt, canUseServerSearch, retrieveFromServer, isListingQuestion, catalogue, isFinanceQuestion, financeAnalysis, financeFacts } from "@/lib/ask";
 import { Ic } from "./Icons";
 
@@ -102,9 +102,10 @@ export default function AskVault({ items, open, onClose, onGoto, onOpenSettings 
 
   if (!open) return null;
 
-  const ask = async () => {
-    const question = q.trim();
+  const ask = async (qOverride) => {
+    const question = (typeof qOverride === "string" ? qOverride : q).trim();
     if (!question || busy) return;
+    setQ(question);
     setBusy(true); setError(null); setAnswer(null); setListing(null); setFinance(null);
 
     /* Money questions are arithmetic over every expense against every budget,
@@ -223,6 +224,12 @@ export default function AskVault({ items, open, onClose, onGoto, onOpenSettings 
       );
     });
 
+  const cfg = getAIConfig();
+  const modelLabel = answeredBy === "browser"
+    ? (cfg.provider === "oss" ? (cfg.ossModel || "your local model") : (cfg.model || "your model"))
+    : (answeredBy && answeredBy !== "server" ? answeredBy : "your Vault server");
+  const SUGGESTS = ["Summarize my latest notes", "What tasks are due this week?", "How much did I spend this month?", "List all my documents"];
+
   return (
     <div className="pal-overlay" onClick={onClose} role="dialog" aria-label="Ask your Vault">
       <div className="pal askvault" onClick={(e) => e.stopPropagation()}>
@@ -337,7 +344,14 @@ export default function AskVault({ items, open, onClose, onGoto, onOpenSettings 
           )}
           {answer && (
             <>
+              <div className="av-answer-head mono">✦ Answer · grounded in your vault</div>
               <div className="av-answer">{renderAnswer(answer)}</div>
+              <div className="av-model">
+                <span className={`av-model-pill ${answeredBy === "browser" ? "own" : "srv"}`}>
+                  {answeredBy === "browser" ? "✦ Answered with your own AI key" : "✦ Answered by your Vault AI"}
+                </span>
+                <span className="av-model-note">{modelLabel}{sources.length ? ` · ${sources.length} source${sources.length === 1 ? "" : "s"} cited` : " · computed from your data"}</span>
+              </div>
               {/* The Documents section renders what THIS browser holds, while
                   a server answer draws on everything synced. When they differ
                   the user sees the app and the AI contradict each other, so
@@ -368,11 +382,18 @@ export default function AskVault({ items, open, onClose, onGoto, onOpenSettings 
               </div>
             </>
           )}
-          {!answer && !busy && !error && (aiEnabled() || serverAI) && (
-            <div className="av-note">
-              {canUseServerSearch()
-                ? "Answers come only from what you've saved — including the text inside uploaded PDFs and Word files — with citations you can click."
-                : "Answers come only from what you've saved. Offline search reads titles and notes; turn on Backend sync to also search inside uploaded documents."}
+          {!answer && !busy && !error && !finance && !listing && (aiEnabled() || serverAI) && (
+            <div className="av-empty">
+              <div className="av-note">
+                {canUseServerSearch()
+                  ? "Answers come only from what you've saved — including the text inside uploaded PDFs and Word files — with citations you can click."
+                  : "Answers come only from what you've saved. Offline search reads titles and notes; turn on Backend sync to also search inside uploaded documents."}
+              </div>
+              <div className="av-suggests">
+                {SUGGESTS.map((s) => (
+                  <button key={s} type="button" className="av-suggest" onClick={() => ask(s)}>{s}</button>
+                ))}
+              </div>
             </div>
           )}
         </div>

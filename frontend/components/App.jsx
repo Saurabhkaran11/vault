@@ -10,6 +10,7 @@ import { Ic } from "./Icons";
 import QuickCapture from "./QuickCapture";
 import { initOnboarding, setOB, startClean, WelcomeModal, ChecklistCard } from "./Onboarding";
 import { KEY_ACTIONS, NAV_ACTIONS, DEFAULT_KEYS, getKeymap, setKeymap, resetKeymap, validateKey } from "@/lib/keymap";
+import { ACCENTS, DEFAULT_ACCENT, applyAccent } from "@/lib/accents";
 import { getCustomTags, addCustomTag, removeCustomTag, normalizeTag } from "@/lib/tags";
 import { REPORTS, downloadReport, openReport } from "@/lib/report";
 import { downloadICS } from "@/lib/ics";
@@ -618,10 +619,12 @@ export default function App() {
     } catch {}
   }, [hydrated]);
 
-  /* dark mode (top-requested PKM feature) */
+  /* dark mode (top-requested PKM feature) + user-selected accent colour */
   useEffect(() => {
-    document.documentElement.setAttribute("data-theme", profile.theme === "dark" ? "dark" : "light");
-  }, [profile.theme]);
+    const theme = profile.theme === "dark" ? "dark" : "light";
+    document.documentElement.setAttribute("data-theme", theme);
+    applyAccent(profile.accent || DEFAULT_ACCENT, theme);
+  }, [profile.theme, profile.accent]);
 
   /* autosave indicator */
   const [saveState, setSaveState] = useState("Saved ✓");
@@ -1026,6 +1029,26 @@ export default function App() {
                 <button className="menu-item" onClick={() => setProfile({ ...profile, theme: profile.theme === "dark" ? "light" : "dark" })}>
                   {profile.theme === "dark" ? "☀ Light mode" : "◐ Dark mode"} <span className="menukey kbd">{keymap.theme.toUpperCase()}</span>
                 </button>
+
+                <div className="accent-pick">
+                  <div className="accent-lead">
+                    <span>Accent colour</span>
+                    <span className="cardsub mono">{(ACCENTS.find((a) => a.id === (profile.accent || DEFAULT_ACCENT)) || ACCENTS[0]).name}</span>
+                  </div>
+                  <div className="accent-swatches" role="group" aria-label="Accent colour">
+                    {ACCENTS.map((ac) => {
+                      const on = (profile.accent || DEFAULT_ACCENT) === ac.id;
+                      return (
+                        <button key={ac.id} type="button"
+                          className={"accent-sw" + (on ? " on" : "")}
+                          style={{ background: ac.light.a }}
+                          aria-pressed={on} aria-label={ac.name} title={ac.name}
+                          onClick={() => setProfile({ ...profile, accent: ac.id })} />
+                      );
+                    })}
+                  </div>
+                </div>
+
                 <button className="menu-item" onClick={() => { setHelpOpen(true); setSettingsOpen(false); }}>
                   ⌨ Keyboard shortcuts <span className="menukey kbd">?</span>
                 </button>
@@ -1267,6 +1290,10 @@ export default function App() {
 
         {open && (
           <div className="foot">
+            <div className="trust-chips">
+              <span className="trust-chip"><span className="tc-dot ok" aria-hidden="true" />Local-first · your data</span>
+              <span className="trust-chip"><span className="tc-dot accent" aria-hidden="true" />{aiReady ? "AI on your key" : "Bring your own AI"}</span>
+            </div>
             Data lives in this browser (localStorage).
             <div style={{ marginTop: 6 }}>
               <button onClick={doExport}>⬇ Export backup</button>
@@ -1452,10 +1479,13 @@ export default function App() {
                         pulse.inbox && { k: "inbox", label: "Inbox to sort", n: pulse.inbox, tone: "neutral", go: () => goView("all") },
                       ].filter(Boolean);
                       return rows.length ? (
-                        <div className="needlist">
+                        <div className="needcards">
                           {rows.map((r) => (
-                            <button key={r.k} className="needrow" onClick={r.go} title={`Open — ${r.label}`}>
-                              <span className="need-txt">{r.label}{r.sub && <small>{r.sub}</small>}</span>
+                            <button key={r.k} className={`needcard tone-${r.tone}`} onClick={r.go} title={`Open — ${r.label}`}>
+                              <span className="need-lead">
+                                <span className="need-label">{r.label}</span>
+                                {r.sub && <span className="need-sub">{r.sub}</span>}
+                              </span>
                               <span className={`need-cnt ${r.tone}`}>{r.n}</span>
                             </button>
                           ))}
