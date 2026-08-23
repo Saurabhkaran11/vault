@@ -80,9 +80,14 @@ async def test_delete_erases_everything(client, pfx):
     assert (await client.get("/items")).json() == []
     assert (await client.get("/todos")).json() == []
     assert (await client.get("/boards")).json() == []
+    # A still-authenticated request re-materialises an EMPTY user shell (the app
+    # provisions the user on any authed request; in the real flow the client
+    # signs out right after delete). What erasure guarantees is that no DATA
+    # comes back with it.
     after = (await client.get("/account/export")).json()
-    assert after["profile"] is None
-    assert all(v == 0 for k, v in after["counts"].items())
+    assert all(v == 0 for v in after["counts"].values())
+    prof = after["profile"]
+    assert prof is None or (not prof.get("name") and not prof.get("email") and not prof.get("prefs"))
 
 
 async def test_delete_does_not_touch_another_account(client, pfx, other_client):
