@@ -773,6 +773,7 @@ img.fpreview{height:auto}
 /* ---------- custom kanban boards */
 .btabs{display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:14px}
 .btabs-actions{display:flex; align-items:center; gap:8px; flex-wrap:wrap}
+.ctype-tabs{margin-bottom:16px}
 .board-empty{display:flex; flex-direction:column; align-items:center; gap:8px; text-align:center; padding:48px 20px; border:1px dashed var(--line); border-radius:14px; background:var(--paper-2,transparent); margin-top:4px}
 .board-empty-title{font-family:'Fraunces',serif; font-size:19px; font-weight:650; color:var(--ink)}
 .board-empty-sub{font-size:13px; color:var(--ink-soft); max-width:440px; line-height:1.5}

@@ -406,6 +406,11 @@ function SyncSection() {
   );
 }
 
+/* The four saved-item kinds share one list UI; the "Content" section unifies
+   them behind one nav item, with a type switcher and an "all" view. */
+const CONTENT_TYPES = Object.keys(SECTIONS);   // note, video, book, doc
+const isContentView = (v) => v === "all" || CONTENT_TYPES.includes(v);
+
 export default function App() {
   const { items: allItems, add, update, remove, exportJson, importJson, hydrated } = useStore();
   /* Apple Notes-style trash: deleting sets a `deleted` stamp instead of
@@ -787,7 +792,7 @@ export default function App() {
       if (kl === km.capture) { e.preventDefault(); setCapOpen(true); return; }
       if (kl === km.newItem) {
         e.preventDefault();
-        if (!(s.view in SECTIONS) && s.view !== "tag") openSection("note");
+        if (!(s.view in SECTIONS) && s.view !== "tag" && s.view !== "all") openSection("note");
         setPageId(null);
         setAdding(true);
         return;
@@ -810,6 +815,7 @@ export default function App() {
     { group: "GO TO", label: "Finance", hint: `G ${navKeyFor("finance")}`, keywords: "money expenses bills payments credit card", run: () => { setView("finance"); setTag(null); setAdding(false); setPageId(null); } },
     { group: "GO TO", label: "To-dos", hint: `G ${navKeyFor("todos")}`, keywords: "tasks board", run: () => { setView("todos"); setTag(null); setAdding(false); setPageId(null); } },
     { group: "GO TO", label: "Graph", hint: `G ${navKeyFor("graph")}`, keywords: "connections map", run: () => { setView("graph"); setTag(null); setAdding(false); setPageId(null); } },
+    { group: "GO TO", label: "Content — all saved items", hint: `G ${navKeyFor("all")}`, keywords: "everything notes videos library documents collection", run: () => { setView("all"); setTag(null); setAdding(false); setPageId(null); setQ(""); } },
     { group: "GO TO", label: "Notes", hint: `G ${navKeyFor("note")}`, keywords: "section", run: () => openSection("note") },
     { group: "GO TO", label: "YouTube", hint: `G ${navKeyFor("video")}`, keywords: "videos section", run: () => openSection("video") },
     { group: "GO TO", label: "Library", hint: `G ${navKeyFor("book")}`, keywords: "books pdfs reading section", run: () => openSection("book") },
@@ -818,7 +824,7 @@ export default function App() {
     { group: "GO TO", label: "Recently deleted", keywords: "trash bin restore deleted", run: () => { setView("trash"); setTag(null); setAdding(false); setPageId(null); } },
     { group: "ACTION", label: "✦ Ask your Vault (AI)", keywords: "ai ask question claude rag search answers", run: () => setAskOpen(true) },
     { group: "ACTION", label: "✦ Generate weekly digest (AI)", keywords: "ai digest review week summary", run: () => { setView("dash"); setTag(null); setAdding(false); setPageId(null); genDigest(); } },
-    { group: "ACTION", label: "New item", hint: "N", keywords: "add create capture", run: () => { if (!(view in SECTIONS) && view !== "tag") openSection("note"); setPageId(null); setAdding(true); } },
+    { group: "ACTION", label: "New item", hint: "N", keywords: "add create capture", run: () => { if (!(view in SECTIONS) && view !== "tag" && view !== "all") openSection("note"); setPageId(null); setAdding(true); } },
     { group: "ACTION", label: "Toggle dark / light theme", hint: "T", keywords: "mode appearance", run: () => setProfile((p) => ({ ...p, theme: p.theme === "dark" ? "light" : "dark" })) },
     { group: "ACTION", label: "Toggle sidebar", hint: "B", keywords: "collapse expand menu", run: () => setOpen((o) => !o) },
     { group: "ACTION", label: "Export backup (JSON)", hint: "E", keywords: "save download data", run: doExport },
@@ -875,6 +881,7 @@ export default function App() {
   const visible = items
     .filter((i) => {
       if (view === "tag") return i.tags.includes(tag);
+      if (view === "all") return CONTENT_TYPES.includes(i.type);
       if (view in SECTIONS) return i.type === view;
       return true;
     })
@@ -896,10 +903,9 @@ export default function App() {
     { k: "finance", label: "Finance", ic: "finance" },
     { k: "todos", label: "To-dos", ic: "todos" },
     { k: "graph", label: "Graph", ic: "graph" },
-    { k: "note", label: "Notes", ic: "note" },
-    { k: "video", label: "YouTube", ic: "video" },
-    { k: "book", label: "Library", ic: "book" },
-    { k: "doc", label: "Documents", ic: "doc" },
+    // Notes, YouTube, Library and Documents are the same thing — saved items —
+    // so they live behind one "Content" section with a type switcher inside.
+    { k: "all", label: "Content", ic: "note" },
     { k: "tags", label: "Tags", ic: "tag" },
   ].map((n) => ({ ...n, hint: `G then ${navKeyFor(n.k)}` }));
 
@@ -1185,7 +1191,7 @@ export default function App() {
         </button>
 
         {nav.map((n) => (
-          <button key={n.k} className={`navbtn ${view === n.k ? "on" : ""}`}
+          <button key={n.k} className={`navbtn ${(n.k === "all" ? isContentView(view) : view === n.k) ? "on" : ""}`}
             title={open ? n.hint : `${n.label} (${n.hint})`}
             onClick={() => n.k in SECTIONS
               ? openSection(n.k)
@@ -1699,24 +1705,43 @@ export default function App() {
           </>
         )}
 
-        {(view in SECTIONS || view === "tag") && pageItem && (
+        {(isContentView(view) || view === "tag") && pageItem && (
           <NotePage it={pageItem} onBack={() => setPageId(null)} onUpdate={updateStamped} onTag={openTag} folders={folders}
             allItems={items} onGoto={goto} />
         )}
 
-        {(view in SECTIONS || view === "tag") && !pageItem && (
+        {(isContentView(view) || view === "tag") && !pageItem && (
           <>
-            <div className="crumb">{view === "tag" ? "Project" : "Section"}</div>
-            <h2 className="display">{view === "tag" ? `#${tag}` : SECTIONS[view].label}</h2>
+            <div className="crumb">{view === "tag" ? "Project" : view === "all" ? "Collection" : "Section"}</div>
+            <h2 className="display">{view === "tag" ? `#${tag}` : view === "all" ? "Content" : SECTIONS[view].label}</h2>
             <p className="sub">
               {view === "tag"
                 ? `Everything linked to “${tag}” across notes, videos, PDFs and documents.`
-                : view === "video"
-                  ? "Saved videos — press “Watch here” to play without leaving Vault."
-                  : view === "book"
-                    ? "Your reading hub — track progress on each book/PDF and link the notes, videos and docs that belong with it."
-                    : "Click any #tag to jump to that project. Click item text to edit."}
+                : view === "all"
+                  ? "Everything you've saved — notes, videos, reading and documents, in one place. Filter by type below."
+                  : view === "video"
+                    ? "Saved videos — press “Watch here” to play without leaving Vault."
+                    : view === "book"
+                      ? "Your reading hub — track progress on each book/PDF and link the notes, videos and docs that belong with it."
+                      : "Click any #tag to jump to that project. Click item text to edit."}
             </p>
+
+            {/* Type switcher — the four saved-item kinds, unified. "All" shows
+                everything mixed; each type shows its own view and extras. */}
+            {isContentView(view) && (
+              <div className="doctabs ctype-tabs" role="tablist" aria-label="Content type">
+                <button className={view === "all" ? "on" : ""} role="tab" aria-selected={view === "all"}
+                  onClick={() => { setView("all"); setTag(null); setAdding(false); setPageId(null); setQ(""); }}>
+                  All · {items.filter((i) => CONTENT_TYPES.includes(i.type)).length}
+                </button>
+                {CONTENT_TYPES.map((t) => (
+                  <button key={t} className={view === t ? "on" : ""} role="tab" aria-selected={view === t}
+                    onClick={() => openSection(t)}>
+                    {SECTIONS[t].label} · {items.filter((i) => i.type === t).length}
+                  </button>
+                ))}
+              </div>
+            )}
 
             {view === "tag" && (
               <div className="tagband">
@@ -1883,7 +1908,7 @@ export default function App() {
             )}
 
             {adding && (
-              <AddForm section={view} existingTags={[...new Set([...allTags, ...customTags])]}
+              <AddForm section={view === "all" || view === "tag" ? "note" : view} existingTags={[...new Set([...allTags, ...customTags])]}
                 onAdd={(it) => add(view === "tag" ? { ...it, tags: [...new Set([...it.tags, tag])] } : it)}
                 onClose={() => setAdding(false)} />
             )}

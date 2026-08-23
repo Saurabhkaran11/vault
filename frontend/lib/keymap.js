@@ -23,10 +23,11 @@ export const NAV_ACTIONS = [
   { id: "navFinance", label: "Finance", def: "f", view: "finance" },
   { id: "navTodos", label: "To-dos", def: "t", view: "todos" },
   { id: "navGraph", label: "Graph", def: "r", view: "graph" },
-  { id: "navNotes", label: "Notes", def: "n", view: "note" },
-  { id: "navVideo", label: "YouTube", def: "y", view: "video" },
-  { id: "navBook", label: "Library", def: "l", view: "book" },
-  { id: "navDoc", label: "Documents", def: "o", view: "doc" },
+  { id: "navContent", label: "Content (all saved items)", def: "c", view: "all" },
+  { id: "navNotes", label: "· Notes", def: "n", view: "note" },
+  { id: "navVideo", label: "· YouTube", def: "y", view: "video" },
+  { id: "navBook", label: "· Library", def: "l", view: "book" },
+  { id: "navDoc", label: "· Documents", def: "o", view: "doc" },
   { id: "navTags", label: "Tags", def: "a", view: "tags" },
 ];
 
