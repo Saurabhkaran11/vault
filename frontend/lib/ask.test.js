@@ -117,6 +117,13 @@ describe("financeAnalysis + financeFacts", () => {
     expect(facts).toContain("OVER by 150.00");
   });
 
+  it("includes all-time category totals so cross-period questions work", () => {
+    const facts = financeFacts(financeAnalysis("2026-08"));
+    expect(facts).toContain("All-time spending");
+    // Food all-time = 300 + 250 (Aug) + 999 (Jul) = 1549
+    expect(facts).toContain("Food: 1549.00");
+  });
+
   it("handles an empty finance store without throwing", () => {
     localStorage.clear();
     const a = financeAnalysis("2026-08");

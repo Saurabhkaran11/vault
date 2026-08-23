@@ -173,11 +173,23 @@ async function completeOSS({ system, prompt, maxTokens = 16000, outputFormat }) 
   return text;
 }
 
+/* Reasoning models (Nemotron, DeepSeek-R1, some local models) emit their
+ * chain-of-thought — often wrapped in <think>…</think> — ahead of the answer.
+ * Users want the answer, not the monologue, so strip it from every response.
+ * Belt-and-braces with the "detailed thinking off" system directive below. */
+export function stripReasoning(text) {
+  if (!text) return text;
+  return text
+    .replace(/<think(?:ing)?>[\s\S]*?<\/think(?:ing)?>/gi, "")
+    .replace(/^\s*(?:thought|thinking|reasoning)\s*:[\s\S]*?\n\s*\n/i, "")
+    .trim();
+}
+
 /* Core call. Server-side fallbacks are on by default so a safety-classifier
  * decline re-runs on Anthropic's recommended fallback model instead of failing. */
 async function complete(opts) {
-  if (getAIConfig().provider === "oss") return completeOSS(opts);
-  return completeAnthropic(opts);
+  const text = getAIConfig().provider === "oss" ? await completeOSS(opts) : await completeAnthropic(opts);
+  return stripReasoning(text);
 }
 
 async function completeAnthropic({ system, prompt, maxTokens = 16000, effort, outputFormat }) {
@@ -276,14 +288,18 @@ export async function serverAIStatus() {
 }
 
 async function completeViaServer({ system, messages, maxTokens }) {
-  const payload = [];
-  if (system) payload.push({ role: "system", content: system });
+  // "detailed thinking off" is Nemotron's switch to skip its reasoning trace;
+  // the plain-English lines steer every other model the same way. Harmless to
+  // providers that ignore them, and stripReasoning cleans up anything left.
+  const guard = "detailed thinking off\n\n" +
+    "Output only the final answer to the user. Do not show your reasoning, analysis, or chain-of-thought, and do not describe what you are doing — just give the answer.";
+  const payload = [{ role: "system", content: system ? `${system}\n\n${guard}` : guard }];
   payload.push(...messages);
   const res = await api("/ai/complete", {
     method: "POST",
     body: { messages: payload, max_tokens: maxTokens },
   });
-  return res?.text || "";
+  return stripReasoning(res?.text || "");
 }
 
 /**
