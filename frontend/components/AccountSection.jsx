@@ -1,8 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { SignOutButton, useUser } from "@clerk/nextjs";
+import { SignOutButton, useUser, useClerk } from "@clerk/nextjs";
 import { authEnabled } from "@/lib/authConfig";
+import { api } from "@/lib/api";
+import { BACKED_UP_STORES } from "@/lib/backup";
 
 /* Settings → account identity.
  *
@@ -47,10 +49,53 @@ function LocalOnlyAccount() {
 
 function SignedInAccount() {
   const { user, isLoaded } = useUser();
+  const { signOut } = useClerk();
   const [showEmail, setShowEmail] = useState(false);
+  const [busy, setBusy] = useState("");        // "export" | "delete" while a call is in flight
+  const [armed, setArmed] = useState(false);   // delete needs a second, deliberate click
+  const [err, setErr] = useState("");
 
   const email = user?.primaryEmailAddress?.emailAddress || "";
   const name = user?.fullName || user?.firstName || "";
+
+  /* Download everything the server holds for this account as one JSON file.
+     The backend does the gathering; we just save the response. */
+  async function exportData() {
+    setErr(""); setBusy("export");
+    try {
+      const data = await api("/account/export");
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `vault-account-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      setErr("Couldn't download your data — check your connection and try again.");
+    } finally {
+      setBusy("");
+    }
+  }
+
+  /* Permanent erasure. Two clicks (native confirm() is blocked in webviews),
+     then wipe this browser's copy too and sign out — nothing should linger
+     locally after the account is gone. */
+  async function deleteAccount() {
+    setErr("");
+    if (!armed) { setArmed(true); return; }
+    setBusy("delete");
+    try {
+      await api("/account", { method: "DELETE" });
+      for (const s of BACKED_UP_STORES) localStorage.removeItem(s.key);
+      await signOut();
+    } catch {
+      setErr("Couldn't delete your account — nothing was changed. Try again.");
+      setBusy(""); setArmed(false);
+    }
+  }
 
   return (
     <div className="set-sec">
@@ -79,6 +124,26 @@ function SignedInAccount() {
           <SignOutButton>
             <button className="menu-item">Sign out</button>
           </SignOutButton>
+
+          <div className="menu-sec" style={{ marginTop: 14 }}>Your data</div>
+          <button className="menu-item" onClick={exportData} disabled={busy === "export"}>
+            {busy === "export" ? "Preparing…" : "Download my data"}
+            <span className="menukey">everything we store</span>
+          </button>
+          <button className="menu-item danger" onClick={deleteAccount}
+            disabled={busy === "delete"}
+            onBlur={() => setArmed(false)}
+            style={armed ? { color: "var(--stamp)", fontWeight: 700 } : undefined}>
+            {busy === "delete" ? "Deleting…" : armed ? "Click again to permanently delete everything" : "Delete account"}
+            {!armed && <span className="menukey">erase account &amp; data</span>}
+          </button>
+          {armed && (
+            <div className="menu-foot" style={{ border: "none", marginTop: 2, paddingTop: 0 }}>
+              This removes your account and all its data from the server and this
+              browser. It cannot be undone.
+            </div>
+          )}
+          {err && <div className="kmerr" role="status" style={{ marginTop: 6 }}>{err}</div>}
         </>
       )}
     </div>
