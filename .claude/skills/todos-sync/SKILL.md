@@ -5,7 +5,7 @@ description: Mirror Vault to-dos to the FastAPI todos API — idempotent upsert,
 
 # To-dos sync
 
-Owned files: `frontend/components/TodoBoard.jsx` · `backend/app/routers/todos.py`.
+Owned files: `frontend/components/TaskBoard.jsx` · `backend/app/routers/todos.py`.
 Read `../backend-integration/SKILL.md` first.
 
 ## Backend work
@@ -15,7 +15,7 @@ exists for this user, update every field; else insert. Keep the
 `task.completed` event emit on the false→true done transition (it fires in
 update path today — preserve that behavior inside the upsert).
 
-## Frontend work (TodoBoard.jsx)
+## Frontend work (TaskBoard.jsx)
 
 Import `{ mirror }` from `@/lib/api`. Central choke point: `setTasks` is
 called from add/toggle/patch/del/clearDone/Resched. Mirror at each
@@ -34,7 +34,7 @@ ISO `YYYY-MM-DD` strings — pass through; convert undefined→null.
 1. POST insert → GET /todos has it; POST same id with done=true +
    done_at → still one row, done=true.
 2. agenda buckets reflect due dates.
-3. DELETE removes; `node --check` passes on TodoBoard.jsx.
+3. DELETE removes; `node --check` passes on TaskBoard.jsx.
 
 ## Status log
 
@@ -46,7 +46,7 @@ ISO `YYYY-MM-DD` strings — pass through; convert undefined→null.
   — verified it fires exactly once and that replaying the same done=true body
   does not duplicate it. `DELETE /todos/{id}` made idempotent too (missing row
   → `{ok:true}`), so retry-queue replays can't wedge `flushQueue` behind a 404.
-  TodoBoard.jsx imports `{ mirror }`, adds module-level `toApi()`, and mirrors
+  TaskBoard.jsx imports `{ mirror }`, adds module-level `toApi()`, and mirrors
   at every setTasks call site: add → POST upsert; patch (also covers toggle +
   reschedule, which route through it) → POST upsert with the updated task;
   del → DELETE; clearDone → one DELETE per completed task. Updaters stay pure;
@@ -55,6 +55,6 @@ ISO `YYYY-MM-DD` strings — pass through; convert undefined→null.
   done=true, done_at stamped; agenda buckets correct (overdue/today/upcoming/
   someday, done task excluded); DELETE removes, re-DELETE still 200. Syntax:
   `node --check` cannot parse `.jsx` (ERR_UNKNOWN_FILE_EXTENSION even on the
-  pristine file), so the gate run was: Next's bundled SWC parses TodoBoard.jsx
+  pristine file), so the gate run was: Next's bundled SWC parses TaskBoard.jsx
   (jsx:true) → compiled JS → `node --check` passes on that output. QA rows
   cleaned up afterward.

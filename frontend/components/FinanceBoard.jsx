@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { fmtStamp, today, daysAgo } from "@/lib/seed";
 import FinanceAnalytics from "./FinanceAnalytics";
 import FinanceBudgets from "./FinanceBudgets";
+import StatementImport from "./StatementImport";
 import FinanceGoals from "./FinanceGoals";
 import { askJSON } from "@/lib/ai";
 import { useAiReady } from "@/hooks/useAiReady";
@@ -266,12 +267,46 @@ export default function FinanceBoard() {
     return map;
   }, [fin.expenses, thisMonth]);
 
-  /* selected month's expenses grouped by day, newest first */
+  /* expense list view: one day / one week / a whole month, grouped by day —
+     each range has its own ‹ › walker so any past period is reachable */
+  const [expView, setExpView] = useState("month");
+  /* all walker date math in UTC — mixing local-midnight parsing with
+     toISOString() loses a day in any UTC-positive timezone (IST, CET…),
+     which made ‹ › skip or stick. UTC end-to-end matches today()'s ISO. */
+  const addDaysIso = (iso, n) => {
+    const d = new Date(iso + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() + n);
+    return d.toISOString().slice(0, 10);
+  };
+  const [selDay, setSelDay] = useState(today());
+  const shiftDay = (n) => setSelDay(addDaysIso(selDay, n));
+  const weekStartOf = (iso) => {
+    const d = new Date(iso + "T00:00:00Z");
+    return addDaysIso(iso, -((d.getUTCDay() + 6) % 7));   // back to Monday
+  };
+  const [selWeek, setSelWeek] = useState(() => weekStartOf(today()));
+  const shiftWeek = (n) => setSelWeek(addDaysIso(selWeek, n * 7));
+  const weekEnd = useMemo(() => addDaysIso(selWeek, 6), [selWeek]);
+  const thisYear = today().slice(0, 4);
+  const [selYear, setSelYear] = useState(thisYear);
+  const shiftYear = (n) => setSelYear(String(+selYear + n));
+  const yearLabel = selYear === thisYear ? "THIS YEAR" : selYear;
+  const weekLabel = selWeek === weekStartOf(today())
+    ? "THIS WEEK"
+    : `${fmtStamp(selWeek)} – ${fmtStamp(weekEnd)}`;
   const byDay = useMemo(() => {
+    const keep = (e) =>
+      expView === "day" ? e.date === selDay
+      : expView === "week" ? (e.date >= selWeek && e.date <= weekEnd)
+      : expView === "year" ? e.date.startsWith(selYear)
+      : e.date.startsWith(month);
     const map = {};
-    fin.expenses.filter((e) => e.date.startsWith(month)).forEach((e) => { (map[e.date] = map[e.date] || []).push(e); });
+    fin.expenses.filter(keep).forEach((e) => { (map[e.date] = map[e.date] || []).push(e); });
     return Object.entries(map).sort((a, b) => b[0].localeCompare(a[0]));
-  }, [fin.expenses, month]);
+  }, [fin.expenses, month, expView, selDay, selWeek, weekEnd, selYear]);
+  /* total for whatever slice the toggle shows — rendered under the list */
+  const shownTotal = useMemo(() => byDay.reduce((a, [, list]) => a + list.reduce((x, e) => x + e.amount, 0), 0), [byDay]);
+  /* bill card expanded via its ⓘ button */
+  const [infoBill, setInfoBill] = useState(null);
 
   const catTotals = useMemo(() => {
     const map = {};
@@ -298,6 +333,20 @@ export default function FinanceBoard() {
   };
   const incomeMonth = fin.incomes.filter((i) => i.date.startsWith(thisMonth)).reduce((a, i) => a + i.amount, 0);
   const incomesShown = fin.incomes.filter((i) => i.date.startsWith(month));
+
+  /* ---------- budget period (weekly / monthly / yearly caps) */
+  const budgetPeriod = fin.budgets?.period || "monthly";
+  const PERIOD_WORD = { weekly: "this week", monthly: "this month", yearly: "this year" };
+  const inBudgetPeriod = (d) =>
+    budgetPeriod === "weekly" ? (daysAgo(d) < 7 && daysAgo(d) >= 0)
+    : budgetPeriod === "yearly" ? d.startsWith(thisMonth.slice(0, 4))
+    : d.startsWith(thisMonth);
+  const spentPeriod = fin.expenses.filter((e) => inBudgetPeriod(e.date)).reduce((a, e) => a + e.amount, 0);
+  const spentByCatPeriod = useMemo(() => {
+    const m = {};
+    fin.expenses.filter((e) => inBudgetPeriod(e.date)).forEach((e) => { m[e.cat] = (m[e.cat] || 0) + e.amount; });
+    return m;
+  }, [fin.expenses, budgetPeriod]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ---------- bills (recurring + inline edit) */
   const [bTitle, setBTitle] = useState("");
@@ -390,6 +439,9 @@ export default function FinanceBoard() {
   const changeBudgets = (budgets) => {
     const prev = fin.budgets || { overall: null, byCat: {} };
     setFin((f) => ({ ...f, budgets }));
+    /* the backend budget API has no period concept — only the monthly set
+     * mirrors; weekly/yearly caps live in this browser */
+    if ((budgets.period || "monthly") !== "monthly") return;
     /* PUT per changed scope; a cleared cap mirrors as 0 (BudgetIn.cap_cents
      * is required — the UI already treats a 0/absent cap as "no cap"). */
     if ((prev.overall ?? null) !== (budgets.overall ?? null))
@@ -429,7 +481,69 @@ export default function FinanceBoard() {
     URL.revokeObjectURL(a.href);
   };
 
+  /* Excel export: an HTML table with an .xls name — Excel, Numbers and Google
+   * Sheets all open it natively, with no spreadsheet library shipped. */
+  const exportExcel = () => {
+    const esc = (v) => String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;");
+    const head = ["Type", "Date", "Description", "Category", "Payment method", "Amount", "Currency", "Status", "Due", "Recurrence"];
+    const rows = [];
+    fin.expenses.forEach((e) => rows.push(["Expense", e.date, e.desc, e.cat, methodName(e.pay) || "", e.amount, fin.currency, "", "", ""]));
+    fin.bills.forEach((b) => rows.push(["Bill", b.paidOn || "", b.title, "Bills", "", b.amount, fin.currency, b.paid ? "paid" : "pending", b.due, b.recur || "one-time"]));
+    fin.incomes.forEach((i) => rows.push(["Income", i.date, i.source, "", "", i.amount, fin.currency, "", "", ""]));
+    const html = `<html xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="utf-8"></head><body><table border="1"><tr>${head.map((h) => `<th>${h}</th>`).join("")}</tr>${rows.map((r) => `<tr>${r.map((c) => `<td>${esc(c)}</td>`).join("")}</tr>`).join("")}</table></body></html>`;
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([html], { type: "application/vnd.ms-excel" }));
+    a.download = `vault-finance-${today()}.xls`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+
+  /* Report export: a clean printable HTML summary — numbers, budgets, bills */
+  const exportReport = () => {
+    const esc = (v) => String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;");
+    const unpaid = fin.bills.filter((b) => !b.paid);
+    const catRows = Object.entries(spentByCat).sort((a, b) => b[1] - a[1])
+      .map(([c, v]) => `<tr><td>${esc(c)}</td><td class="r">${esc(fmt(v))}</td><td class="r">${fin.budgets?.byCat?.[c] ? esc(fmt(fin.budgets.byCat[c])) : "—"}</td></tr>`).join("");
+    const billRows = fin.bills.map((b) => `<tr><td>${esc(b.title)}</td><td class="r">${esc(fmt(b.amount))}</td><td>${esc(b.due)}</td><td>${b.paid ? "paid" : daysAgo(b.due) > 0 ? "OVERDUE" : "pending"}</td></tr>`).join("");
+    const html = `<meta charset="utf-8"><title>Vault finance report — ${today()}</title>
+<style>body{font-family:Georgia,serif;max-width:720px;margin:40px auto;color:#222;line-height:1.5}h1{font-size:24px}h2{font-size:17px;margin-top:28px}table{border-collapse:collapse;width:100%;font-size:14px}td,th{border-bottom:1px solid #ddd;padding:6px 8px;text-align:left}.r{text-align:right}.big{font-size:15px;margin:4px 0}</style>
+<h1>Vault — finance report</h1><p>Generated ${today()} · currency ${fin.currency || "USD"}</p>
+<h2>This month</h2>
+<p class="big">Spent: <b>${esc(fmt(outMonth))}</b> (${esc(fmt(spentMonth))} expenses + ${esc(fmt(paidMonth))} bills)</p>
+<p class="big">Income: <b>${esc(fmt(incomeMonth))}</b> · Saved: <b>${esc(fmt(savedMonth))}</b>${savingsRate !== null ? ` (${savingsRate}% savings rate)` : ""}</p>
+<p class="big">Pending payments: <b>${esc(fmt(pending))}</b> across ${unpaid.length} unpaid bill(s)</p>
+<h2>Spending by category (this month)</h2><table><tr><th>Category</th><th class="r">Spent</th><th class="r">Cap</th></tr>${catRows || "<tr><td colspan=3>No expenses yet</td></tr>"}</table>
+<h2>Bills</h2><table><tr><th>Bill</th><th class="r">Amount</th><th>Due</th><th>Status</th></tr>${billRows || "<tr><td colspan=4>No bills</td></tr>"}</table>
+<h2>Savings goals</h2>${(fin.goals || []).map((g) => `<p class="big">${esc(g.name)}: <b>${esc(fmt(g.saved))}</b> of ${esc(fmt(g.target))} (${Math.min(100, Math.round((g.saved / g.target) * 100))}%)</p>`).join("") || "<p>None set</p>"}`;
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([html], { type: "text/html" }));
+    a.download = `vault-finance-report-${today()}.html`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+
   const [tab, setTab] = useState("board"); // board | analytics
+
+  /* ＋ statement import — bulk-add extracted transactions as expenses. The
+     statement's bank/card becomes a payment method (found or created), so
+     every imported row is identifiable by its source in the ledger. */
+  const [stmtOpen, setStmtOpen] = useState(false);
+  const importTransactions = (rows, source) => {
+    let payId = null;
+    if (source) {
+      const existing = (fin.payMethods || []).find((m) => m.name.toLowerCase() === source.toLowerCase());
+      if (existing) payId = existing.id;
+      else {
+        const pm = { id: `pm-${uid()}`, name: source, kind: "card" };
+        payId = pm.id;
+        setFin((f) => ({ ...f, payMethods: [...(f.payMethods || []), pm] }));
+      }
+    }
+    const exps = rows.map((r) => ({ id: uid(), desc: r.name, amount: r.amount, cat: r.cat || "Other", date: r.date, ...(payId ? { pay: payId } : {}), ...(r.time ? { time: r.time } : {}) }));
+    setFin((f) => ({ ...f, expenses: [...exps, ...f.expenses] }));
+    exps.forEach((e) => mirror("/finance/expenses", { method: "POST", body: expToApi(e) }));
+    setSmartMsg({ ok: true, text: `Imported ${exps.length} transaction${exps.length === 1 ? "" : "s"}${source ? ` from ${source}` : ""} — each tagged with the source.` });
+  };
 
   /* ---------- ✦ natural-language smart add */
   const aiReady = useAiReady();
@@ -498,14 +612,24 @@ export default function FinanceBoard() {
         <div className="tile"><div className="k" style={{ color: "var(--gold)" }}>⧗ Pending payments</div><div className="n">{fmt(pending)}</div><div className="d">{overdue.length > 0 ? <b style={{ color: "var(--stamp)" }}>{overdue.length} overdue!</b> : `${fin.bills.filter((b) => !b.paid).length} open bill(s)`}{recurringMonthly > 0 && <> · ≈{fmt(Math.round(recurringMonthly))}/mo recurring</>}</div></div>
         <div className="tile"><div className="k" style={{ color: "var(--blue)" }}>▲ Income this month</div><div className="n">{fmt(incomeMonth)}</div><div className="d">{fin.incomes.filter((i) => i.date.startsWith(thisMonth)).length} entr{fin.incomes.filter((i) => i.date.startsWith(thisMonth)).length === 1 ? "y" : "ies"}</div></div>
         <div className="tile"><div className="k" style={{ color: savedMonth >= 0 ? "var(--moss)" : "var(--stamp)" }}>✦ Saved this month</div><div className="n">{fmt(savedMonth)}</div><div className="d">{savingsRate !== null ? <b style={{ color: savedMonth >= 0 ? "var(--moss)" : "var(--stamp)" }}>{savingsRate}% savings rate</b> : "log income to see your rate"}</div></div>
-        <div className="tile"><div className="k" style={{ color: "var(--violet)" }}>✓ Paid this month</div><div className="n">{fmt(paidMonth)}</div><div className="d">
-          <select className="cursel" value={fin.currency || "USD"} aria-label="Display currency"
-            title="Display currency — USD by default"
-            onChange={(e) => setFin((f) => ({ ...f, currency: e.target.value, currencyChosen: true }))}>
-            {CURRENCIES.map((c) => <option key={c.code} value={c.code}>{c.code} · {c.sym.trim()}</option>)}
-          </select>
-        </div></div>
+        <div className="tile"><div className="k" style={{ color: "var(--violet)" }}>✓ Paid this month</div><div className="n">{fmt(paidMonth)}</div><div className="d">{fin.bills.filter((b) => b.paid && (b.paidOn || "").startsWith(thisMonth)).length} bill(s) settled</div></div>
       </div>
+
+      {/* how each number above is calculated — plain words, no surprises */}
+      <details className="kmfold finhow-fold">
+        <summary className="kmfold-head">
+          <span>ⓘ How these numbers are calculated</span>
+          <span className="cardsub mono">tap to read ▾</span>
+        </summary>
+        <div className="finhow-body">
+          <div><b>◎ Spent today</b> — every expense dated today, added up. Updates the moment you log one.</div>
+          <div><b>◈ Spent this month</b> — all of this calendar month&rsquo;s expenses <i>plus</i> the bills you marked paid this month. It resets on the 1st.</div>
+          <div><b>⧗ Pending payments</b> — every unpaid bill added together, whatever its due date. Overdue ones are flagged in red.</div>
+          <div><b>▲ Income this month</b> — the income entries you logged this calendar month (salary, freelance, anything).</div>
+          <div><b>✦ Saved this month</b> — income this month minus everything that went out (expenses + bills paid). Positive means you kept money; the savings rate is this as a share of income.</div>
+          <div><b>✓ Paid this month</b> — the bills you marked paid this calendar month. Marking a recurring bill paid also schedules its next cycle.</div>
+        </div>
+      </details>
 
       {/* ✦ natural-language quick entry */}
       <div className="smartbar">
@@ -533,15 +657,55 @@ export default function FinanceBoard() {
           <button className={tab === "analytics" ? "on" : ""} role="tab" aria-selected={tab === "analytics"}
             onClick={() => setTab("analytics")}>◔ Analytics</button>
         </div>
-        <button className="btn ghost sm" onClick={exportCSV} title="Download every expense, bill and income as a spreadsheet-ready CSV">⬇ CSV</button>
+        <button className="btn sm" onClick={() => setStmtOpen(true)}
+          title="Upload a credit-card or bank statement — Vault extracts name, amount, date and time for every transaction">＋ Import statement</button>
+        <details className="dl-menu">
+          <summary className="btn ghost sm dl-summary" title="Download your finance data">⬇ Download ▾</summary>
+          <div className="dl-pop" role="menu">
+            {[["Report", "Summary you can read or print", exportReport],
+              ["Excel (.xls)", "Every transaction, opens in Excel or Sheets", exportExcel],
+              ["CSV", "Plain spreadsheet data", exportCSV]].map(([label, hint, run]) => (
+              <button key={label} role="menuitem" onClick={(e) => { run(); e.currentTarget.closest("details").open = false; }}>
+                <b>{label}</b><small>{hint}</small>
+              </button>
+            ))}
+          </div>
+        </details>
+        <select className="cursel" value={fin.currency || "USD"} aria-label="Display currency"
+          title="Display currency — applies everywhere in Finance"
+          onChange={(e) => setFin((f) => ({ ...f, currency: e.target.value, currencyChosen: true }))}>
+          {CURRENCIES.map((c) => <option key={c.code} value={c.code}>{c.code} · {c.sym.trim()}</option>)}
+        </select>
       </div>
+
+      <StatementImport open={stmtOpen} onClose={() => setStmtOpen(false)} onImport={importTransactions}
+        categories={CATEGORIES} cur={cur} aiReady={aiReady} />
 
       {tab === "analytics" && <FinanceAnalytics fin={fin} fmt={fmt} spentByCat={spentByCat} savingsRate={savingsRate} recurringMonthly={recurringMonthly} />}
 
       {tab === "payments" && (<>
+      {/* one plain sentence before the machinery — what do I owe, what's next */}
+      {(() => {
+        const unpaid = fin.bills.filter((b) => !b.paid);
+        const next = [...unpaid].sort((a, b) => (a.due || "9999").localeCompare(b.due || "9999"))[0];
+        return (
+          <div className={`fin-plain ${overdue.length ? "warn" : ""}`}>
+            {unpaid.length === 0
+              ? "✓ All bills are paid — nothing due right now."
+              : <>You have <b>{unpaid.length} unpaid bill{unpaid.length === 1 ? "" : "s"}</b> totalling <b>{fmt(pending)}</b>.
+                {overdue.length > 0 && <> <b className="fin-over">{overdue.length} overdue.</b></>}
+                {next?.due && <> Next up: <b>{next.title}</b> — {fmt(next.amount)} due {fmtStamp(next.due)}.</>}</>}
+          </div>
+        );
+      })()}
       {/* pending payments kanban */}
       <div className="card">
-        <h3>Pending payments {overdue.length > 0 && <span className="age">{overdue.length} OVERDUE</span>}</h3>
+        <h3>Bills to pay {overdue.length > 0 && <span className="age">{overdue.length} OVERDUE</span>}</h3>
+        <div className="fin-how">
+          Each bill is a card. It sits in <b>Upcoming</b>, moves to <b>Due soon</b> as the date nears, and lands in
+          <b> Paid</b> when you press <b>✓ Paid</b> (or drag it there). Recurring bills come back by themselves for the next cycle.
+        </div>
+        <div className="bsub-head">Add a bill <span className="bsub-note">name it, the amount, and when it&rsquo;s due — set a repeat if it comes back every month</span></div>
         <div className="fform">
           <input placeholder="Bill — e.g. credit card, rent, Netflix…" value={bTitle}
             onChange={(e) => setBTitle(e.target.value)} aria-label="Bill name"
@@ -616,8 +780,10 @@ export default function FinanceBoard() {
                         </span>
                         <span style={{ marginLeft: "auto", display: "flex", gap: 4 }}>
                           {!b.paid
-                            ? <button className="kbtn" title="Mark as paid" onClick={() => setPaid(b.id, true)}>✓ Paid</button>
+                            ? <button className="btn sm bill-paid-btn" title="Mark this bill as paid" onClick={() => setPaid(b.id, true)}>✓ Paid</button>
                             : <button className="kbtn" title="Move back to pending" onClick={() => setPaid(b.id, false)}>↩</button>}
+                          <button className={`kbtn ${infoBill === b.id ? "on" : ""}`} title="Bill details" aria-label={`Details for ${b.title}`}
+                            onClick={() => setInfoBill(infoBill === b.id ? null : b.id)}>ⓘ</button>
                           <button className="kbtn" title="Edit bill" aria-label={`Edit ${b.title}`}
                             onClick={() => setEditBill({ id: b.id, title: b.title, amount: b.amount, due: b.due, recur: b.recur || "" })}>✎</button>
                           <button className={`kbtn kdel ${armBill === b.id ? "armed" : ""}`}
@@ -625,6 +791,14 @@ export default function FinanceBoard() {
                             onClick={() => delBill(b.id)}>{armBill === b.id ? "Sure?" : "✕"}</button>
                         </span>
                       </div>
+                      {infoBill === b.id && (
+                        <div className="bill-detail">
+                          <div><span>Amount</span><b className="mono">{fmt(b.amount)}</b></div>
+                          <div><span>Due</span><b className="mono">{fmtStamp(b.due)}{!b.paid && (daysAgo(b.due) > 0 ? ` · ${daysAgo(b.due)}d overdue` : daysAgo(b.due) === 0 ? " · today" : ` · in ${-daysAgo(b.due)}d`)}</b></div>
+                          <div><span>Repeats</span><b>{b.recur ? `${b.recur} — comes back by itself once you mark it paid` : "one-time"}</b></div>
+                          <div><span>Status</span><b style={{ color: b.paid ? "var(--moss)" : daysAgo(b.due) > 0 ? "var(--stamp)" : undefined }}>{b.paid ? `paid on ${fmtStamp(b.paidOn || b.due)}` : "unpaid"}</b></div>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -669,7 +843,28 @@ export default function FinanceBoard() {
       </div>
 
       {/* budgets + savings goals — all forward planning lives on this tab */}
-      <FinanceBudgets budgets={fin.budgets} spentByCat={spentByCat} spentMonth={spentMonth} fmt={fmt}
+      {(() => {
+        const cap = fin.budgets?.overall || 0;
+        const pct = cap > 0 ? Math.round((spentPeriod / cap) * 100) : 0;
+        return (
+          <div className={`fin-plain ${pct > 100 ? "warn" : ""}`}>
+            {cap > 0
+              ? <>{PERIOD_WORD[budgetPeriod].replace(/^t/, "T")} you&rsquo;ve spent <b>{fmt(spentPeriod)}</b> of your <b>{fmt(cap)}</b> budget ({pct}%) — <b>{pct > 100 ? "over budget" : pct > 85 ? "close to the cap" : "on track"}</b>.</>
+              : <>A budget is one number: the most you want to spend per week, month or year. Set it below and Vault tells you plainly if you&rsquo;re on track.</>}
+          </div>
+        );
+      })()}
+      <FinanceBudgets budgets={fin.budgets} spentByCat={spentByCatPeriod} spentMonth={spentPeriod} fmt={fmt}
+        period={budgetPeriod} periodWord={PERIOD_WORD[budgetPeriod]}
+        onPeriod={(p) => setFin((f) => {
+          /* each period keeps its own caps: stash the outgoing period's set,
+             then load the incoming one (empty on first visit) */
+          const b = f.budgets || {};
+          const pp = { ...(b.perPeriod || {}) };
+          pp[b.period || "monthly"] = { overall: b.overall ?? null, byCat: b.byCat || {} };
+          const nxt = pp[p] || { overall: null, byCat: {} };
+          return { ...f, budgets: { ...b, period: p, overall: nxt.overall, byCat: nxt.byCat, perPeriod: pp } };
+        })}
         categories={CATEGORIES}
         onChange={changeBudgets} />
       <FinanceGoals goals={fin.goals} fmt={fmt}
@@ -679,14 +874,44 @@ export default function FinanceBoard() {
       {tab === "board" && (<>
       {/* daily expenses + category breakdown */}
       <div className="charts" style={{ gridTemplateColumns: "1.6fr 1fr" }}>
+        <div>
         <div className="card">
-          <h3 style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            Daily expenses
-            <span className="mnav">
-              <button onClick={() => shiftMonth(-1)} aria-label="Previous month">‹</button>
-              <span className="mono">{monthLabel}</span>
-              <button onClick={() => shiftMonth(1)} disabled={month >= thisMonth} aria-label="Next month">›</button>
+          <h3 style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            Expenses
+            <span className="doctabs" role="tablist" aria-label="Expense range" style={{ display: "inline-flex" }}>
+              {[["day", "Daily"], ["week", "Weekly"], ["month", "Monthly"], ["year", "Yearly"]].map(([k, label]) => (
+                <button key={k} className={expView === k ? "on" : ""} role="tab" aria-selected={expView === k}
+                  onClick={() => setExpView(k)}>{label}</button>
+              ))}
             </span>
+            {expView === "month" && (
+              <span className="mnav">
+                <button onClick={() => shiftMonth(-1)} aria-label="Previous month">‹</button>
+                <span className="mono">{monthLabel}</span>
+                <button onClick={() => shiftMonth(1)} disabled={month >= thisMonth} aria-label="Next month">›</button>
+              </span>
+            )}
+            {expView === "day" && (
+              <span className="mnav">
+                <button onClick={() => shiftDay(-1)} aria-label="Previous day">‹</button>
+                <span className="mono">{selDay === today() ? "TODAY" : fmtStamp(selDay)}</span>
+                <button onClick={() => shiftDay(1)} disabled={selDay >= today()} aria-label="Next day">›</button>
+              </span>
+            )}
+            {expView === "week" && (
+              <span className="mnav">
+                <button onClick={() => shiftWeek(-1)} aria-label="Previous week">‹</button>
+                <span className="mono">{weekLabel}</span>
+                <button onClick={() => shiftWeek(1)} disabled={selWeek >= weekStartOf(today())} aria-label="Next week">›</button>
+              </span>
+            )}
+            {expView === "year" && (
+              <span className="mnav">
+                <button onClick={() => shiftYear(-1)} aria-label="Previous year">‹</button>
+                <span className="mono">{yearLabel}</span>
+                <button onClick={() => shiftYear(1)} disabled={selYear >= thisYear} aria-label="Next year">›</button>
+              </span>
+            )}
           </h3>
           <div className="fform">
             <input placeholder="What did you spend on?" value={desc}
@@ -704,7 +929,12 @@ export default function FinanceBoard() {
             </select>
             <button className="btn" onClick={addExpense} disabled={!desc.trim() || !parseAmount(amount)}>+ Add</button>
           </div>
-          {byDay.length === 0 && <div className="empty" style={{ marginTop: 12 }}>No expenses in {monthLabel}.</div>}
+          {byDay.length === 0 && (
+            <div className="empty" style={{ marginTop: 12 }}>
+              No expenses {expView === "day" ? (selDay === today() ? "today" : `on ${fmtStamp(selDay)}`) : expView === "week" ? (weekLabel === "THIS WEEK" ? "this week" : `in ${fmtStamp(selWeek)} – ${fmtStamp(weekEnd)}`) : expView === "year" ? (selYear === thisYear ? "this year" : `in ${selYear}`) : `in ${monthLabel}`} — add one above.
+            </div>
+          )}
+          <div className="scrolllist">
           {byDay.map(([d, list]) => (
             <div key={d} className="fday">
               <div className="fday-head">
@@ -749,6 +979,14 @@ export default function FinanceBoard() {
               ))}
             </div>
           ))}
+          </div>
+        </div>
+
+        {/* the total for the selected range — its own card, just the number */}
+        <div className="card exp-total-card">
+          <span className="etc-label mono">TOTAL · {expView === "day" ? (selDay === today() ? "TODAY" : fmtStamp(selDay).toUpperCase()) : expView === "week" ? weekLabel.toUpperCase() : expView === "year" ? yearLabel.toUpperCase() : monthLabel.toUpperCase()}</span>
+          <span className="etc-amount">{fmt(shownTotal)}</span>
+        </div>
         </div>
 
         <div>
@@ -763,10 +1001,9 @@ export default function FinanceBoard() {
               </div>
             ))}
             {catTotals.length > 0 && (
-              <div className="fcatrow" style={{ borderTop: `1px solid var(--line)`, paddingTop: 8, marginTop: 4 }}>
-                <span className="fcat mono" style={{ fontWeight: 600 }}>TOTAL</span>
-                <div style={{ flex: 1 }} />
-                <span className="mono famt" style={{ fontWeight: 600 }}>{fmt(monthSpendShown)}</span>
+              <div className="wtotal">
+                <span className="etc-label mono">TOTAL</span>
+                <span className="wtotal-amt">{fmt(monthSpendShown)}</span>
               </div>
             )}
           </div>
@@ -783,6 +1020,7 @@ export default function FinanceBoard() {
               <button className="btn sm" onClick={addIncome} disabled={!incSource.trim() || !parseAmount(incAmount)}>+ Add</button>
             </div>
             {incomesShown.length === 0 && <div className="m" style={{ color: "var(--ink-soft)", marginTop: 10 }}>No income logged in {monthLabel} — add salary or freelance payments to track your savings rate.</div>}
+            <div className="scrolllist scrolllist-short">
             {incomesShown.map((i) => (
               <div key={i.id} className="fexp">
                 <span className="fcat mono" style={{ background: "var(--moss-soft)", color: "var(--moss)" }}>{fmtStamp(i.date).slice(0, 6)}</span>
@@ -792,6 +1030,7 @@ export default function FinanceBoard() {
                   onClick={() => delIncome(i.id)}>✕</button>
               </div>
             ))}
+            </div>
           </div>
         </div>
       </div>

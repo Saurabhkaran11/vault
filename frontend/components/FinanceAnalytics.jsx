@@ -239,6 +239,37 @@ export default function FinanceAnalytics({ fin, fmt, spentByCat = {}, savingsRat
     return out.slice(0, 5);
   }, [expenses, fmt, budgets, spentByCat, savingsRate]);
 
+  /* analyst view — the ratios an accountant would reach for first */
+  const kpis = useMemo(() => {
+    const now = new Date(today() + "T00:00:00");
+    const thisM = today().slice(0, 7);
+    const lastM = new Date(now.getFullYear(), now.getMonth() - 1, 15).toISOString().slice(0, 7);
+    const sumE = (fil) => expenses.filter(fil).reduce((a, e) => a + e.amount, 0);
+    const spentNow = sumE((e) => e.date.startsWith(thisM));
+    const spentLast = sumE((e) => e.date.startsWith(lastM));
+    const income = (fin.incomes || []).filter((i) => i.date.startsWith(thisM)).reduce((a, i) => a + i.amount, 0);
+    const paidBills = (fin.bills || []).filter((b) => b.paid && (b.paidOn || "").startsWith(thisM)).reduce((a, b) => a + b.amount, 0);
+    const outflow = spentNow + paidBills;
+    const cashflow = income - outflow;
+    const daysIn = now.getDate();
+    const daysTotal = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+    const burn = daysIn > 0 ? outflow / daysIn : 0;
+    const projected = burn * daysTotal;
+    const mom = spentLast > 0 ? Math.round(((spentNow - spentLast) / spentLast) * 100) : null;
+    const fixedRatio = income > 0 ? Math.round((recurringMonthly / income) * 100) : null;
+    const catNow = Object.entries(spentByCat).sort((a, b) => b[1] - a[1])[0];
+    const topShare = catNow && spentNow > 0 ? Math.round((catNow[1] / spentNow) * 100) : null;
+    const biggest = expenses.filter((e) => e.date.startsWith(thisM)).sort((a, b) => b.amount - a.amount)[0];
+    return [
+      { k: "Cash flow", v: fmt(cashflow), tone: cashflow >= 0 ? "ok" : "bad", d: cashflow >= 0 ? "money in beat money out this month" : "spending outpaced income this month" },
+      { k: "Daily burn", v: fmt(Math.round(burn)), d: `avg going out per day · on pace for ${fmt(Math.round(projected))} by month-end` },
+      mom !== null && { k: "Vs last month", v: `${mom >= 0 ? "+" : ""}${mom}%`, tone: mom > 15 ? "bad" : mom < -5 ? "ok" : "", d: `expenses ${fmt(spentNow)} now vs ${fmt(spentLast)} last month` },
+      fixedRatio !== null && { k: "Fixed costs", v: `${fixedRatio}%`, tone: fixedRatio > 50 ? "bad" : "", d: "of income committed to recurring bills — analysts like this under 50%" },
+      topShare !== null && { k: "Concentration", v: `${topShare}%`, d: `of this month's spend is ${catNow[0]} — a high share means one lever to pull` },
+      biggest && { k: "Biggest expense", v: fmt(biggest.amount), d: `${biggest.desc} (${biggest.cat}, ${biggest.date.slice(8)}/${biggest.date.slice(5, 7)})` },
+    ].filter(Boolean);
+  }, [expenses, fin, fmt, spentByCat, recurringMonthly]);
+
   return (
     <div className="card">
       <div className="fanal-head">
@@ -263,6 +294,16 @@ export default function FinanceAnalytics({ fin, fmt, spentByCat = {}, savingsRat
         <span><b>{fmt(total)}</b> total in this {periodName.toLowerCase()} range</span>
         <span><b>{fmt(avg)}</b> avg per active {period === "daily" ? "day" : period === "weekly" ? "week" : period === "monthly" ? "month" : "year"}</span>
         <span>peak <b>{fmt(top.total)}</b>{top.total > 0 ? ` (${top.label})` : ""}</span>
+      </div>
+
+      <div className="kpi-grid">
+        {kpis.map((x) => (
+          <div key={x.k} className={`kpi ${x.tone || ""}`}>
+            <span className="kpi-k mono">{x.k}</span>
+            <span className="kpi-v">{x.v}</span>
+            <span className="kpi-d">{x.d}</span>
+          </div>
+        ))}
       </div>
 
       {insights.length > 0 && (

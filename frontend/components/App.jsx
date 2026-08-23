@@ -1,9 +1,9 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { SECTIONS, fmtStamp, daysAgo, today } from "@/lib/seed";
+import { SECTIONS, fmtStamp, daysAgo, today, fmtK } from "@/lib/seed";
 import { useStore } from "@/hooks/useStore";
-import { Donut, MiniBars, rangeSeries } from "./Charts";
+import { Donut, rangeSeries, TinyBars, SparkArea } from "./Charts";
 import GraphView from "./GraphView";
 import ItemRow, { TagAdder } from "./ItemRow";
 import { Ic } from "./Icons";
@@ -19,13 +19,13 @@ import AddForm from "./AddForm";
 import CommandPalette from "./CommandPalette";
 import ShortcutsHelp from "./ShortcutsHelp";
 import NoteBlocks from "./NoteBlocks";
-import TodoBoard from "./TodoBoard";
+import TaskBoard from "./TaskBoard";
 import ProjectBoard from "./ProjectBoard";
 import CustomBoards from "./CustomBoards";
 import FinanceBoard from "./FinanceBoard";
 import AskVault from "./AskVault";
 import { emptyBlock } from "./NoteBlocks";
-import { downloadBackup, inspectBackup, applyBackup } from "@/lib/backup";
+import { inspectBackup, applyBackup } from "@/lib/backup";
 import { AI_MODELS, OSS_PRESETS, OSS_MODEL_SUGGESTIONS, presetById, getAIConfig, setAIConfig, askText, askJSON } from "@/lib/ai";
 import { useAiReady } from "@/hooks/useAiReady";
 import CalendarConnect from "./CalendarConnect";
@@ -60,11 +60,18 @@ function buildInsights(items, tasks, fin, t0) {
   // to-dos
   const doneWeek = tasks.filter((t) => t.done && t.doneAt && daysAgo(t.doneAt) <= 7).length;
   const openTasks = tasks.filter((t) => !t.done).length;
-  // money (this month vs overall budget)
+  // money — the overall cap applies per the user's chosen budget period
   const ym = t0.slice(0, 7);
   const monthExp = (fin.expenses || []).filter((e) => (e.date || "").startsWith(ym));
   const spent = monthExp.reduce((a, e) => a + (+e.amount || 0), 0);
   const budget = +(fin.budgets?.overall) || 0;
+  const budgetPeriod = fin.budgets?.period || "monthly";
+  const budgetWord = { weekly: "this week", monthly: "this month", yearly: "this year" }[budgetPeriod];
+  const budgetSpent = budgetPeriod === "weekly"
+    ? (fin.expenses || []).filter((e) => e.date && daysAgo(e.date) < 7 && daysAgo(e.date) >= 0).reduce((a, e) => a + (+e.amount || 0), 0)
+    : budgetPeriod === "yearly"
+      ? (fin.expenses || []).filter((e) => (e.date || "").startsWith(t0.slice(0, 4))).reduce((a, e) => a + (+e.amount || 0), 0)
+      : spent;
   const sym = CUR_SYM[fin.currency] || "$";
   const byCat = {};
   monthExp.forEach((e) => { const c = e.cat || "Other"; byCat[c] = (byCat[c] || 0) + (+e.amount || 0); });
@@ -93,7 +100,7 @@ function buildInsights(items, tasks, fin, t0) {
     reading: { count: reading.length, total: books.length, pct: avgProg },
     watching: { done: vidsDone, total: vids.length, pct: vids.length ? Math.round((vidsDone / vids.length) * 100) : 0 },
     todos: { doneWeek, open: openTasks, pct: (doneWeek + openTasks) ? Math.round((doneWeek / (doneWeek + openTasks)) * 100) : 0 },
-    money: { spent, budget, sym, topCats, pct: budget ? Math.round((spent / budget) * 100) : 0 },
+    money: { spent, budget, sym, topCats, budgetWord, budgetSpent, pct: budget ? Math.round((budgetSpent / budget) * 100) : 0 },
     trend: { savedNow, savedPrev },
     usage: {
       todoDates: tasks.filter((t) => t.done && t.doneAt).map((t) => t.doneAt),
@@ -470,7 +477,6 @@ export default function App() {
   const [q, setQ] = useState("");
   const [adding, setAdding] = useState(false);
   const [palette, setPalette] = useState(false);
-  const [dq, setDq] = useState("");            // dashboard search
   const [menuOpen, setMenuOpen] = useState(false); // profile/settings dropdown
   const [settingsOpen, setSettingsOpen] = useState(false); // full settings dialog
   const [keyEdit, setKeyEdit] = useState(false);   // replacing the (never-displayed) AI key
@@ -551,12 +557,6 @@ export default function App() {
     const t = setTimeout(() => setToast(null), 6000);
     return () => clearTimeout(t);
   }, [toast]);
-  const doExport = () => {
-    const c = downloadBackup();
-    setObState(setOB({ exported: true }));
-    setToast(`Backup saved — ${c.items} items, ${c.todos} to-dos, ${c.finance} finance records, ${c.boards} boards.`);
-  };
-
   /* ---- universal quick capture + notification bell ---- */
   const [capOpen, setCapOpen] = useState(false);
   const [capBump, setCapBump] = useState(0);      // remounts To-dos/Finance so captures show instantly
@@ -720,7 +720,7 @@ export default function App() {
         pendingBillsTotal: (fin.bills || []).filter((b) => !b.paid).reduce((a, b) => a + (+b.amount || 0), 0),
         inbox: items.filter((i) => i.status === "Inbox").length,
         doneDates: tasks.filter((t) => t.done && t.doneAt).map((t) => t.doneAt),
-        expensesRaw: (fin.expenses || []).map((e) => ({ date: e.date, amt: +e.amount || 0 })),
+        expensesRaw: (fin.expenses || []).map((e) => ({ date: e.date, amt: +e.amount || 0, cat: e.cat || "Other" })),
         ins: buildInsights(items, tasks, fin, t0),
       });
     } catch { setPulse(null); }
@@ -764,7 +764,7 @@ export default function App() {
      Linear/Gmail-style: G-chords navigate, single keys act.
      Single-key shortcuts are suspended while typing in any field. */
   const kb = useRef({});
-  kb.current = { view, tag, adding, palette, helpOpen, menuOpen, pageId, showTemplates, profile, exportJson: doExport, keymap, keyListen };
+  kb.current = { view, tag, adding, palette, helpOpen, menuOpen, pageId, showTemplates, profile, keymap, keyListen };
   useEffect(() => {
     let gUntil = 0; // G-chord window (2s)
     const typing = (el) =>
@@ -828,10 +828,9 @@ export default function App() {
         setAdding(true);
         return;
       }
-      if (kl === km.search) { e.preventDefault(); filterRef.current?.focus(); return; }
+      if (kl === km.search) { e.preventDefault(); if (filterRef.current) filterRef.current.focus(); else setPalette(true); return; }
       if (kl === km.theme) { e.preventDefault(); setProfile((p) => ({ ...p, theme: p.theme === "dark" ? "light" : "dark" })); return; }
       if (kl === km.sidebar) { e.preventDefault(); setOpen((o) => !o); return; }
-      if (kl === km.export) { e.preventDefault(); s.exportJson(); return; }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -858,7 +857,6 @@ export default function App() {
     { group: "ACTION", label: "New item", hint: "N", keywords: "add create capture", run: () => { if (!(view in SECTIONS) && view !== "tag" && view !== "all") openSection("note"); setPageId(null); setAdding(true); } },
     { group: "ACTION", label: "Toggle dark / light theme", hint: "T", keywords: "mode appearance", run: () => setProfile((p) => ({ ...p, theme: p.theme === "dark" ? "light" : "dark" })) },
     { group: "ACTION", label: "Toggle sidebar", hint: "B", keywords: "collapse expand menu", run: () => setOpen((o) => !o) },
-    { group: "ACTION", label: "Export backup (JSON)", hint: "E", keywords: "save download data", run: doExport },
     { group: "ACTION", label: "📊 Generate reports", keywords: "report pdf print summary stats export feature", run: () => setReportsOpen(true) },
     { group: "ACTION", label: "Import backup", keywords: "restore upload data", run: () => importRef.current?.click() },
     { group: "ACTION", label: "Keyboard shortcuts", hint: "?", keywords: "help keys cheatsheet", run: () => setHelpOpen(true) },
@@ -899,7 +897,6 @@ export default function App() {
   const range = profile.range || "week";
   const RANGES = [["day", "Daily"], ["week", "Weekly"], ["month", "Monthly"], ["year", "Yearly"]];
   const RANGE_WORD = { day: "today", week: "this week", month: "this month", year: "this year" };
-  const RANGE_UNIT = { day: "day", week: "week", month: "month", year: "year" };
   const inRange = (iso) => {
     if (!iso) return false;
     const d = new Date(iso + "T00:00:00"), n = new Date();
@@ -915,10 +912,6 @@ export default function App() {
     setTimeout(() => setFocusId(null), 2200);
   };
 
-  const thisWeek = (type) => {
-    const cut = new Date(); cut.setDate(cut.getDate() - 7);
-    return items.filter((i) => (type ? i.type === type : true) && new Date(i.date) >= cut).length;
-  };
 
   const visible = items
     .filter((i) => {
@@ -939,14 +932,16 @@ export default function App() {
           ? (b.edited || b.date).localeCompare(a.edited || a.date)
           : b.date.localeCompare(a.date)));
 
+  // Order follows the go-to-market design: Dashboard, then Ask (injected in the
+  // sidebar render), then Content, Tasks, Boards, Finance, Tags, and Graph last.
   const nav = [
     { k: "dash", label: "Dashboard", ic: "home" },
-    { k: "board", label: "Boards", ic: "board" },
-    { k: "finance", label: "Finance", ic: "finance" },
-    { k: "todos", label: "Tasks", ic: "todos" },
     // Notes, YouTube, Library and Documents are the same thing — saved items —
     // so they live behind one "Content" section with a type switcher inside.
-    { k: "all", label: "Content", ic: "note" },
+    { k: "all", label: "Content", ic: "content" },
+    { k: "todos", label: "Tasks", ic: "todos" },
+    { k: "board", label: "Boards", ic: "board" },
+    { k: "finance", label: "Finance", ic: "finance" },
     { k: "tags", label: "Tags", ic: "tag" },
     // Graph is an explore-it view, not a daily destination — keep it last.
     { k: "graph", label: "Graph", ic: "graph" },
@@ -1223,7 +1218,6 @@ export default function App() {
 
               <div className="set-sec">
                 <div className="menu-sec">🗄 YOUR DATA</div>
-                <button className="menu-item" onClick={() => doExport()}>⬇ Export backup (JSON) <span className="menukey kbd">E</span></button>
                 <button className="menu-item" onClick={() => importRef.current?.click()}>⬆ Import backup</button>
                 <button className="menu-item" onClick={() => downloadICS()}
                   title="Due to-dos and bills as calendar events — import into Google/Apple/Outlook and get reminded there">
@@ -1251,32 +1245,35 @@ export default function App() {
           {open && <h1>Vault</h1>}
         </div>
 
-        <button className="qadd" onClick={() => setCapOpen(true)}
-          title={`Capture anything — a link, a to-do, an expense, a thought (${keymap.capture.toUpperCase()})`}>
-          <span className="ic" aria-hidden="true"><Ic name="plus" size={19} strokeWidth={1.9} /></span>
-          {open && <>Quick add<span className="cnt">{keymap.capture.toUpperCase()}</span></>}
-        </button>
+        {nav.flatMap((n, idx) => {
+          const btn = (
+            <button key={n.k} className={`navbtn ${(n.k === "all" ? isContentView(view) : view === n.k) ? "on" : ""}`}
+              title={open ? n.hint : `${n.label} (${n.hint})`}
+              onClick={() => n.k in SECTIONS
+                ? openSection(n.k)
+                : (setView(n.k), setTag(null), setAdding(false), setPageId(null))}>
+              <span className="ic" aria-hidden="true"><Ic name={n.ic} size={19} /></span>
+              {open && <>{n.label}{n.k in SECTIONS && <span className="cnt">{items.filter((i) => i.type === n.k).length}</span>}</>}
+            </button>
+          );
+          if (idx !== 0) return [btn];
+          /* Ask sits right after Dashboard — it's the hero feature in the
+             go-to-market design, so it gets prime placement, not buried below. */
+          return [btn, (
+            <button key="ask" className={`navbtn askbtn ${view === "ask" ? "on" : ""}`}
+              onClick={() => { setView("ask"); setTag(null); setAdding(false); setPageId(null); }}
+              title="Ask your Vault — AI answers with citations from your saved items">
+              <span className="ic" aria-hidden="true"><Ic name="ai" size={19} /></span>
+              {open && <>Ask AI</>}
+            </button>
+          )];
+        })}
 
-        {nav.map((n) => (
-          <button key={n.k} className={`navbtn ${(n.k === "all" ? isContentView(view) : view === n.k) ? "on" : ""}`}
-            title={open ? n.hint : `${n.label} (${n.hint})`}
-            onClick={() => n.k in SECTIONS
-              ? openSection(n.k)
-              : (setView(n.k), setTag(null), setAdding(false), setPageId(null))}>
-            <span className="ic" aria-hidden="true"><Ic name={n.ic} size={19} /></span>
-            {open && <>{n.label}{n.k in SECTIONS && <span className="cnt">{items.filter((i) => i.type === n.k).length}</span>}</>}
-          </button>
-        ))}
-
-        <button className="navbtn" onClick={() => setPalette(true)} title="Search everything (Ctrl+K)">
+        <button className={`navbtn ${view === "searchpg" ? "on" : ""}`}
+          onClick={() => { setView("searchpg"); setTag(null); setAdding(false); setPageId(null); }}
+          title="Search everything (Ctrl+K opens the quick version)">
           <span className="ic" aria-hidden="true"><Ic name="search" size={19} /></span>
           {open && <>Search<span className="cnt">⌘K</span></>}
-        </button>
-
-        <button className="navbtn askbtn" onClick={() => setAskOpen(true)}
-          title="Ask your Vault — AI answers with citations from your saved items">
-          <span className="ic" aria-hidden="true"><Ic name="ai" size={19} /></span>
-          {open && <>Ask AI</>}
         </button>
 
         {trashed.length > 0 && (
@@ -1296,7 +1293,6 @@ export default function App() {
             </div>
             Data lives in this browser (localStorage).
             <div style={{ marginTop: 6 }}>
-              <button onClick={doExport}>⬇ Export backup</button>
               <button onClick={() => importRef.current?.click()}>⬆ Import</button>
               <input ref={importRef} type="file" accept="application/json" hidden onChange={onImport} />
             </div>
@@ -1417,11 +1413,31 @@ export default function App() {
             <button onClick={() => { update(undoItem); setUndoItem(null); }}>Undo</button>
           </div>
         )}
+        {view === "ask" && (
+          <AskVault inline items={items} open onClose={() => {}} onGoto={goto}
+            onOpenSettings={() => setSettingsOpen(true)} />
+        )}
+
+        {view === "searchpg" && (
+          <>
+            <div className="crumb">Search · everything you&rsquo;ve saved</div>
+            <h2 className="display">Search your vault</h2>
+            <CommandPalette inline items={items} actions={paletteActions} open
+              onClose={() => {}} onGo={(r) => (r.kind === "tag" ? openTag(r.tag) : goto(r.item))} />
+          </>
+        )}
+
         {view === "dash" && (
           <>
             <div className="crumb">Overview · {fmtStamp(today())}</div>
             <h2 className="display">Your collection, at a glance</h2>
             <p className="sub">Search everything with <span className="kbd">Ctrl</span>+<span className="kbd">K</span> — here's just what matters today.</p>
+
+            <button className="dash-search" onClick={() => setPalette(true)}>
+              <span className="ds-ic" aria-hidden="true"><Ic name="search" size={16} /></span>
+              <span className="ds-ph">Search or ask your vault…</span>
+              <span className="ds-kbd kbd">Ctrl K</span>
+            </button>
 
             {pulse?.ins && (
               <div className="rangebar">
@@ -1438,7 +1454,7 @@ export default function App() {
                   const sym = pulse.ins.money.sym;
                   return (
                     <span className="rangeroll mono">
-                      {RANGE_WORD[range]}: <b>{done}</b> finished · <b>{saved}</b> saved · <b>{sym}{Math.round(spent).toLocaleString()}</b> spent
+                      {RANGE_WORD[range]}: <b>{fmtK(done)}</b> finished · <b>{fmtK(saved)}</b> saved · <b>{sym}{Math.round(spent).toLocaleString()}</b> spent
                     </span>
                   );
                 })()}
@@ -1449,10 +1465,9 @@ export default function App() {
               let boardsOwn = false;
               try { boardsOwn = (JSON.parse(localStorage.getItem("vault.boards.v1") || "{}").boards || []).some((b) => !b.seeded); } catch {}
               const steps = [
-                { id: "cap", label: "Capture your first item — a link, a thought, an expense", hint: "Press C and type anything; Vault files it for you", key: "C", done: items.some((i) => +i.id > 1e12), go: () => setCapOpen(true) },
+                { id: "cap", label: "Save your first item — a link, a thought, a document", hint: "Content → ＋ New", done: items.some((i) => +i.id > 1e12), go: () => openSection("all") },
                 { id: "name", label: "Make it yours — add your name", hint: "Settings → Profile", done: !!profile.name?.trim() && profile.name.trim() !== "You", go: () => setSettingsOpen(true) },
                 { id: "board", label: "Plan something — create your own board", hint: "Boards → ＋ New board", done: boardsOwn, go: () => { setView("board"); setTag(null); setAdding(false); setPageId(null); } },
-                { id: "backup", label: "Own your data — export a backup", hint: "One click, one JSON file — your insurance", key: "E", done: !!ob.exported, go: doExport },
                 { id: "ai", label: "Optional: connect AI — Claude or an open-source model", hint: "Settings → AI assistant", done: aiReady, go: () => setSettingsOpen(true) },
               ];
               return (
@@ -1463,188 +1478,174 @@ export default function App() {
             })()}
 
             {pulse?.ins && (() => {
+              /* Go-to-market layout: mono section labels on the canvas, needs
+                 cards in a row, rings + the momentum sparkline in one progress
+                 grid, then the two breakdown charts side by side. */
               const ins = pulse.ins;
-              return (
-                <div className="charts-top">
-                  <div className="card">
-                    <div className="wstrip-head"><h3 style={{ margin: 0 }}>Needs you now</h3></div>
-                    {(() => {
-                      const sym = ins.money.sym;
-                      const cardsOpen = Math.max(0, ins.boards.total - ins.boards.done);
-                      const rows = [
-                        pulse.overdueTasks && { k: "od", label: "Overdue tasks", n: pulse.overdueTasks, tone: "red", go: () => goView("todos") },
-                        pulse.dueToday && { k: "dt", label: "Due today", n: pulse.dueToday, tone: "amber", go: () => goView("todos") },
-                        pulse.pendingBills && { k: "bill", label: "Unpaid bills", sub: pulse.overdueBills ? `${pulse.overdueBills} overdue` : null, n: `${sym}${Math.round(pulse.pendingBillsTotal).toLocaleString()}`, tone: pulse.overdueBills ? "red" : "amber", go: () => goView("finance") },
-                        cardsOpen && { k: "cards", label: "Cards in progress", n: cardsOpen, tone: "neutral", go: () => goView("board") },
-                        pulse.inbox && { k: "inbox", label: "Inbox to sort", n: pulse.inbox, tone: "neutral", go: () => goView("all") },
-                      ].filter(Boolean);
-                      return rows.length ? (
-                        <div className="needcards">
-                          {rows.map((r) => (
-                            <button key={r.k} className={`needcard tone-${r.tone}`} onClick={r.go} title={`Open — ${r.label}`}>
-                              <span className="need-lead">
-                                <span className="need-label">{r.label}</span>
-                                {r.sub && <span className="need-sub">{r.sub}</span>}
-                              </span>
-                              <span className={`need-cnt ${r.tone}`}>{r.n}</span>
-                            </button>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="allclear">✓ You're all caught up — nothing pending.</div>
-                      );
-                    })()}
-                  </div>
-                  <div className="card">
-                    <div className="wstrip-head"><h3 style={{ margin: 0 }}>Your progress</h3></div>
-                    {(() => {
-                      const sym = ins.money.sym;
-                      const readingBooks = items.filter((i) => i.type === "book" && (i.progress || 0) > 0 && (i.progress || 0) < 100).slice(0, 2);
-                      const rows = [
-                        { k: "todo", label: "Tasks this week", val: `${ins.todos.doneWeek} done · ${ins.todos.open} open`, pct: ins.todos.pct, color: "var(--moss)" },
-                        ins.boards.total > 0 && { k: "sprint", label: "Sprint", val: `${ins.boards.done}/${ins.boards.total} done`, pct: ins.boards.pct, color: "var(--azure)" },
-                        ...readingBooks.map((b) => ({ k: `bk-${b.id}`, label: `Reading · ${b.alias || b.title}`, val: `${b.progress || 0}%`, pct: b.progress || 0, color: "var(--gold)" })),
-                        ins.money.budget > 0 && { k: "budget", label: "Budget used", val: `${sym}${Math.round(ins.money.spent).toLocaleString()} / ${sym}${Math.round(ins.money.budget).toLocaleString()}`, pct: Math.min(100, ins.money.pct), color: ins.money.pct > 100 ? "var(--stamp)" : "var(--gold)" },
-                      ].filter(Boolean);
-                      return (
-                        <div className="proglist">
-                          {rows.map((r) => (
-                            <div key={r.k} className="progrow">
-                              <div className="prog-top"><span>{r.label}</span><b className="mono">{r.val}</b></div>
-                              <div className="prog-track"><div className="prog-fill" style={{ width: `${Math.max(3, r.pct)}%`, background: r.color }} /></div>
-                            </div>
-                          ))}
-                        </div>
-                      );
-                    })()}
-                  </div>
-                  <div className="card"><h3>Where things live</h3><Donut items={items} /></div>
-                  <div className="card">
-                    <div className="wstrip-head">
-                      <h3 style={{ margin: 0 }}>Where money goes</h3>
-                      <span className="cardsub mono">{ins.money.sym}{Math.round(ins.money.spent).toLocaleString()} this month</span>
-                    </div>
-                    {ins.money.topCats.length ? (
-                      <div className="catbars">
-                        {ins.money.topCats.map((c) => {
-                          const max = ins.money.topCats[0].amt || 1;
-                          return (
-                            <div key={c.cat} className="catbar" title={`${c.cat} — ${ins.money.sym}${c.amt.toFixed(2)} spent this month`}>
-                              <span className="cb-name">{c.cat}</span>
-                              <span className="cb-track"><span className="cb-fill" style={{ width: `${Math.max(4, (c.amt / max) * 100)}%` }} /></span>
-                              <span className="cb-amt mono">{ins.money.sym}{Math.round(c.amt)}</span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    ) : (
-                      <div className="m" style={{ color: "var(--ink-soft)" }}>No expenses logged this month yet — add one in Finance.</div>
-                    )}
-                  </div>
-                </div>
-              );
-            })()}
-
-            {pulse?.doneDates && (() => {
-              const { values, labels } = rangeSeries(pulse.doneDates, range);
-              if (!values.some((n) => n > 0)) return null;
+              const sym = ins.money.sym;
+              const cardsOpen = Math.max(0, ins.boards.total - ins.boards.done);
+              const needs = [
+                pulse.overdueTasks && { k: "od", label: "Overdue tasks", n: pulse.overdueTasks, sub: "Open tasks →", tone: "red", go: () => goView("todos") },
+                pulse.dueToday && { k: "dt", label: "Due today", n: pulse.dueToday, sub: "Open tasks →", tone: "amber", go: () => goView("todos") },
+                pulse.pendingBills && { k: "bill", label: "Unpaid bills", sub: pulse.overdueBills ? `${pulse.overdueBills} overdue · Finance →` : "Open Finance →", n: `${sym}${Math.round(pulse.pendingBillsTotal).toLocaleString()}`, tone: pulse.overdueBills ? "red" : "amber", go: () => goView("finance") },
+                cardsOpen && { k: "cards", label: "Cards in progress", n: cardsOpen, sub: "Open Boards →", tone: "neutral", go: () => goView("board") },
+                pulse.inbox && { k: "inbox", label: "Inbox to sort", n: pulse.inbox, sub: "Open Content →", tone: "neutral", go: () => goView("all") },
+              ].filter(Boolean);
+              /* one aggregate Reading ring, not one per book — a vault with
+                 200 in-progress books still gets a single calm card */
+              const readingBooks = items.filter((i) => i.type === "book" && (i.progress || 0) > 0 && (i.progress || 0) < 100);
+              const readAvg = readingBooks.length ? Math.round(readingBooks.reduce((x, y) => x + (y.progress || 0), 0) / readingBooks.length) : 0;
+              /* the whole progress row follows the Daily/Weekly/Monthly/Yearly
+                 tab; only inherently-monthly budget keeps its own caption */
+              const doneInRange = pulse.doneDates.filter(inRange).length;
+              const taskPct = doneInRange + ins.todos.open > 0 ? Math.round((doneInRange / (doneInRange + ins.todos.open)) * 100) : 0;
+              const rings = [
+                { k: "todo", label: `Tasks ${RANGE_WORD[range]}`, val: `${fmtK(doneInRange)} done · ${fmtK(ins.todos.open)} open`, pct: taskPct, color: "var(--moss)", go: () => goView("todos") },
+                ins.boards.total > 0 && { k: "sprint", label: "Sprint", val: `${fmtK(ins.boards.done)}/${fmtK(ins.boards.total)} done`, pct: ins.boards.pct, color: "var(--azure)", go: () => goView("board") },
+                readingBooks.length > 0 && {
+                  k: "read",
+                  label: readingBooks.length === 1 ? `Reading · ${readingBooks[0].alias || readingBooks[0].title}` : `Reading · ${fmtK(readingBooks.length)} books`,
+                  val: readingBooks.length === 1 ? `${readingBooks[0].progress || 0}%` : `${readAvg}% avg`,
+                  pct: readAvg, color: "var(--gold)",
+                  go: () => (readingBooks.length === 1 ? goto(readingBooks[0]) : openSection("book")),
+                },
+                ins.money.budget > 0 && { k: "budget", label: `Budget · ${ins.money.budgetWord}`, val: `${sym}${Math.round(ins.money.budgetSpent).toLocaleString()} / ${sym}${Math.round(ins.money.budget).toLocaleString()}`, pct: Math.min(100, ins.money.pct), color: ins.money.pct > 100 ? "var(--stamp)" : "var(--gold)", go: () => goView("finance") },
+              ].filter(Boolean);
+              /* momentum sparkline + small range-aware charts; every card is a
+                 door into its section, and the flex grid packs with no gaps */
+              const { values: sv, tips: st } = rangeSeries(pulse.doneDates, range);
+              const hasSpark = sv.some((n) => n > 0);
               const span = { day: "last 14 days", week: "last 8 weeks", month: "last 12 months", year: "last 5 years" }[range];
-              return (
-                <div className="card">
-                  <div className="wstrip-head">
-                    <h3 style={{ margin: 0 }}>Tasks finished per {RANGE_UNIT[range]}</h3>
-                    <span className="cardsub mono">{span} · your momentum</span>
-                  </div>
-                  <MiniBars values={values} labels={labels} color="var(--moss)" />
-                </div>
-              );
-            })()}
-
-            <div className="bar">
-              <input ref={filterRef} placeholder="Search your whole vault — notes, videos, books, docs, #tags…  ( / )"
-                value={dq} onChange={(e) => setDq(e.target.value)} aria-label="Search vault" />
-              {dq && <button className="btn ghost" onClick={() => setDq("")}>Clear</button>}
-            </div>
-            {dq && (
-              <div className="card">
-                <h3>Results for “{dq}”</h3>
-                {items
-                  .filter((i) => (i.title + " " + i.meta + " " + i.tags.join(" ")).toLowerCase().includes(dq.toLowerCase()))
-                  .slice(0, 8)
-                  .map((it) => {
-                    const s = SECTIONS[it.type];
-                    return (
-                      <div key={it.id} className="row" style={{ padding: "10px 12px", cursor: "pointer" }}
-                        onClick={() => { openSection(it.type); setDq(""); }} role="button" tabIndex={0}
-                        onKeyDown={(e) => e.key === "Enter" && (openSection(it.type), setDq(""))}>
-                        <div className="icbox" style={{ width: 30, height: 30, fontSize: 13, background: s.soft, color: s.color }} aria-hidden="true"><Ic name={s.ic} /></div>
-                        <div className="body">
-                          <div className="t" style={{ fontSize: 14 }}>{it.title}</div>
-                          <div className="m">{s.label} · {it.tags.map((t) => `#${t}`).join(" ") || "no tags"}</div>
-                        </div>
-                        <div className="stamp">Added · {fmtStamp(it.date)}</div>
-                      </div>
-                    );
-                  })}
-                {items.filter((i) => (i.title + " " + i.meta + " " + i.tags.join(" ")).toLowerCase().includes(dq.toLowerCase())).length === 0 && (
-                  <div className="empty">No matches for “{dq}”.</div>
-                )}
-              </div>
-            )}
-
-            <div className="tiles">
-              {Object.entries(SECTIONS).map(([k, s]) => (
-                <div key={k} className="tile" onClick={() => openSection(k)} role="button" tabIndex={0}
-                  onKeyDown={(e) => e.key === "Enter" && openSection(k)}>
-                  <div className="k" style={{ color: s.color }}><Ic name={s.ic} /> {s.label}</div>
-                  <div className="n">{items.filter((i) => i.type === k).length}</div>
-                  <div className="d"><b>+{thisWeek(k)}</b> this week</div>
-                </div>
-              ))}
-            </div>
-
-            {pulse?.ins && (() => {
-              const ins = pulse.ins;
-              const go = (v) => { setView(v); setTag(null); setAdding(false); setPageId(null); };
+              const half = Math.floor(sv.length / 2);
+              /* equal-size windows — with odd bucket counts the middle bucket
+                 is left out so the comparison stays honest */
+              const a = sv.slice(0, half).reduce((x, y) => x + y, 0);
+              const b = sv.slice(sv.length - half).reduce((x, y) => x + y, 0);
+              /* no earlier-half baseline → a % reads as a stuck "+100%";
+                 the honest number is the span total */
+              const deltaTxt = a === 0 ? `${fmtK(a + b)} total` : `${b >= a ? "+" : ""}${Math.round(((b - a) / a) * 100)}%`;
+              const deltaDown = a > 0 && b < a;
+              const exp = pulse.expensesRaw || [];
+              const spend = rangeSeries(exp.map((e) => e.date), range, exp.map((e) => e.amt));
+              const spentNow = exp.filter((e) => inRange(e.date)).reduce((x, e) => x + e.amt, 0);
+              /* "Where money goes" follows the range tab like everything else */
+              const catMap = {};
+              exp.filter((e) => inRange(e.date)).forEach((e) => { catMap[e.cat] = (catMap[e.cat] || 0) + e.amt; });
+              const topCats = Object.entries(catMap).map(([cat, amt]) => ({ cat, amt })).sort((x, y) => y.amt - x.amt).slice(0, 5);
               return (
                 <>
-                  <div className="insights">
-                    <button className="insight" onClick={() => openSection("book")} title="Open Library">
-                      <span className="ins-k" style={{ color: "var(--gold)" }}>▤ Reading</span>
-                      <span className="ins-n">{ins.reading.count}<small> book{ins.reading.count === 1 ? "" : "s"} going</small></span>
-                      <span className="tl-bar"><span className="tl-bar-fill" style={{ width: `${ins.reading.pct}%` }} /></span>
-                      <span className="ins-d">{ins.reading.count ? `${ins.reading.pct}% through on average` : "Pick a book to start"}</span>
-                    </button>
-                    <button className="insight" onClick={() => openSection("video")} title="Open YouTube">
-                      <span className="ins-k" style={{ color: "var(--azure)" }}>▶ Watching</span>
-                      <span className="ins-n">{ins.watching.done}<small> of {ins.watching.total} watched</small></span>
-                      <span className="tl-bar"><span className="tl-bar-fill" style={{ width: `${ins.watching.pct}%` }} /></span>
-                      <span className="ins-d">{ins.watching.total - ins.watching.done} still in the queue</span>
-                    </button>
-                    <button className="insight" onClick={() => go("todos")} title="Open Tasks">
-                      <span className="ins-k" style={{ color: "var(--moss)" }}>☑ Tasks</span>
-                      <span className="ins-n">{ins.todos.doneWeek}<small> done this week</small></span>
-                      <span className="tl-bar"><span className="tl-bar-fill" style={{ width: `${ins.todos.pct}%` }} /></span>
-                      <span className="ins-d">{ins.todos.open} still open</span>
-                    </button>
-                    <button className={`insight ${ins.money.budget && ins.money.pct > 100 ? "over" : ""}`} onClick={() => go("finance")} title="Open Finance">
-                      <span className="ins-k" style={{ color: "var(--violet)" }}>⛁ Money</span>
-                      <span className="ins-n">{ins.money.sym}{Math.round(ins.money.spent).toLocaleString()}<small> spent this month</small></span>
-                      <span className="tl-bar"><span className="tl-bar-fill" style={{ width: `${Math.min(100, ins.money.pct)}%` }} /></span>
-                      <span className="ins-d">{ins.money.budget
-                        ? (ins.money.pct > 100 ? `${ins.money.pct - 100}% over your ${ins.money.sym}${ins.money.budget.toLocaleString()} budget` : `${ins.money.pct}% of your ${ins.money.sym}${ins.money.budget.toLocaleString()} budget`)
-                        : "Set a budget in Finance → Payments"}</span>
-                    </button>
-                    <button className="insight" onClick={() => go("board")} title="Open Boards">
-                      <span className="ins-k" style={{ color: "var(--ink)" }}>▦ Boards</span>
-                      <span className="ins-n">{ins.boards.done}<small> of {ins.boards.total} cards done</small></span>
-                      <span className="tl-bar"><span className="tl-bar-fill" style={{ width: `${ins.boards.pct}%` }} /></span>
-                      <span className="ins-d">{ins.boards.count} board{ins.boards.count === 1 ? "" : "s"} in play</span>
-                    </button>
+                  <div className="sec-label mono"><span className="sl-dot" aria-hidden="true" /> Needs you now</div>
+                  {needs.length ? (
+                    <div className="needs-grid">
+                      {needs.map((r) => (
+                        <button key={r.k} className={`needcard tone-${r.tone}`} onClick={r.go} title={`Open — ${r.label}`}>
+                          <span className={`need-tag mono ${r.tone}`}>{r.label}</span>
+                          <span className="need-big">{typeof r.n === "number" ? fmtK(r.n) : r.n}</span>
+                          <span className="need-meta">{r.sub}</span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="allclear">✓ You're all caught up — nothing pending.</div>
+                  )}
+
+                  <div className="sec-label mono">Your progress · {RANGE_WORD[range]}</div>
+                  <div className="prog-grid">
+                    {rings.map((r) => {
+                      const pct = Math.max(0, Math.min(100, Math.round(r.pct)));
+                      return (
+                        <button key={r.k} className="ringcard" onClick={r.go} title={`Open — ${r.label}`}>
+                          <div className="progring" style={{ background: `conic-gradient(${r.color} ${pct}%, var(--line) 0)` }}>
+                            <span className="progring-hole mono">{pct}%</span>
+                          </div>
+                          <div className="progring-meta">
+                            <span className="progring-label">{r.label}</span>
+                            <b className="mono">{r.val}</b>
+                          </div>
+                        </button>
+                      );
+                    })}
+                    {hasSpark && (
+                      <button className="ringcard spark-card" onClick={() => goView("todos")} title="Open Tasks">
+                        <div className="spark-body">
+                          <div className="spark-head">
+                            <span className="progring-label">Tasks finished</span>
+                            <b className={`mono spark-delta ${deltaDown ? "down" : ""}`}>{deltaTxt}</b>
+                          </div>
+                          <SparkArea values={sv} labels={st} color="var(--moss)" soft="var(--moss-soft)"
+                            fmt={(v) => `${fmtK(v)} done`} label={`Tasks finished, ${span}`} />
+                          <span className="spark-span mono">{span}</span>
+                        </div>
+                      </button>
+                    )}
+                    {spend.values.some((v) => v > 0) && (
+                      <button className="ringcard spark-card" onClick={() => goView("finance")} title="Open Finance">
+                        <div className="spark-body">
+                          <div className="spark-head">
+                            <span className="progring-label">Spending</span>
+                            <b className="mono">{sym}{Math.round(spentNow).toLocaleString()} {RANGE_WORD[range]}</b>
+                          </div>
+                          <TinyBars values={spend.values} labels={spend.tips} color="var(--gold)"
+                            fmt={(v) => `${sym}${Math.round(v).toLocaleString()}`} label={`Spending, ${span}`} />
+                          <span className="spark-span mono">{span}</span>
+                        </div>
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="charts-duo">
+                    <div className="card"><h3>Where things live</h3><Donut items={items} /></div>
+                    <div className="card">
+                      {/* no amount up here — the TOTAL block below is the one number */}
+                      <div className="wstrip-head">
+                        <h3 style={{ margin: 0 }}>Where money goes</h3>
+                        <span className="cardsub mono">{RANGE_WORD[range]}</span>
+                      </div>
+                      {topCats.length ? (
+                        <>
+                          <div className="catbars catbars-fill">
+                            {topCats.map((c) => {
+                              const catMax = topCats[0].amt || 1;
+                              const share = spentNow > 0 ? Math.round((c.amt / spentNow) * 100) : 0;
+                              return (
+                                <div key={c.cat} className="catbar" data-tip={`${c.cat} · ${sym}${c.amt.toFixed(2)} ${RANGE_WORD[range]} (${share}% of spend)`}>
+                                  <span className="cb-name">{c.cat}</span>
+                                  <span className="cb-track"><span className="cb-fill" style={{ width: `${Math.max(4, (c.amt / catMax) * 100)}%` }} /></span>
+                                  <span className="cb-amt mono">{sym}{Math.round(c.amt).toLocaleString()}</span>
+                                  <span className="cb-share mono">{share}%</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                          <div className="wtotal">
+                            <span className="etc-label mono">TOTAL</span>
+                            <span className="wtotal-amt">{sym}{Math.round(spentNow).toLocaleString()}</span>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="m" style={{ color: "var(--ink-soft)" }}>No expenses logged {RANGE_WORD[range]} — add one in Finance.</div>
+                      )}
+                    </div>
                   </div>
                 </>
               );
             })()}
+
+            <div className="tiles">
+              {Object.entries(SECTIONS).map(([k, s]) => {
+                const nAll = items.filter((i) => i.type === k).length;
+                const nNew = items.filter((i) => i.type === k && inRange(i.date)).length;
+                return (
+                  <div key={k} className="tile" onClick={() => openSection(k)} role="button" tabIndex={0}
+                    data-tip={`Open ${s.label} — ${fmtK(nAll)} saved · ${fmtK(nNew)} added ${RANGE_WORD[range]}`}
+                    onKeyDown={(e) => e.key === "Enter" && openSection(k)}>
+                    <div className="k" style={{ color: s.color }}><Ic name={s.ic} size={22} /> {s.label}</div>
+                    <div className="n">{fmtK(nAll)}</div>
+                    <div className="d"><b>+{fmtK(nNew)}</b> {RANGE_WORD[range]}</div>
+                  </div>
+                );
+              })}
+            </div>
 
             <div className="card" style={{ borderColor: "var(--violet)" }}>
               <h3>✦ Weekly digest
@@ -1687,7 +1688,7 @@ export default function App() {
             <div className="crumb">Tasks</div>
             <h2 className="display">Tasks</h2>
             <p className="sub">One box, zero setup — type a task and it sorts itself into Overdue, Today, Upcoming or Someday. ⚑ marks priority; click a date chip to reschedule.</p>
-            <TodoBoard key={`tb-${capBump}`} />
+            <TaskBoard key={`tb-${capBump}`} />
           </>
         )}
 
@@ -1927,29 +1928,6 @@ export default function App() {
               <div className="kmerr" role="status">{quickFileErr}</div>
             )}
 
-            {view === "book" && (() => {
-              const reading = items.filter((i) => i.type === "book" && (i.progress || 0) > 0 && (i.progress || 0) < 100);
-              if (!reading.length) return null;
-              const bump = (b, d) => {
-                const p = Math.max(0, Math.min(100, (b.progress || 0) + d));
-                updateStamped({ ...b, progress: p, status: p >= 100 ? "Done" : p > 0 ? "In progress" : b.status });
-              };
-              return (
-                <div className="card" style={{ borderColor: "var(--gold)" }}>
-                  <h3>📖 Reading now</h3>
-                  {reading.map((b) => (
-                    <div key={b.id} className="readnow">
-                      <span className="fdesc" style={{ fontWeight: 600 }}>{b.alias || b.title}</span>
-                      <button className="kbtn" onClick={() => bump(b, -5)} title="Went back a bit">−5%</button>
-                      <div className="readbar" style={{ flex: 1, marginTop: 0, minWidth: 80 }}><div className="readbar-fill" style={{ width: `${b.progress || 0}%` }} /></div>
-                      <button className="kbtn" onClick={() => bump(b, 5)} title="Read a bit more — one tap">+5%</button>
-                      <span className="readpct mono">{b.progress || 0}%</span>
-                    </div>
-                  ))}
-                </div>
-              );
-            })()}
-
             {view === "note" && folders.length > 0 && (
               <div className="tagband" role="tablist" aria-label="Folders">
                 <button className={`fchip ${effFolder === "All" ? "on" : ""}`} role="tab"
@@ -2105,8 +2083,8 @@ export default function App() {
                     ? <>Nothing {dateFilter ? <>added on <b>{fmtStamp(dateFilter)}</b></> : "matching your filter"} here — <button className="av-link" onClick={() => { setDateFilter(""); setQ(""); }}>clear filters</button>.</>
                     : <>Nothing here yet. Tap <b>+ Add item</b> to create your first {SECTIONS[view].label.toLowerCase().replace(/s$/, "")}.</>}</div>
             ) : visible.length
-              ? visible.map((it) => <ItemRow key={it.id} it={it} onTag={openTag} onUpdate={updateStamped} onRemove={removeWithUndo}
-                  allItems={items} onGoto={goto} focus={focusId === it.id} onOpen={() => setPageId(it.id)} folders={folders} />)
+              ? <div className="scrolllist scrolllist-tall">{visible.map((it) => <ItemRow key={it.id} it={it} onTag={openTag} onUpdate={updateStamped} onRemove={removeWithUndo}
+                  allItems={items} onGoto={goto} focus={focusId === it.id} onOpen={() => setPageId(it.id)} folders={folders} />)}</div>
               : <div className="empty">{dateFilter || q || (view === "doc" && docFilter !== "All")
                   ? <>{dateFilter ? <>Nothing added on <b>{fmtStamp(dateFilter)}</b></> : (view === "doc" && docFilter !== "All") ? <>No <b>{docFilter}</b> documents yet</> : "Nothing matching your filter"} — <button className="av-link" onClick={() => { setDateFilter(""); setQ(""); setDocFilter("All"); }}>clear filters</button>.</>
                   : <>Nothing here yet. Tap <b>+ Add item</b>, paste a link for instant capture, or drop a file straight into the form.</>}</div>}

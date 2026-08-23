@@ -6,45 +6,55 @@ import { SECTIONS, fmtStamp } from "@/lib/seed";
 /* Command palette — Ctrl+K (or Cmd+K) from anywhere.
    Runs COMMANDS (go-to a view, actions) and searches titles, notes and
    tags across ALL sections. ↑/↓ to move, Enter to run/open, Esc to close. */
-export default function CommandPalette({ items, actions = [], open, onClose, onGo }) {
+export default function CommandPalette({ items, actions = [], open, onClose, onGo, inline = false }) {
   const [q, setQ] = useState("");
   const [sel, setSel] = useState(0);
   const inputRef = useRef(null);
 
   useEffect(() => {
-    if (open) { setQ(""); setSel(0); setTimeout(() => inputRef.current?.focus(), 30); }
-  }, [open]);
+    if (open || inline) { setQ(""); setSel(0); setTimeout(() => inputRef.current?.focus(), 30); }
+  }, [open, inline]);
 
   /* dialog-standard Escape: works no matter where focus is, so the open
    * state can never diverge from what's on screen (stuck-open palette
    * silently disables every single-key shortcut) */
   useEffect(() => {
-    if (!open) return;
+    if (!open || inline) return;
     const onEsc = (e) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", onEsc);
     return () => window.removeEventListener("keydown", onEsc);
-  }, [open, onClose]);
+  }, [open, inline, onClose]);
 
+  /* Calm ordering: an empty palette shows just your latest items — not a wall
+     of commands. Typing puts YOUR CONTENT first, tags next, and at most four
+     matching actions last. */
   const results = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    const cmdHits = actions
-      .filter((a) => !needle || (`${a.label} ${a.group || ""} ${a.keywords || ""}`).toLowerCase().includes(needle))
-      .map((a) => ({ kind: "cmd", action: a }));
-    const tagHits = !needle ? [] :
-      [...new Set(items.flatMap((i) => i.tags))]
-        .filter((t) => t.includes(needle))
-        .map((t) => ({ kind: "tag", tag: t }));
+    if (!needle) {
+      return [...items]
+        .sort((a, b) => b.date.localeCompare(a.date))
+        .slice(0, 6)
+        .map((i) => ({ kind: "item", item: i, group: "Recent" }));
+    }
     const itemHits = items
-      .filter((i) => !needle || (i.title + " " + i.meta + " " + i.tags.join(" ")).toLowerCase().includes(needle))
+      .filter((i) => (i.title + " " + i.meta + " " + i.tags.join(" ")).toLowerCase().includes(needle))
       .sort((a, b) => b.date.localeCompare(a.date))
-      .slice(0, 10)
-      .map((i) => ({ kind: "item", item: i }));
-    return [...cmdHits, ...tagHits, ...itemHits];
+      .slice(0, 8)
+      .map((i) => ({ kind: "item", item: i, group: "In your vault" }));
+    const tagHits = [...new Set(items.flatMap((i) => i.tags))]
+      .filter((t) => t.includes(needle))
+      .slice(0, 3)
+      .map((t) => ({ kind: "tag", tag: t, group: "Tags" }));
+    const cmdHits = actions
+      .filter((a) => (`${a.label} ${a.group || ""} ${a.keywords || ""}`).toLowerCase().includes(needle))
+      .slice(0, 4)
+      .map((a) => ({ kind: "cmd", action: a, group: "Actions" }));
+    return [...itemHits, ...tagHits, ...cmdHits];
   }, [q, items, actions]);
 
   useEffect(() => setSel(0), [results.length]);
 
-  if (!open) return null;
+  if (!open && !inline) return null;
 
   const go = (r) => {
     if (r.kind === "cmd") r.action.run();
@@ -59,47 +69,72 @@ export default function CommandPalette({ items, actions = [], open, onClose, onG
     if (e.key === "Escape") onClose();
   };
 
-  return (
-    <div className="pal-overlay" onClick={onClose} role="dialog" aria-label="Command palette">
-      <div className="pal" onClick={(e) => e.stopPropagation()}>
+  const body = (
+    <>
         <input ref={inputRef} value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={onKey}
-          placeholder="Type a command or search — notes, videos, books, docs, #tags…" aria-label="Command or search" />
+          placeholder="Search your vault…" aria-label="Search" />
         <div className="results">
-          {results.length === 0 && <div className="none">No matches — try a shorter word</div>}
+          {!q.trim() && results.length > 0 && (
+            <div className="res-hint">Your latest items — or start typing to search everything you&rsquo;ve saved.</div>
+          )}
+          {results.length === 0 && (
+            <div className="none">{q.trim() ? <>Nothing matches &ldquo;{q.trim()}&rdquo; — try a shorter word.</> : "Your vault is empty — press C to capture your first item."}</div>
+          )}
           {results.map((r, i) => {
+            const header = r.group && (i === 0 || results[i - 1].group !== r.group)
+              ? <div className="res-h mono" key={`h-${r.group}`}>{r.group}</div> : null;
             if (r.kind === "cmd") return (
-              <div key={`c-${r.action.label}`} className={`res ${i === sel ? "sel" : ""}`}
-                onMouseEnter={() => setSel(i)} onClick={() => go(r)}>
-                <span className="sec" style={{ color: "var(--moss)" }}>{r.action.group || "COMMAND"}</span>
-                <span className="rt">{r.action.label}</span>
-                {r.action.hint && <span className="rd"><span className="kbd">{r.action.hint}</span></span>}
-              </div>
+              <React.Fragment key={`c-${r.action.label}`}>
+                {header}
+                <div className={`res ${i === sel ? "sel" : ""}`}
+                  onMouseEnter={() => setSel(i)} onClick={() => go(r)}>
+                  <span className="sec" style={{ color: "var(--moss)" }}>{r.action.group || "ACTION"}</span>
+                  <span className="rt">{r.action.label}</span>
+                  {r.action.hint && <span className="rd"><span className="kbd">{r.action.hint}</span></span>}
+                </div>
+              </React.Fragment>
             );
             if (r.kind === "tag") return (
-              <div key={`t-${r.tag}`} className={`res ${i === sel ? "sel" : ""}`}
-                onMouseEnter={() => setSel(i)} onClick={() => go(r)}>
-                <span className="sec" style={{ color: "var(--violet)" }}>PROJECT</span>
-                <span className="rt">#{r.tag}</span>
-                <span className="rd">{`${items.filter((x) => x.tags.includes(r.tag)).length} items`}</span>
-              </div>
+              <React.Fragment key={`t-${r.tag}`}>
+                {header}
+                <div className={`res ${i === sel ? "sel" : ""}`}
+                  onMouseEnter={() => setSel(i)} onClick={() => go(r)}>
+                  <span className="sec" style={{ color: "var(--violet)" }}>TAG</span>
+                  <span className="rt">#{r.tag}</span>
+                  <span className="rd">{`${items.filter((x) => x.tags.includes(r.tag)).length} items`}</span>
+                </div>
+              </React.Fragment>
             );
             return (
-              <div key={r.item.id} className={`res ${i === sel ? "sel" : ""}`}
-                onMouseEnter={() => setSel(i)} onClick={() => go(r)}>
-                <span className="sec" style={{ color: SECTIONS[r.item.type].color }}>{SECTIONS[r.item.type].label}</span>
-                <span className="rt">{r.item.title}</span>
-                <span className="rd">{fmtStamp(r.item.date)}</span>
-              </div>
+              <React.Fragment key={r.item.id}>
+                {header}
+                <div className={`res ${i === sel ? "sel" : ""}`}
+                  onMouseEnter={() => setSel(i)} onClick={() => go(r)}>
+                  <span className="sec" style={{ color: SECTIONS[r.item.type].color }}>{SECTIONS[r.item.type].label}</span>
+                  <span className="rt">{r.item.title}</span>
+                  <span className="rd">{fmtStamp(r.item.date)}</span>
+                </div>
+              </React.Fragment>
             );
           })}
         </div>
-        <div className="tips">
-          <span><span className="kbd">↑</span><span className="kbd">↓</span> move</span>
-          <span><span className="kbd">↵</span> run</span>
-          <span><span className="kbd">Esc</span> close</span>
-          <span style={{ marginLeft: "auto" }}><span className="kbd">?</span> all shortcuts</span>
-        </div>
-      </div>
+        {!inline && (
+          <div className="tips">
+            <span><span className="kbd">↑</span><span className="kbd">↓</span> move</span>
+            <span><span className="kbd">↵</span> run</span>
+            <span><span className="kbd">Esc</span> close</span>
+            <span style={{ marginLeft: "auto" }}><span className="kbd">?</span> all shortcuts</span>
+          </div>
+        )}
+    </>
+  );
+
+  /* plain conditional frames — never an inline wrapper component, which
+     would remount (and drop focus) on every keystroke */
+  if (inline) return <div className="pal searchpage">{body}</div>;
+  return (
+    <div className="pal-overlay" onClick={onClose} role="dialog" aria-label="Command palette">
+      <div className="pal" onClick={(e) => e.stopPropagation()}>{body}</div>
     </div>
   );
 }

@@ -226,7 +226,11 @@ export default function CustomBoards({ itemsBoard }) {
   const patchBoard = (fn) => setBoards((bs) => bs.map((b) => (b.id === active ? fn(b) : b)));
   const addCol = () => patchBoard((b) => ({ ...b, cols: [...b.cols, { id: uid(), title: "New column", cards: [] }] }));
   const renameCol = (cid, title) => patchBoard((b) => ({ ...b, cols: b.cols.map((c) => (c.id === cid ? { ...c, title } : c)) }));
+  /* the workflow's backbone columns can be renamed but never deleted — losing
+     Backlog / In progress / Done breaks every board convention users expect */
+  const isCoreCol = (col) => ["backlog", "in progress", "done", "to do", "doing"].includes((col.title || "").trim().toLowerCase());
   const deleteCol = (col) => {
+    if (isCoreCol(col)) return;
     if (col.cards.length && arm !== `col:${col.id}`) { setArm(`col:${col.id}`); return; }
     patchBoard((b) => ({ ...b, cols: b.cols.filter((c) => c.id !== col.id) }));
     setArm(null);
@@ -449,7 +453,7 @@ export default function CustomBoards({ itemsBoard }) {
           </div>
 
           <div className="kanban" style={{ gridTemplateColumns: `repeat(${Math.max(1, board.cols.length)}, 1fr)` }}>
-            {board.cols.map((col) => (
+            {board.cols.map((col, ci) => (
               <div key={col.id} className={`kcol ${overCol === col.id && dragging ? "over" : ""}`}
                 onDragOver={(e) => { e.preventDefault(); setOverCol(col.id); }}
                 onDragLeave={() => setOverCol((o) => (o === col.id ? null : o))}
@@ -458,10 +462,12 @@ export default function CustomBoards({ itemsBoard }) {
                   <input className="kcol-name" value={col.title} aria-label="Column name"
                     onChange={(e) => renameCol(col.id, e.target.value)} />
                   <span className="kcount mono">{inSprint(col).length}</span>
-                  <button className={`kbtn kdel ${arm === `col:${col.id}` ? "armed" : ""}`}
-                    title={arm === `col:${col.id}` ? `Click again to delete “${col.title}” and its ${col.cards.length} card(s)` : "Delete column"}
-                    aria-label={`Delete column ${col.title}`}
-                    onClick={() => deleteCol(col)}>{arm === `col:${col.id}` ? "Sure?" : "✕"}</button>
+                  {!isCoreCol(col) && (
+                    <button className={`kbtn kdel ${arm === `col:${col.id}` ? "armed" : ""}`}
+                      title={arm === `col:${col.id}` ? `Click again to delete “${col.title}” and its ${col.cards.length} card(s)` : "Delete column"}
+                      aria-label={`Delete column ${col.title}`}
+                      onClick={() => deleteCol(col)}>{arm === `col:${col.id}` ? "Sure?" : "✕"}</button>
+                  )}
                 </div>
                 {inSprint(col).map((k) => (
                   <div key={k.id} className={`kcard bcard ${dragging === k.id ? "dragging" : ""}`}
@@ -497,8 +503,12 @@ export default function CustomBoards({ itemsBoard }) {
                     </div>
                   </div>
                 ))}
-                <input className="tadd bcard-add" placeholder="+ Add a card…" aria-label={`Add card to ${col.title}`}
-                  onKeyDown={(e) => { if (e.key === "Enter") { addCard(col.id, e.target.value); e.target.value = ""; } }} />
+                {/* new cards enter through the first (intake) column only —
+                    everything else they reach by dragging, like a real kanban */}
+                {ci === 0 && (
+                  <input className="tadd bcard-add" placeholder="+ Add a card…" aria-label={`Add card to ${col.title}`}
+                    onKeyDown={(e) => { if (e.key === "Enter") { addCard(col.id, e.target.value); e.target.value = ""; } }} />
+                )}
               </div>
             ))}
           </div>

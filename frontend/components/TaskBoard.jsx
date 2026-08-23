@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { today, daysAgo, fmtStamp } from "@/lib/seed";
-import { WeekView, MonthView, YearView, startOfWeek } from "./TodoCalendar";
+import { WeekView, MonthView, YearView, startOfWeek } from "./TaskCalendar";
 import { MiniBars, weekSeries, weekLabels } from "./Charts";
 import { importICSFile, getCalendarEvents } from "@/lib/ics";
 import { mirror, api, backendOn, hasVerifiedIdentity } from "@/lib/api";
@@ -82,7 +82,7 @@ const dueLabel = (due) => {
   return fmtStamp(due).slice(0, 6);
 };
 
-export default function TodoBoard() {
+export default function TaskBoard() {
   const [store, setStore] = useState({ version: 2, tasks: seedTasks() });
   const [hydrated, setHydrated] = useState(false);
 
@@ -439,6 +439,7 @@ export default function TodoBoard() {
         <YearView tasks={tasks} anchor={anchor} onPickMonth={(m) => { setAnchor(m); setMode("month"); }} />
       ) : (
         <>
+      <div className="scrolllist scrolllist-tall">
       {sections.map((s) => s.tasks.length > 0 && (
         <div key={s.key} className="tsec">
           <div className="tsec-head">
@@ -454,6 +455,7 @@ export default function TodoBoard() {
           ))}
         </div>
       ))}
+      </div>
 
       {sections.every((s) => s.tasks.length === 0) && (
         <div className="empty">All clear 🎉 — add a task above, or enjoy the quiet.</div>

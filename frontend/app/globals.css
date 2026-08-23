@@ -68,7 +68,8 @@ body{background:var(--bg)}
 
 /* ---------- item rows */
 .row{background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:14px 16px; display:flex; gap:14px; align-items:flex-start; margin-bottom:10px}
-.row .icbox{width:38px; height:38px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:16px; flex-shrink:0}
+.row .icbox{width:46px; height:46px; border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:18px; flex-shrink:0}
+.row .icbox .icn{width:23px; height:23px}
 .row .body{flex:1; min-width:0}
 .row .t{font-weight:600; font-size:15px; margin-bottom:3px; overflow-wrap:anywhere}
 .row .t a{color:var(--ink); text-decoration:none; border-bottom:1px solid var(--line)}
@@ -567,6 +568,37 @@ img.fpreview{height:auto}
 .av-model-pill.srv{background:var(--moss-soft); color:var(--moss)}
 .av-model-note{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--ink-soft)}
 .av-empty{display:flex; flex-direction:column; gap:12px}
+
+/* Ask your Vault — chat layout (go-to-market design) */
+.pal.askvault{display:flex; flex-direction:column; max-height:82vh}
+.av-title{display:flex; align-items:center; gap:11px; padding:14px 16px; border-bottom:1px solid var(--line)}
+.av-title-txt{display:flex; flex-direction:column; gap:1px; margin-right:auto}
+.av-title-txt b{font-size:15px; font-weight:600; color:var(--ink)}
+.av-title-txt span{font-size:12px; color:var(--ink-soft)}
+.av-convo{flex:1 1 auto; overflow-y:auto; padding:16px 18px; display:flex; flex-direction:column; gap:14px; min-height:120px}
+.av-qbubble{align-self:flex-end; max-width:85%; background:var(--moss-soft); border:1px solid var(--moss); color:var(--ink); border-radius:13px 13px 4px 13px; padding:10px 14px; font-size:14px; line-height:1.5}
+.av-thinking{display:flex; align-items:center; gap:9px; font-size:13px; color:var(--ink-soft)}
+.av-dots{display:inline-flex; gap:4px}
+.av-dots i{width:6px; height:6px; border-radius:50%; background:var(--moss); animation:avpulse 1s infinite ease-in-out}
+.av-dots i:nth-child(2){animation-delay:.15s}
+.av-dots i:nth-child(3){animation-delay:.3s}
+@keyframes avpulse{0%,80%,100%{opacity:.3}40%{opacity:1}}
+@media (prefers-reduced-motion: reduce){.av-dots i{animation:none}}
+.av-card{background:var(--panel); border:1px solid var(--line); border-radius:4px 13px 13px 13px; padding:15px 17px; box-shadow:var(--shadow-1)}
+.av-card .av-answer{margin:0}
+.askvault .av-sources{display:flex; flex-wrap:wrap; gap:7px; margin-top:12px; padding-top:12px; border-top:1px solid var(--line)}
+.av-chip{display:inline-flex; align-items:center; gap:6px; font-family:'Public Sans',sans-serif; font-size:12px; color:var(--ink-soft); background:var(--field); border:1px solid var(--line); border-radius:20px; padding:4px 11px; cursor:pointer; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.av-chip:hover:not(:disabled){border-color:var(--moss); color:var(--ink)}
+.av-chip:disabled{opacity:.6; cursor:default}
+.av-chip .mono{color:var(--moss); font-weight:600; font-size:10px}
+.av-composer{flex:none; border-top:1px solid var(--line); padding:10px 14px 12px}
+.av-composer .av-controls{border-bottom:none; padding:0 0 8px}
+.av-inputrow{display:flex; align-items:center; gap:9px; background:var(--field); border:1px solid var(--moss); border-radius:12px; padding:7px 7px 7px 14px; box-shadow:0 0 0 3px var(--moss-soft)}
+.av-inputrow input{flex:1; border:none; background:transparent; font-family:'Public Sans',sans-serif; font-size:14px; color:var(--ink)}
+.av-inputrow input:focus{outline:none}
+.av-send{width:32px; height:32px; flex:none; border:none; border-radius:9px; background:var(--moss); color:#fff; font-size:16px; font-weight:700; cursor:pointer; display:grid; place-items:center; line-height:1}
+.av-send:disabled{opacity:.5; cursor:default}
+[data-theme="dark"] .av-send{color:#0F1928}
 .av-suggests{display:flex; flex-wrap:wrap; gap:8px}
 .av-suggest{font-size:12.5px; color:var(--ink); background:var(--field); border:1px solid var(--line); border-radius:20px; padding:6px 12px; cursor:pointer; transition:border-color .12s, background .12s}
 .av-suggest:hover{border-color:var(--moss); background:var(--moss-soft)}
@@ -812,23 +844,188 @@ img.fpreview{height:auto}
 .need-cnt.amber{background:var(--gold-soft); color:var(--gold)}
 .need-cnt.neutral{background:var(--field); color:var(--ink-soft)}
 .allclear{color:var(--ink-soft); font-size:14px; padding:14px 6px}
-.needcards{display:flex; flex-direction:column; gap:8px}
-.needcard{display:flex; align-items:center; justify-content:space-between; gap:10px; width:100%; text-align:left; background:var(--field); border:1px solid var(--line); border-left:3px solid var(--line); border-radius:10px; padding:11px 13px; cursor:pointer; font-family:inherit; color:var(--ink); transition:border-color .12s, background .12s, transform .12s}
-.needcard:hover{background:var(--panel); transform:translateY(-1px)}
+/* Go-to-market dashboard: mono section labels, needs cards in a row,
+   rings + sparkline in one progress grid, breakdown charts side by side. */
+.sec-label{font-size:11.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-soft); margin:18px 0 10px; display:flex; align-items:center; gap:8px}
+.sec-label:first-of-type{margin-top:14px}
+.sl-dot{width:7px; height:7px; border-radius:50%; background:var(--moss); flex:none}
+/* Flex-wrap with grow so the row always packs edge-to-edge — cards stretch to
+   fill whatever space the count leaves, no empty cells at any width. */
+.needs-grid{display:flex; flex-wrap:wrap; gap:12px}
+.needs-grid .needcard{flex:1 1 200px; min-width:180px}
+.needcard{display:flex; flex-direction:column; align-items:flex-start; gap:3px; text-align:left; background:var(--panel); border:1px solid var(--line); border-left:3px solid var(--line); border-radius:12px; padding:13px 15px; cursor:pointer; font-family:inherit; color:var(--ink); transition:border-color .12s, box-shadow .12s, transform .12s}
+.needcard:hover{box-shadow:var(--shadow-2); transform:translateY(-1px)}
 .needcard.tone-red{border-left-color:var(--stamp)}
 .needcard.tone-amber{border-left-color:var(--gold)}
 .needcard.tone-neutral{border-left-color:var(--blue)}
-.need-lead{display:flex; flex-direction:column; gap:2px; min-width:0}
-.need-label{font-size:14px; font-weight:600}
-.need-sub{font-size:11.5px; color:var(--stamp)}
+.need-tag{font-size:10.5px; letter-spacing:.06em; text-transform:uppercase}
+.need-tag.red{color:var(--stamp)}
+.need-tag.amber{color:var(--gold)}
+.need-tag.neutral{color:var(--blue)}
+.need-big{font-family:'Fraunces',serif; font-size:24px; font-weight:650; line-height:1.15}
+.need-meta{font-size:12px; color:var(--ink-soft)}
+.prog-grid{display:flex; flex-wrap:wrap; gap:12px}
+.ringcard{display:flex; align-items:center; gap:13px; background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:14px 15px; min-width:200px; min-height:96px; flex:1 1 215px; text-align:left; font-family:inherit; color:var(--ink); cursor:pointer; transition:border-color .12s, box-shadow .12s, transform .12s}
+.ringcard:hover{box-shadow:var(--shadow-2); transform:translateY(-1px)}
+.spark-card{align-items:stretch; flex:1.6 1 300px; min-height:128px}
+.tinybars{width:100%; height:64px; flex:1}
+
+/* cursor-following chart tooltip (TinyBars, SparkArea, Donut) */
+.chart-wrap{position:relative; flex:1; display:flex; min-width:0}
+.chart-wrap>.tinybars, .chart-wrap>.sparkline{width:100%}
+/* the donut fills its card: it tracks the card's HEIGHT (the dimension that
+   actually grows when the row stretches), square via the viewBox ratio,
+   with width as a secondary bound so the legend always keeps its room */
+.donut-wrap{flex:1; align-self:stretch; min-height:170px}
+.donut-svg{height:clamp(150px, 100%, 250px); width:auto; max-width:48%; flex:none}
+.chart-tip{position:absolute; transform:translate(-50%,-135%); background:var(--ink); color:var(--bg); font-size:11px; font-weight:600; padding:5px 10px; border-radius:7px; white-space:nowrap; pointer-events:none; z-index:60; box-shadow:var(--shadow-2)}
+.dseg{transition:stroke-width .1s; cursor:pointer}
+.dseg:hover{stroke-width:20}
+
+/* instant CSS tooltips for icons, tiles, legends — no 1s native-title delay */
+[data-tip]{position:relative}
+[data-tip]:hover::after{content:attr(data-tip); position:absolute; bottom:calc(100% + 7px); left:50%; transform:translateX(-50%); background:var(--ink); color:var(--bg); font-family:'Public Sans',sans-serif; font-size:11px; font-weight:600; line-height:1.4; padding:5px 10px; border-radius:7px; white-space:nowrap; z-index:60; pointer-events:none; box-shadow:var(--shadow-2)}
+[data-tip]:hover::before{content:""; position:absolute; bottom:calc(100% + 2px); left:50%; transform:translateX(-50%); border:5px solid transparent; border-top-color:var(--ink); z-index:60; pointer-events:none}
+.catbar[data-tip]:hover{background:var(--field); border-radius:8px}
+.catbar:hover .cb-fill{filter:brightness(1.15)}
+
+/* ---- Finance: plain-language summaries + statement import ---- */
+.fin-plain{background:var(--moss-soft); border:1px solid var(--moss); border-radius:11px; padding:12px 16px; font-size:14.5px; line-height:1.55; color:var(--ink); margin-bottom:14px}
+.fin-plain.warn{background:var(--stamp-soft); border-color:var(--stamp)}
+.fin-over{color:var(--stamp)}
+.pal.stmtdlg{max-width:680px}
+.stmt-lead{font-size:14px; color:var(--ink-soft); line-height:1.55; margin:0 0 14px}
+.stmt-drop{display:flex; flex-direction:column; align-items:center; gap:4px; width:100%; padding:26px 16px; background:var(--field); border:1.5px dashed var(--moss); border-radius:14px; cursor:pointer; color:var(--ink); font-family:'Public Sans',sans-serif; font-size:14.5px; font-weight:600; transition:background .12s}
+.stmt-drop:hover{background:var(--moss-soft)}
+.stmt-plus{width:38px; height:38px; border-radius:50%; background:var(--moss); color:#fff; display:grid; place-items:center; font-size:22px; margin-bottom:4px}
+[data-theme="dark"] .stmt-plus{color:#0F1928}
+.stmt-drop small{font-weight:400; font-size:12px; color:var(--ink-soft)}
+.stmt-or{text-align:center; font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-soft); margin:14px 0 8px}
+.stmt-paste{width:100%; border:1px solid var(--line); border-radius:10px; background:var(--field); color:var(--ink); font-family:'IBM Plex Mono',monospace; font-size:12px; padding:10px 12px; resize:vertical; margin-bottom:10px}
+.stmt-paste:focus{outline:2px solid var(--moss); outline-offset:1px}
+.stmt-summary{font-size:14px; color:var(--ink); margin-bottom:10px}
+.stmt-source{display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:10px; background:var(--field); border:1px solid var(--line); border-radius:10px; padding:9px 12px}
+.stmt-source label{font-size:13px; font-weight:600; color:var(--ink); flex:none}
+.stmt-source input{flex:1; min-width:180px; border:1px solid var(--line); border-radius:8px; background:var(--panel); color:var(--ink); font-family:'Public Sans',sans-serif; font-size:13px; padding:6px 10px}
+.stmt-source input:focus{outline:2px solid var(--moss); outline-offset:1px}
+.stmt-source small{flex-basis:100%; font-size:11.5px; color:var(--ink-soft)}
+.stmt-tablewrap{max-height:46vh; overflow:auto; border:1px solid var(--line); border-radius:10px}
+.stmt-table{margin:0}
+.stmt-table select{font-size:12px; border:1px solid var(--line); border-radius:6px; background:var(--field); color:var(--ink); padding:2px 5px}
+.stmt-name{max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.stmt-off{opacity:.42}
+.stmt-actions{display:flex; justify-content:space-between; gap:10px; margin-top:12px}
+
+/* finance explainers, budget period, totals, analyst KPIs */
+.fin-how{font-size:13px; color:var(--ink-soft); line-height:1.55; background:var(--field); border:1px solid var(--line); border-radius:9px; padding:9px 13px; margin:6px 0 12px}
+.fin-how b{color:var(--ink)}
+.finhow-fold{margin-bottom:14px}
+.finhow-body{display:flex; flex-direction:column; gap:9px; padding:10px 4px 4px; font-size:13.5px; line-height:1.55; color:var(--ink-soft)}
+.finhow-body b{color:var(--ink)}
+.bperiod{display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:4px 0 12px}
+.bperiod-label{font-size:13px; font-weight:600; color:var(--ink)}
+.bperiod-hint{font-size:12px; color:var(--ink-soft)}
+.btotal{display:flex; align-items:baseline; gap:12px; border-top:1px solid var(--line); margin-top:10px; padding-top:10px}
+.btotal-line{font-size:13.5px; color:var(--ink-soft)}
+.btotal-line b{color:var(--ink)}
+.kpi-grid{display:flex; flex-wrap:wrap; gap:10px; margin:12px 0}
+.kpi{flex:1 1 180px; min-width:170px; background:var(--field); border:1px solid var(--line); border-radius:11px; padding:11px 13px; display:flex; flex-direction:column; gap:2px}
+.kpi.ok{border-left:3px solid var(--moss)}
+.kpi.bad{border-left:3px solid var(--stamp)}
+.kpi-k{font-size:10.5px; letter-spacing:.07em; text-transform:uppercase; color:var(--ink-soft)}
+.kpi-v{font-family:'Fraunces',serif; font-size:20px; font-weight:650; color:var(--ink)}
+.kpi.bad .kpi-v{color:var(--stamp)}
+.kpi-d{font-size:12px; color:var(--ink-soft); line-height:1.45}
+
+/* long lists scroll inside their card instead of stretching the page;
+   totals and headers sit OUTSIDE the scroll area so they never move */
+.scrolllist{max-height:440px; overflow-y:auto; padding-right:4px; overscroll-behavior:contain}
+.scrolllist-tall{max-height:62vh}
+.scrolllist-short{max-height:240px}
+.kanban .kcol{max-height:480px; overflow-y:auto; overscroll-behavior:contain}
+.pal.searchpage .results{max-height:60vh; overflow-y:auto}
+.askpage .av-convo{max-height:55vh}
+
+/* "Where it goes / money goes" total block + space-filling bars */
+.wtotal{display:flex; align-items:baseline; justify-content:space-between; gap:12px; background:var(--field); border:1px solid var(--line); border-radius:10px; padding:10px 14px; margin-top:12px}
+.wtotal-amt{font-family:'Fraunces',serif; font-size:22px; font-weight:650}
+.charts-duo .card{display:flex; flex-direction:column}
+.catbars-fill{flex:1; display:flex; flex-direction:column; justify-content:space-evenly; gap:10px}
+.catbars-fill .catbar{padding:6px 4px}
+.cb-share{font-size:10.5px; color:var(--ink-soft); min-width:34px; text-align:right}
+
+/* budget allocation bar (stacked category slices of the overall budget) */
+.bclamp{flex-basis:100%; font-size:11px; color:var(--gold); padding-left:2px}
+.bsub-note b{color:var(--moss)}
+.balloc{margin:2px 0 12px}
+.balloc-bar{display:flex; height:14px; border-radius:20px; background:var(--field); border:1px solid var(--line); overflow:hidden}
+.balloc-seg{height:100%}
+.balloc-seg+.balloc-seg{border-left:1px solid var(--panel)}
+.balloc-line{display:block; font-size:11.5px; color:var(--ink-soft); margin-top:5px}
+.balloc-line b{color:var(--ink)}
+
+/* bill card ⓘ details */
+.bill-detail{display:flex; flex-direction:column; gap:5px; margin-top:9px; padding-top:9px; border-top:1px dashed var(--line); font-size:12.5px}
+.bill-detail>div{display:flex; justify-content:space-between; gap:10px}
+.bill-detail span{color:var(--ink-soft)}
+.bill-detail b{font-weight:600; text-align:right}
+.kbtn.on{background:var(--moss-soft); color:var(--moss)}
+
+/* expense range total — its own card, just the number */
+.exp-total-card{display:flex; flex-direction:column; gap:4px; align-items:flex-start; margin-top:12px}
+.etc-label{font-size:10.5px; letter-spacing:.09em; color:var(--ink-soft)}
+.etc-amount{font-family:'Fraunces',serif; font-size:30px; font-weight:650; line-height:1.1}
+
+/* download dropdown in the finance toolbar */
+.dl-menu{position:relative; display:inline-block}
+.dl-summary{list-style:none; cursor:pointer; display:inline-block}
+.dl-summary::-webkit-details-marker{display:none}
+.dl-pop{position:absolute; top:calc(100% + 6px); left:0; z-index:80; background:var(--panel); border:1px solid var(--line); border-radius:11px; box-shadow:var(--shadow-3); padding:6px; min-width:230px; display:flex; flex-direction:column; gap:2px}
+.dl-pop button{display:flex; flex-direction:column; align-items:flex-start; gap:1px; width:100%; text-align:left; background:none; border:none; border-radius:8px; padding:8px 11px; cursor:pointer; font-family:'Public Sans',sans-serif; color:var(--ink)}
+.dl-pop button:hover{background:var(--moss-soft)}
+.dl-pop b{font-size:13.5px; font-weight:600}
+.dl-pop small{font-size:11.5px; color:var(--ink-soft)}
+
+/* Ask + Search as in-page sections (no overlay) */
+.pal.askpage, .pal.searchpage{position:static; width:100%; max-width:860px; margin:0; box-shadow:var(--shadow-1); border:1px solid var(--line); border-radius:14px; background:var(--panel)}
+.pal.searchpage{padding-top:4px}
+.pal.searchpage input{width:100%; border:none; background:transparent; font-family:'Public Sans',sans-serif; font-size:16px; color:var(--ink); padding:16px 18px 12px; border-bottom:1px solid var(--line)}
+.pal.searchpage input:focus{outline:none}
+.pal.searchpage .results{padding-bottom:8px}
+
+/* calmer command palette: gentle group headers + a friendly empty state */
+.res-h{font-size:10.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-soft); padding:10px 14px 4px}
+.res-hint{font-size:13px; color:var(--ink-soft); padding:12px 14px 4px; line-height:1.5}
+.spark-body{display:flex; flex-direction:column; gap:4px; flex:1; min-width:0}
+.spark-head{display:flex; align-items:baseline; justify-content:space-between; gap:10px}
+.spark-delta{font-size:14px; color:var(--moss); font-weight:600}
+.spark-delta.down{color:var(--stamp)}
+.sparkline{width:100%; height:64px; flex:1}
+.spark-span{font-size:10px; color:var(--ink-soft)}
+.charts-duo{display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:18px}
+@media (max-width:760px){.charts-duo{grid-template-columns:1fr}}
+.charts-duo .card{margin-bottom:0}
 .proglist{display:flex; flex-direction:column; gap:13px; padding-top:4px}
 .prog-top{display:flex; justify-content:space-between; gap:10px; font-size:13px; color:var(--ink-soft); margin-bottom:5px}
 .prog-top b{color:var(--ink); font-weight:600; font-size:12px}
 .prog-track{height:7px; background:var(--field); border-radius:20px; overflow:hidden}
 .prog-fill{height:100%; border-radius:20px; transition:width .3s}
+.progrings{display:flex; flex-direction:column; gap:14px; padding-top:4px}
+.progring-card{display:flex; align-items:center; gap:14px}
+.progring{width:58px; height:58px; border-radius:50%; flex:none; display:grid; place-items:center}
+.progring-hole{width:42px; height:42px; border-radius:50%; background:var(--panel); display:grid; place-items:center; font-size:11.5px; font-weight:600; color:var(--ink)}
+.progring-meta{display:flex; flex-direction:column; gap:1px; min-width:0}
+.progring-label{font-size:13px; color:var(--ink-soft); line-height:1.3; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden}
+.progring-meta b{font-size:13.5px; color:var(--ink); font-weight:600}
+.dash-search{display:flex; align-items:center; gap:10px; width:100%; max-width:560px; text-align:left; margin:14px 0 2px; background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:10px 14px; cursor:pointer; color:var(--ink-soft); font-family:'Public Sans',sans-serif; font-size:14px; transition:border-color .12s}
+.dash-search:hover{border-color:var(--moss)}
+.ds-ic{color:var(--ink-soft); display:flex; flex:none}
+.ds-ph{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.ds-kbd{flex:none}
+@media (max-width:560px){.ds-kbd{display:none}}
 
 /* Content compact list — dense scannable rows, expand in place */
-.clist{border:1px solid var(--line); border-radius:12px; overflow:hidden; background:var(--panel)}
+.clist{border:1px solid var(--line); border-radius:12px; background:var(--panel); max-height:62vh; overflow-y:auto; overscroll-behavior:contain}
 .crow{display:flex; align-items:center; gap:12px; padding:9px 12px; cursor:pointer; border-bottom:1px solid var(--line); font-size:14px; color:var(--ink)}
 .citem:last-child .crow{border-bottom:none}
 .crow:hover{background:var(--field)}
@@ -1082,7 +1279,7 @@ img{max-width:100%}
 .trust-chip{display:flex; align-items:center; gap:7px; font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:.03em; text-transform:uppercase; color:#9DB2C8; border:1px solid rgba(255,255,255,.10); border-radius:8px; padding:6px 9px}
 .tc-dot{width:6px; height:6px; border-radius:50%; flex-shrink:0}
 .tc-dot.ok{background:#4FB477}
-.tc-dot.accent{background:var(--moss)}
+.tc-dot.accent{background:#6BA5E8}
 
 /* ---- keyboard focus: visible ring on anything focusable, never on click */
 button:focus-visible, a:focus-visible, summary:focus-visible,

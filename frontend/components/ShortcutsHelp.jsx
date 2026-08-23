@@ -66,7 +66,6 @@ export default function ShortcutsHelp({ open, onClose, keymap = DEFAULT_KEYS }) 
     { keys: [show(keymap.search)], label: "Focus the filter / search box" },
     { keys: [show(keymap.theme)], label: "Toggle dark / light theme" },
     { keys: [show(keymap.sidebar)], label: "Toggle the sidebar" },
-    { keys: [show(keymap.export)], label: "Export a JSON backup" },
     { keys: ["?"], label: "Show this shortcuts sheet" },
     { keys: ["Esc"], label: "Close menus, forms & dialogs" },
   ];
