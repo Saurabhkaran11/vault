@@ -5,7 +5,7 @@ import { today, daysAgo, fmtStamp } from "@/lib/seed";
 import { WeekView, MonthView, YearView, startOfWeek } from "./TodoCalendar";
 import { MiniBars, weekSeries, weekLabels } from "./Charts";
 import { importICSFile, getCalendarEvents } from "@/lib/ics";
-import { mirror } from "@/lib/api";
+import { mirror, api, backendOn, hasVerifiedIdentity } from "@/lib/api";
 import { uid } from "@/lib/id";
 
 /* To-dos, redesigned for simplicity: ONE quick-add bar, and the app sorts
@@ -152,7 +152,28 @@ export default function TodoBoard() {
   const [calEvents, setCalEvents] = useState([]);
   const [calMsg, setCalMsg] = useState(null);
   const icsRef = React.useRef(null);
-  useEffect(() => { setCalEvents(getCalendarEvents()); }, []);
+  /* Calendar events shown on the grid come from two places: imported .ics
+     files (local) and a connected Google Calendar (backend). Both are mapped
+     to the same {date, summary, cal, time} shape the views already render. */
+  useEffect(() => {
+    setCalEvents(getCalendarEvents());
+    if (!backendOn() || !hasVerifiedIdentity()) return;
+    (async () => {
+      try {
+        const g = await api("/calendar/events");
+        const mapped = (g || []).filter((e) => e.starts_at).map((e) => {
+          const d = new Date(e.starts_at);
+          const date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+          return {
+            id: `g-${e.id}`, date, summary: e.title || "(no title)", cal: "Google",
+            time: e.all_day ? "" : d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+            source: "google",
+          };
+        });
+        if (mapped.length) setCalEvents((prev) => [...prev, ...mapped]);
+      } catch { /* not connected / offline — the .ics events still show */ }
+    })();
+  }, []);
   const dueOnDay = tasks.filter((t) => !t.done && t.due === anchor).sort((a, b) => (b.high ? 1 : 0) - (a.high ? 1 : 0));
   const doneOnDay = tasks.filter((t) => t.done && (t.doneAt === anchor || t.due === anchor));
 

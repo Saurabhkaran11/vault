@@ -38,9 +38,16 @@ GOOGLE_AUTH_ENDPOINT = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token"
 GOOGLE_USERINFO = "https://openidconnect.googleapis.com/v1/userinfo"
 GOOGLE_EVENTS = "https://www.googleapis.com/calendar/v3/calendars/primary/events"
-# Phase 1 is read-only: the narrowest scope that still shows external events,
-# which is also the fastest to get through Google verification.
-GOOGLE_SCOPES = ["openid", "email", "https://www.googleapis.com/auth/calendar.readonly"]
+# Read-only scopes: calendar events, plus Drive so a user can import a Doc/
+# Sheet/PDF's text into the vault. drive.readonly can read + export file
+# content; the in-app picker means we never load Google's picker JS (blocked
+# by the frontend CSP). Incremental auth (include_granted_scopes) lets an
+# existing calendar-only connection add Drive on the next reconnect.
+GOOGLE_SCOPES = [
+    "openid", "email",
+    "https://www.googleapis.com/auth/calendar.readonly",
+    "https://www.googleapis.com/auth/drive.readonly",
+]
 
 
 def google_configured() -> bool:

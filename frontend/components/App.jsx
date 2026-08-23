@@ -28,6 +28,7 @@ import { downloadBackup, inspectBackup, applyBackup } from "@/lib/backup";
 import { AI_MODELS, OSS_PRESETS, OSS_MODEL_SUGGESTIONS, presetById, getAIConfig, setAIConfig, askText, askJSON } from "@/lib/ai";
 import { useAiReady } from "@/hooks/useAiReady";
 import CalendarConnect from "./CalendarConnect";
+import GoogleDrivePicker from "./GoogleDrivePicker";
 import { getBackend, setBackend, backendHealthy, fullSync, flushQueue, pendingMirrors, pullAll, applyPulled, hydrateIfEmpty, hasVerifiedIdentity } from "@/lib/api";
 import { storeFile } from "@/lib/files";
 import AccountSection from "./AccountSection";
@@ -636,6 +637,7 @@ export default function App() {
   const [notesLayout, setNotesLayout] = useState("list"); // list | grid
   const [expandedId, setExpandedId] = useState(null);     // compact list: which row is open
   const clistRef = useRef(null);
+  const [driveOpen, setDriveOpen] = useState(false);      // Google Drive import picker
   const [showTemplates, setShowTemplates] = useState(false);
   const [docFilter, setDocFilter] = useState("All"); // All | PDF | Word | Sheet | Image
   const [helpOpen, setHelpOpen] = useState(false);     // "?" shortcuts sheet
@@ -1199,6 +1201,7 @@ export default function App() {
       )}
       <AskVault items={items} open={askOpen} onClose={() => setAskOpen(false)}
         onGoto={goto} onOpenSettings={() => setSettingsOpen(true)} />
+      <GoogleDrivePicker open={driveOpen} onClose={() => setDriveOpen(false)} onImport={(it) => add(it)} />
       {chord && <div className="chordhint mono" role="status">G — then {NAV_ACTIONS.map((a) => (keymap[a.id] || a.def).toUpperCase()).join(" ")}</div>}
 
       <nav className={`side ${open ? "open" : "rail"}`}>
@@ -1852,6 +1855,12 @@ export default function App() {
                   }} />
                 <span className="cardsub mono">lives in its app · linked here</span>
               </div>
+            )}
+
+            {view === "doc" && hasVerifiedIdentity() && (
+              <button className="btn ghost" style={{ marginBottom: 12 }} onClick={() => setDriveOpen(true)}>
+                ⬇ Import from Google Drive <span className="menukey">Docs · Sheets · PDFs</span>
+              </button>
             )}
 
             {view === "doc" && (
