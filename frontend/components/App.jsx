@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { SECTIONS, fmtStamp, daysAgo, today } from "@/lib/seed";
 import { useStore } from "@/hooks/useStore";
-import { WeeklyBars, Donut } from "./Charts";
+import { Donut, MiniBars, weekSeries, weekLabels } from "./Charts";
 import GraphView from "./GraphView";
 import ItemRow, { TagAdder } from "./ItemRow";
 import { Ic } from "./Icons";
@@ -690,6 +690,9 @@ export default function App() {
         overdueTasks: tasks.filter((t) => !t.done && t.due && t.due < t0).length,
         pendingBills: (fin.bills || []).filter((b) => !b.paid).length,
         overdueBills: (fin.bills || []).filter((b) => !b.paid && daysAgo(b.due) > 0).length,
+        pendingBillsTotal: (fin.bills || []).filter((b) => !b.paid).reduce((a, b) => a + (+b.amount || 0), 0),
+        inbox: items.filter((i) => i.status === "Inbox").length,
+        doneWeeks: weekSeries(tasks.filter((t) => t.done && t.doneAt).map((t) => t.doneAt), 8),
         ins: buildInsights(items, tasks, fin, t0),
       });
     } catch { setPulse(null); }
@@ -866,6 +869,7 @@ export default function App() {
   }, [items, docFilter]);
   const openTag = (t) => { setTag(t); setView("tag"); setAdding(false); setQ(""); setDateFilter(""); setPageId(null); };
   const openSection = (k) => { setView(k); setTag(null); setAdding(false); setQ(""); setDateFilter(""); setPageId(null); };
+  const goView = (v) => { setView(v); setTag(null); setAdding(false); setPageId(null); };
   /* jump to a specific item in its own section, scroll to it and flash it */
   const goto = (it) => {
     openSection(it.type);
@@ -1371,36 +1375,56 @@ export default function App() {
 
             {pulse?.ins && (() => {
               const ins = pulse.ins;
-              const maxDay = Math.max(1, ...ins.days.map((d) => d.n));
               return (
                 <div className="charts-top">
                   <div className="card">
-                    <div className="wstrip-head">
-                      <h3 style={{ margin: 0 }}>Your week</h3>
-                      <span className={`streak mono ${ins.streak > 0 ? "hot" : ""}`}>
-                        {ins.streak > 0 ? `🔥 ${ins.streak}-day streak` : "Nothing yet today"}
-                      </span>
-                    </div>
-                    <div className="wstrip" aria-label="Activity over the last 7 days">
-                      {ins.days.map((d, k) => (
-                        <div key={d.iso} className="wday" title={`${d.iso} — ${d.n} thing${d.n === 1 ? "" : "s"} (saved, done, or logged)`}>
-                          <div className="wbarwrap"><div className={`wbar ${d.n > 0 ? "on" : ""}`} style={{ height: `${Math.max(8, (d.n / maxDay) * 100)}%` }} /></div>
-                          <span className={`wlbl mono ${k === 6 ? "today" : ""}`}>{k === 6 ? "Today" : d.wd}</span>
+                    <div className="wstrip-head"><h3 style={{ margin: 0 }}>Needs you now</h3></div>
+                    {(() => {
+                      const sym = ins.money.sym;
+                      const cardsOpen = Math.max(0, ins.boards.total - ins.boards.done);
+                      const rows = [
+                        pulse.overdueTasks && { k: "od", label: "Overdue to-dos", n: pulse.overdueTasks, tone: "red", go: () => goView("todos") },
+                        pulse.dueToday && { k: "dt", label: "Due today", n: pulse.dueToday, tone: "amber", go: () => goView("todos") },
+                        pulse.pendingBills && { k: "bill", label: "Unpaid bills", sub: pulse.overdueBills ? `${pulse.overdueBills} overdue` : null, n: `${sym}${Math.round(pulse.pendingBillsTotal).toLocaleString()}`, tone: pulse.overdueBills ? "red" : "amber", go: () => goView("finance") },
+                        cardsOpen && { k: "cards", label: "Cards in progress", n: cardsOpen, tone: "neutral", go: () => goView("board") },
+                        pulse.inbox && { k: "inbox", label: "Inbox to sort", n: pulse.inbox, tone: "neutral", go: () => goView("all") },
+                      ].filter(Boolean);
+                      return rows.length ? (
+                        <div className="needlist">
+                          {rows.map((r) => (
+                            <button key={r.k} className="needrow" onClick={r.go} title={`Open — ${r.label}`}>
+                              <span className="need-txt">{r.label}{r.sub && <small>{r.sub}</small>}</span>
+                              <span className={`need-cnt ${r.tone}`}>{r.n}</span>
+                            </button>
+                          ))}
                         </div>
-                      ))}
-                    </div>
-                    <div className="m" style={{ color: "var(--ink-soft)", fontSize: 12 }}>
-                      A day counts when you save, finish or log anything.
-                    </div>
+                      ) : (
+                        <div className="allclear">✓ You're all caught up — nothing pending.</div>
+                      );
+                    })()}
                   </div>
                   <div className="card">
-                    <div className="wstrip-head">
-                      <h3 style={{ margin: 0 }}>Items added per week</h3>
-                      <span className="cardsub mono">
-                        {ins.trend.savedNow >= ins.trend.savedPrev ? "▲" : "▼"} {ins.trend.savedNow} this wk · {ins.trend.savedPrev} last
-                      </span>
-                    </div>
-                    <WeeklyBars items={items} />
+                    <div className="wstrip-head"><h3 style={{ margin: 0 }}>Your progress</h3></div>
+                    {(() => {
+                      const sym = ins.money.sym;
+                      const readingBooks = items.filter((i) => i.type === "book" && (i.progress || 0) > 0 && (i.progress || 0) < 100).slice(0, 2);
+                      const rows = [
+                        { k: "todo", label: "To-dos this week", val: `${ins.todos.doneWeek} done · ${ins.todos.open} open`, pct: ins.todos.pct, color: "var(--moss)" },
+                        ins.boards.total > 0 && { k: "sprint", label: "Sprint", val: `${ins.boards.done}/${ins.boards.total} done`, pct: ins.boards.pct, color: "var(--azure)" },
+                        ...readingBooks.map((b) => ({ k: `bk-${b.id}`, label: `Reading · ${b.alias || b.title}`, val: `${b.progress || 0}%`, pct: b.progress || 0, color: "var(--gold)" })),
+                        ins.money.budget > 0 && { k: "budget", label: "Budget used", val: `${sym}${Math.round(ins.money.spent).toLocaleString()} / ${sym}${Math.round(ins.money.budget).toLocaleString()}`, pct: Math.min(100, ins.money.pct), color: ins.money.pct > 100 ? "var(--stamp)" : "var(--gold)" },
+                      ].filter(Boolean);
+                      return (
+                        <div className="proglist">
+                          {rows.map((r) => (
+                            <div key={r.k} className="progrow">
+                              <div className="prog-top"><span>{r.label}</span><b className="mono">{r.val}</b></div>
+                              <div className="prog-track"><div className="prog-fill" style={{ width: `${Math.max(3, r.pct)}%`, background: r.color }} /></div>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })()}
                   </div>
                   <div className="card"><h3>Where things live</h3><Donut items={items} /></div>
                   <div className="card">
@@ -1428,6 +1452,16 @@ export default function App() {
                 </div>
               );
             })()}
+
+            {pulse?.doneWeeks && pulse.doneWeeks.some((n) => n > 0) && (
+              <div className="card">
+                <div className="wstrip-head">
+                  <h3 style={{ margin: 0 }}>Tasks finished per week</h3>
+                  <span className="cardsub mono">last 8 weeks · your momentum</span>
+                </div>
+                <MiniBars values={pulse.doneWeeks} labels={weekLabels(8)} color="var(--moss)" />
+              </div>
+            )}
 
             {pulse?.ins && (() => {
               const usage = pulse.ins.usage;
