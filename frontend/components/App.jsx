@@ -861,12 +861,6 @@ export default function App() {
     return "Other";
   };
   const DOC_CATS = ["PDF", "Word", "Sheet", "Image", "Links", "Text", "Other"];
-  // If the active doc filter drains to empty (last of its kind deleted), its
-  // tab disappears — fall back to All so the view isn't stuck showing nothing.
-  useEffect(() => {
-    if (docFilter !== "All" && !items.some((i) => i.type === "doc" && docCategory(i) === docFilter))
-      setDocFilter("All");
-  }, [items, docFilter]);
   const openTag = (t) => { setTag(t); setView("tag"); setAdding(false); setQ(""); setDateFilter(""); setPageId(null); };
   const openSection = (k) => { setView(k); setTag(null); setAdding(false); setQ(""); setDateFilter(""); setPageId(null); };
   const goView = (v) => { setView(v); setTag(null); setAdding(false); setPageId(null); };
@@ -1762,9 +1756,12 @@ export default function App() {
               const size = bytes > 1048576 ? `${(bytes / 1048576).toFixed(1)} MB` : `${Math.round(bytes / 1024)} KB`;
               const counts = {};
               docs.forEach((d) => { const c = docCategory(d); counts[c] = (counts[c] || 0) + 1; });
-              // Only offer a filter tab for a category that actually has docs,
-              // so no tab ever leads to an empty view.
-              const tabs = ["All", ...DOC_CATS.filter((c) => counts[c])];
+              // Show the document types as a stable set so the section always
+              // reads as "PDF · Word · Sheet · Image · Links · Text", each with
+              // its count (0 included) — the types don't appear and vanish as
+              // documents come and go. "Other" only shows if something lands there.
+              const tabs = ["All", ...DOC_CATS.filter((c) => c !== "Other"),
+                            ...(counts["Other"] ? ["Other"] : [])];
               return (
                 <div className="doclib-head">
                   <span className="doclib-meta mono">
@@ -1775,7 +1772,7 @@ export default function App() {
                     {tabs.map((f) => (
                       <button key={f} className={docFilter === f ? "on" : ""} role="tab"
                         aria-selected={docFilter === f} onClick={() => setDocFilter(f)}>
-                        {f}{f !== "All" && counts[f] ? ` · ${counts[f]}` : ""}
+                        {f}{f !== "All" ? ` · ${counts[f] || 0}` : ""}
                       </button>
                     ))}
                   </div>
@@ -1952,8 +1949,8 @@ export default function App() {
             ) : visible.length
               ? visible.map((it) => <ItemRow key={it.id} it={it} onTag={openTag} onUpdate={updateStamped} onRemove={removeWithUndo}
                   allItems={items} onGoto={goto} focus={focusId === it.id} onOpen={() => setPageId(it.id)} folders={folders} />)
-              : <div className="empty">{dateFilter || q
-                  ? <>Nothing {dateFilter ? <>added on <b>{fmtStamp(dateFilter)}</b></> : "matching your filter"} here — <button className="av-link" onClick={() => { setDateFilter(""); setQ(""); }}>clear filters</button>.</>
+              : <div className="empty">{dateFilter || q || (view === "doc" && docFilter !== "All")
+                  ? <>{dateFilter ? <>Nothing added on <b>{fmtStamp(dateFilter)}</b></> : (view === "doc" && docFilter !== "All") ? <>No <b>{docFilter}</b> documents yet</> : "Nothing matching your filter"} — <button className="av-link" onClick={() => { setDateFilter(""); setQ(""); setDocFilter("All"); }}>clear filters</button>.</>
                   : <>Nothing here yet. Tap <b>+ Add item</b>, paste a link for instant capture, or drop a file straight into the form.</>}</div>}
           </>
         )}
