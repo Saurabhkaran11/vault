@@ -41,28 +41,32 @@ export default function FinanceGoals({ goals, fmt, onChange }) {
   return (
     <div className="card">
       <h3>Savings goals</h3>
+      <div className="fin-how">Saving for something? Name it, say how much it costs, then press <b>＋ Add money</b> each time you put some aside. The bar fills as you get closer.</div>
       <div className="fform">
-        <input placeholder="Goal — e.g. MacBook, emergency fund…" value={name}
+        <input placeholder="What are you saving for? — e.g. MacBook, a trip…" value={name}
           onChange={(e) => setName(e.target.value)} aria-label="Goal name"
           onKeyDown={(e) => e.key === "Enter" && add()} />
-        <input type="number" min="0" step="1" placeholder="Target amount" value={target} style={{ width: 140 }}
+        <input type="number" min="0" step="1" placeholder="How much it costs" value={target} style={{ width: 150 }}
           onChange={(e) => setTarget(e.target.value)} aria-label="Goal target"
           onKeyDown={(e) => e.key === "Enter" && add()} />
         <button className="btn sm" onClick={add} disabled={!name.trim() || !(parseFloat(target) > 0)}>+ Add goal</button>
       </div>
       {goals.length === 0 && (
         <div className="m" style={{ color: "var(--ink-soft)", marginTop: 10 }}>
-          Nothing yet — set a target ("MacBook — 2,000") and log contributions as you save.
+          Nothing yet — try &ldquo;MacBook&rdquo; with a cost of 2,000.
         </div>
       )}
       {goals.map((g) => {
         const pct = Math.min(100, Math.round((g.saved / g.target) * 100));
         const done = g.saved >= g.target;
+        const left = Math.max(0, Math.round((g.target - g.saved) * 100) / 100);
         return (
           <div key={g.id} className="grow">
             <div className="grow-head">
               <span className="fdesc" style={{ fontWeight: 600 }}>{done ? "🎉 " : ""}{g.name}</span>
-              <span className="mono famt" style={{ color: done ? "var(--moss)" : undefined }}>{fmt(g.saved)} / {fmt(g.target)} · {pct}%</span>
+              <span className="mono famt" style={{ color: done ? "var(--moss)" : undefined }}>
+                {done ? `saved — ${fmt(g.target)} reached` : `${fmt(g.saved)} saved · ${fmt(left)} to go · ${pct}%`}
+              </span>
               {addTo === g.id ? (
                 <span style={{ display: "flex", gap: 4 }}>
                   <input type="number" step="0.01" placeholder="+ amount" value={contrib} autoFocus
@@ -73,7 +77,7 @@ export default function FinanceGoals({ goals, fmt, onChange }) {
                 </span>
               ) : (
                 <button className="kbtn" onClick={() => { setAddTo(g.id); setContrib(""); }}
-                  title="Log a contribution (negative to withdraw)">＋ Add</button>
+                  title="Log money you put aside (negative to take some back)">＋ Add money</button>
               )}
               <button className={`kbtn kdel ${arm === g.id ? "armed" : ""}`}
                 title={arm === g.id ? "Click again to delete this goal" : "Delete goal"} aria-label={`Delete ${g.name}`}

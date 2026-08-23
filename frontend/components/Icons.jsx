@@ -8,8 +8,9 @@ import React from "react";
 
 const PATHS = {
   home: (<><path d="M3 10.5 12 3l9 7.5" /><path d="M5 9.5V20a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V9.5" /></>),
-  board: (<><rect x="3" y="3" width="18" height="18" rx="2.5" /><path d="M9 3v18M15 3v12" /></>),
-  finance: (<><rect x="2.5" y="5.5" width="19" height="13.5" rx="2.5" /><path d="M2.5 9.5h19" /><path d="M6 15h4" /></>),
+  board: (<><rect x="3" y="4" width="5" height="16" rx="1.4" /><rect x="9.5" y="4" width="5" height="10.5" rx="1.4" /><rect x="16" y="4" width="5" height="6.5" rx="1.4" /></>),
+  finance: (<><path d="M5 20v-6" /><path d="M10 20V6" /><path d="M15 20v-9" /><path d="M20 20v-13" /></>),
+  content: (<><path d="M12 3 21 7.5 12 12 3 7.5 12 3Z" /><path d="M3 12l9 4.5L21 12" /><path d="M3 16.5 12 21l9-4.5" /></>),
   todos: (<><rect x="3" y="3" width="18" height="18" rx="4.5" /><path d="m8 12.2 2.8 2.8L16 9.5" /></>),
   graph: (<><circle cx="5.5" cy="6" r="2.3" /><circle cx="18.5" cy="6" r="2.3" /><circle cx="12" cy="18" r="2.3" /><path d="M7.8 6h8.4M6.6 8.1 10.9 16M17.4 8.1 13.1 16" /></>),
   note: (<><path d="M12.8 4.8 4 13.6 3 21l7.4-1L19.2 11.2" /><path d="M15.5 3.5a2.3 2.3 0 0 1 3.2 0l1.8 1.8a2.3 2.3 0 0 1 0 3.2l-1.3 1.3-5-5Z" /></>),

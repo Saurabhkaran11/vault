@@ -17,6 +17,16 @@ export const GENERIC_TAGS = [
 export const fmtStamp = (iso) =>
   new Date(iso + "T00:00:00").toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 
+/* Compact count formatting so dashboards stay legible at B2B scale — a team
+ * vault holds thousands of tasks and documents, and "12,438" as "12.4k" reads
+ * at a glance while small counts keep their exact value. */
+export const fmtK = (n) => {
+  const v = Number(n) || 0;
+  if (Math.abs(v) < 10000) return v.toLocaleString();
+  if (Math.abs(v) < 1e6) return `${(v / 1e3).toFixed(v % 1e3 === 0 ? 0 : 1)}k`;
+  return `${(v / 1e6).toFixed(1)}M`;
+};
+
 export const daysAgo = (iso) =>
   Math.floor((Date.now() - new Date(iso + "T00:00:00").getTime()) / 86400000);
 

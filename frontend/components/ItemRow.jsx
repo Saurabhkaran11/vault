@@ -368,7 +368,7 @@ export default function ItemRow({ it, onTag, onUpdate, onRemove, allItems = [], 
 
   return (
     <div className={`row ${focus ? "flash" : ""}`} ref={rowRef}>
-      <div className="icbox" style={{ background: s.soft, color: s.color }} aria-hidden="true"><Ic name={s.ic} /></div>
+      <div className="icbox" style={{ background: s.soft, color: s.color }} data-tip={s.label}><Ic name={s.ic} /></div>
       <div className="body">
         <div className="t">
           {it.cloud && detectCloud(it.url || "") && (

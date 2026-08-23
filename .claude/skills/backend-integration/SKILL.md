@@ -53,7 +53,7 @@ idempotent. Items upsert by `client_id`.
 | Skill | Frontend files | Backend files |
 |---|---|---|
 | `items-sync` | `hooks/useStore.js` | `routers/items.py` |
-| `todos-sync` | `components/TodoBoard.jsx` | `routers/todos.py` |
+| `todos-sync` | `components/TaskBoard.jsx` | `routers/todos.py` |
 | `finance-sync` | `components/FinanceBoard.jsx` | `routers/finance.py` |
 | `boards-sync` | `components/CustomBoards.jsx` | `routers/boards.py` |
 | `tags-capture-sync` | `lib/tags.js`, `components/QuickCapture.jsx`, `components/App.jsx` (Settings UI), `docs/integration.md` | `routers/tags.py` |
@@ -79,7 +79,7 @@ Every skill ends with a **Status log** — append what you did and verified.
     wedging the in-order queue forever (deterministic bodies fail identically
     on every replay); only network failures keep the queue.
   - Seed collisions: fixed ids (`sp1/sb1/se1/pm-cash/…`) randomized at seed
-    time in TodoBoard/CustomBoards/FinanceBoard + `seeded` flag; CustomBoards
+    time in TaskBoard/CustomBoards/FinanceBoard + `seeded` flag; CustomBoards
     `ensureKeys` heals stores that already duplicated `sp1` across boards
     (remint + remap current/card refs).
   - `App.jsx`: `items`/`trashed` are now `useMemo`-stable — the render-fresh

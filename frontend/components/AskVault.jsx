@@ -63,8 +63,9 @@ function retrieve(items, question, maxChunks = 8, budget = 9000) {
   return picked;
 }
 
-export default function AskVault({ items, open, onClose, onGoto, onOpenSettings }) {
+export default function AskVault({ items, open, onClose, onGoto, onOpenSettings, inline = false }) {
   const [q, setQ] = useState("");
+  const [asked, setAsked] = useState("");   // the submitted question, shown as a chat bubble
   const [scope, setScope] = useState("all");
   const [format, setFormat] = useState("prose");
   const [serverSearch, setServerSearch] = useState(false);
@@ -94,18 +95,18 @@ export default function AskVault({ items, open, onClose, onGoto, onOpenSettings 
   }, [open]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || inline) return;   // Escape only closes the dialog form
     const onKey = (e) => { if (e.key === "Escape") { e.stopPropagation(); onClose(); } };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [open, onClose]);
+  }, [open, inline, onClose]);
 
-  if (!open) return null;
+  if (!open && !inline) return null;
 
   const ask = async (qOverride) => {
     const question = (typeof qOverride === "string" ? qOverride : q).trim();
     if (!question || busy) return;
-    setQ(question);
+    setAsked(question); setQ("");
     setBusy(true); setError(null); setAnswer(null); setListing(null); setFinance(null);
 
     /* Money questions are arithmetic over every expense against every budget,
@@ -230,33 +231,17 @@ export default function AskVault({ items, open, onClose, onGoto, onOpenSettings 
     : (answeredBy && answeredBy !== "server" ? answeredBy : "your Vault server");
   const SUGGESTS = ["Summarize my latest notes", "What tasks are due this week?", "How much did I spend this month?", "List all my documents"];
 
-  return (
-    <div className="pal-overlay" onClick={onClose} role="dialog" aria-label="Ask your Vault">
-      <div className="pal askvault" onClick={(e) => e.stopPropagation()}>
-        <div className="av-head">
+  /* one body, two frames: in-page (the Ask AI section — the default now) or
+     the historical dialog. A plain conditional, NOT an inline component —
+     an inline wrapper component would remount on every keystroke. */
+  const body = (
+    <>
+        <div className="av-title">
           <span className="av-spark" aria-hidden="true">✦</span>
-          <input ref={inputRef} value={q} onChange={(e) => setQ(e.target.value)}
-            placeholder="Ask your vault anything — “what did that FastAPI video say about DB sessions?”"
-            aria-label="Question"
-            onKeyDown={(e) => e.key === "Enter" && ask()} />
-          <button className="btn sm" onClick={ask} disabled={busy || !q.trim()}>
-            {busy ? "Thinking…" : "Ask"}
-          </button>
-        </div>
-
-        <div className="av-controls">
-          <label className="av-ctl">
-            <span>Search</span>
-            <select value={scope} onChange={(e) => setScope(e.target.value)} aria-label="What to search">
-              {SCOPES.map((sc) => <option key={sc.id} value={sc.id}>{sc.label}</option>)}
-            </select>
-          </label>
-          <label className="av-ctl">
-            <span>Answer as</span>
-            <select value={format} onChange={(e) => setFormat(e.target.value)} aria-label="Answer format">
-              {FORMATS.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
-            </select>
-          </label>
+          <div className="av-title-txt">
+            <b>Ask your Vault</b>
+            <span>Answers from what you&rsquo;ve saved — with citations you can open</span>
+          </div>
           <span className="av-mode" title={canUseServerSearch()
             ? "Searches meaning across your vault, including text inside uploaded documents."
             : "Offline search matches words in titles and notes only — it cannot read inside uploaded files."}>
@@ -264,14 +249,15 @@ export default function AskVault({ items, open, onClose, onGoto, onOpenSettings 
           </span>
         </div>
 
-        <div className="av-body">
+        <div className="av-convo">
+          {asked && <div className="av-qbubble">{asked}</div>}
           {!aiEnabled() && !serverAI && (
             <div className="av-note">
               🔑 AI is off — <button className="av-link" onClick={() => { onClose(); onOpenSettings(); }}>set up an AI model in Settings</button> to ask questions.
               Your key stays in this browser only.
             </div>
           )}
-          {busy && <div className="av-note">Searching your vault…</div>}
+          {busy && <div className="av-thinking"><span className="av-dots" aria-hidden="true"><i /><i /><i /></span> Searching your vault…</div>}
           {error && <div className="av-note av-err">⚠ {error.message}</div>}
           {finance && (
             <div className="av-listing">
@@ -343,20 +329,32 @@ export default function AskVault({ items, open, onClose, onGoto, onOpenSettings 
             </div>
           )}
           {answer && (
-            <>
+            <div className="av-card">
               <div className="av-answer-head mono">✦ Answer · grounded in your vault</div>
               <div className="av-answer">{renderAnswer(answer)}</div>
+              {sources.length > 0 && (
+                /* Chips keyed by position, not item id: one item can return
+                   several chunks (document extraction), and a shared id made
+                   React drop rows. */
+                <div className="av-sources">
+                  {sources.map((s, i) => (
+                    <button key={`${s.id}-${i}`} className="av-chip" disabled={!s.local}
+                      onClick={() => { if (s.local) { onGoto(s); onClose(); } }}
+                      title={s.local ? `Open in ${SECTIONS[s.type]?.label || s.type}`
+                                     : "Stored on the server — not in this browser"}>
+                      <span className="mono">{i + 1}</span> <Ic name={SECTIONS[s.type]?.ic || "doc"} size={12} /> {(s.alias || s.title).slice(0, 42)}
+                    </button>
+                  ))}
+                </div>
+              )}
               <div className="av-model">
                 <span className={`av-model-pill ${answeredBy === "browser" ? "own" : "srv"}`}>
                   {answeredBy === "browser" ? "✦ Answered with your own AI key" : "✦ Answered by your Vault AI"}
                 </span>
                 <span className="av-model-note">{modelLabel}{sources.length ? ` · ${sources.length} source${sources.length === 1 ? "" : "s"} cited` : " · computed from your data"}</span>
               </div>
-              {/* The Documents section renders what THIS browser holds, while
-                  a server answer draws on everything synced. When they differ
-                  the user sees the app and the AI contradict each other, so
-                  say why rather than leaving a dead grey citation to explain
-                  itself. */}
+              {/* When a server answer cites items not in this browser, say why
+                  rather than leaving a dead grey citation to explain itself. */}
               {sources.some((s) => !s.local) && (
                 <div className="av-note av-warn">
                   {sources.filter((s) => !s.local).length} of these are synced to your account but
@@ -366,28 +364,14 @@ export default function AskVault({ items, open, onClose, onGoto, onOpenSettings 
                   </button>{" "}to bring them down.
                 </div>
               )}
-              <div className="av-sources">
-                {/* Keyed by position, not item id: one item legitimately
-                    returns several chunks — that is what document extraction
-                    produces — and sharing an id made React drop rows. */}
-                {sources.map((s, i) => (
-                  <button key={`${s.id}-${i}`} className="av-src" disabled={!s.local}
-                    onClick={() => { if (s.local) { onGoto(s); onClose(); } }}
-                    title={s.local ? `Open in ${SECTIONS[s.type]?.label || s.type}`
-                                   : "Stored on the server — not in this browser"}>
-                    <span className="mono">[{i + 1}]</span>{" "}
-                    <Ic name={SECTIONS[s.type]?.ic || "doc"} size={12} /> {(s.alias || s.title).slice(0, 46)}
-                  </button>
-                ))}
-              </div>
-            </>
+            </div>
           )}
-          {!answer && !busy && !error && !finance && !listing && (aiEnabled() || serverAI) && (
+          {!asked && !busy && !error && (aiEnabled() || serverAI) && (
             <div className="av-empty">
               <div className="av-note">
                 {canUseServerSearch()
-                  ? "Answers come only from what you've saved — including the text inside uploaded PDFs and Word files — with citations you can click."
-                  : "Answers come only from what you've saved. Offline search reads titles and notes; turn on Backend sync to also search inside uploaded documents."}
+                  ? "Ask anything about what you've saved — including the text inside uploaded PDFs and Word files. Every answer cites sources you can open."
+                  : "Ask anything about what you've saved. Offline search reads titles and notes; turn on Backend sync to also search inside uploaded documents."}
               </div>
               <div className="av-suggests">
                 {SUGGESTS.map((s) => (
@@ -397,12 +381,41 @@ export default function AskVault({ items, open, onClose, onGoto, onOpenSettings 
             </div>
           )}
         </div>
+
+        <div className="av-composer">
+          <div className="av-controls">
+            <label className="av-ctl"><span>Search</span>
+              <select value={scope} onChange={(e) => setScope(e.target.value)} aria-label="What to search">
+                {SCOPES.map((sc) => <option key={sc.id} value={sc.id}>{sc.label}</option>)}
+              </select>
+            </label>
+            <label className="av-ctl"><span>Answer as</span>
+              <select value={format} onChange={(e) => setFormat(e.target.value)} aria-label="Answer format">
+                {FORMATS.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
+              </select>
+            </label>
+          </div>
+          <div className="av-inputrow">
+            <input ref={inputRef} value={q} onChange={(e) => setQ(e.target.value)}
+              placeholder="Ask anything about your vault…" aria-label="Question"
+              onKeyDown={(e) => e.key === "Enter" && ask()} />
+            <button className="av-send" onClick={ask} disabled={busy || !q.trim()} aria-label="Ask">
+              {busy ? "…" : "→"}
+            </button>
+          </div>
+        </div>
         <div className="tips">
           <span><span className="kbd">↵</span> ask</span>
-          <span><span className="kbd">Esc</span> close</span>
+          {!inline && <span><span className="kbd">Esc</span> close</span>}
           <span style={{ marginLeft: "auto" }}>✦ answers cite your saved items</span>
         </div>
-      </div>
+    </>
+  );
+
+  if (inline) return <div className="pal askvault askpage">{body}</div>;
+  return (
+    <div className="pal-overlay" onClick={onClose} role="dialog" aria-label="Ask your Vault">
+      <div className="pal askvault" onClick={(e) => e.stopPropagation()}>{body}</div>
     </div>
   );
 }
