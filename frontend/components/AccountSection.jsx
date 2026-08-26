@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { SignOutButton, useUser, useClerk } from "@clerk/nextjs";
+import { SignInButton, SignOutButton, useUser, useClerk } from "@clerk/nextjs";
 import { authEnabled } from "@/lib/authConfig";
 import { api } from "@/lib/api";
 import { BACKED_UP_STORES } from "@/lib/backup";
@@ -47,6 +47,26 @@ function LocalOnlyAccount() {
   );
 }
 
+/* Auth configured but nobody signed in: the app runs local-only, and this
+ * is where the sync pitch lives — an offer, never a wall. */
+function SignedOutAccount() {
+  return (
+    <div className="set-sec">
+      <div className="menu-sec">Account</div>
+      <div className="conn-row">
+        <span>Using Vault without an account — this browser only</span>
+        <SignInButton mode="modal">
+          <button className="btn sm">Sign in</button>
+        </SignInButton>
+      </div>
+      <div className="menu-foot" style={{ border: "none", marginTop: 4, paddingTop: 0 }}>
+        Everything works and is saved on this device. Sign in only if you want
+        your vault backed up and synced across devices.
+      </div>
+    </div>
+  );
+}
+
 function SignedInAccount() {
   const { user, isLoaded } = useUser();
   const { signOut } = useClerk();
@@ -57,6 +77,9 @@ function SignedInAccount() {
 
   const email = user?.primaryEmailAddress?.emailAddress || "";
   const name = user?.fullName || user?.firstName || "";
+
+  /* auth configured, nobody signed in → the app is in local-only mode */
+  if (isLoaded && !user) return <SignedOutAccount />;
 
   /* Download everything the server holds for this account as one JSON file.
      The backend does the gathering; we just save the response. */
