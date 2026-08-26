@@ -453,7 +453,10 @@ export default function CustomBoards({ itemsBoard }) {
             <button className="kbtn" onClick={exportSprint} title="Download this sprint as CSV — key, title, status, hours, description">⬇ Export CSV</button>
           </div>
 
-          <div className="kanban" style={{ gridTemplateColumns: `repeat(${Math.max(1, board.cols.length)}, 1fr)` }}>
+          {/* column count rides a CSS variable so the mobile stacking media
+              query can still win — an inline grid-template-columns can't be
+              overridden by the stylesheet */}
+          <div className="kanban" style={{ "--kcols": Math.max(1, board.cols.length) }}>
             {board.cols.map((col, ci) => (
               <div key={col.id} className={`kcol ${overCol === col.id && dragging ? "over" : ""}`}
                 onDragOver={(e) => { e.preventDefault(); setOverCol(col.id); }}
@@ -471,16 +474,22 @@ export default function CustomBoards({ itemsBoard }) {
                   )}
                 </div>
                 {inSprint(col).map((k) => (
+                  /* the card div is a mouse/drag convenience only — keyboard
+                     access lives on the title button, because a role=button
+                     container may not nest the hours input and delete button
+                     (WCAG 4.1.2 nested-interactive) */
                   <div key={k.id} className={`kcard bcard ${dragging === k.id ? "dragging" : ""}`}
-                    role="button" tabIndex={0} draggable
+                    draggable
                     title="Open this task — details, description, status"
                     onClick={() => { setDetail({ colId: col.id, cardId: k.id }); setCdMode(k.desc ? "read" : "edit"); }}
-                    onKeyDown={(e) => e.key === "Enter" && (setDetail({ colId: col.id, cardId: k.id }), setCdMode(k.desc ? "read" : "edit"))}
                     onDragStart={() => { drag.current = { fromCol: col.id, cardId: k.id }; setDragging(k.id); }}
                     onDragEnd={() => { drag.current = null; setDragging(null); setOverCol(null); }}
                     onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setOverCol(col.id); }}
                     onDrop={(e) => { e.preventDefault(); e.stopPropagation(); moveTo(col.id, k.id); }}>
-                    <span className="bcard-title">{k.text || "Untitled task"}</span>
+                    <button type="button" className="bcard-title"
+                      onClick={(e) => { e.stopPropagation(); setDetail({ colId: col.id, cardId: k.id }); setCdMode(k.desc ? "read" : "edit"); }}>
+                      {k.text || "Untitled task"}
+                    </button>
                     {(k.labels || []).length > 0 && (
                       <span className="bcard-labels">
                         {k.labels.slice(0, 3).map((l) => {

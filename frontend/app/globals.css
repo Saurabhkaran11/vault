@@ -8,10 +8,10 @@
   --bg:#EFF3F8; --panel:#F9FBFD; --ink:#16283C; --ink-soft:#54677C;
   --line:#D7E0EA; --stamp:#B23A2E; --stamp-soft:#F4E3E0;
   --moss:#1F5FA8; --moss-soft:#DFEAF7;      /* primary · notes */
-  --gold:#0E7898; --gold-soft:#DCEEF4;      /* teal-blue · library */
-  --blue:#4A6FA5; --blue-soft:#E2E9F3;      /* slate-blue · documents */
+  --gold:#0C6E8C; --gold-soft:#DCEEF4;      /* teal-blue · library */
+  --blue:#3F6396; --blue-soft:#E2E9F3;      /* slate-blue · documents */
   --violet:#4C55A8; --violet-soft:#E4E6F6;  /* indigo · tags/AI */
-  --azure:#2E86C1; --azure-soft:#DEEDF8;    /* azure · youtube */
+  --azure:#1E6FA6; --azure-soft:#DEEDF8;    /* azure · youtube */
 }
 *{box-sizing:border-box; margin:0}
 body{background:var(--bg)}
@@ -41,8 +41,8 @@ body{background:var(--bg)}
 .tile .k .icn{width:14px; height:14px; vertical-align:-2.5px}
 .pill .icn{width:11px; height:11px; vertical-align:-1.5px}
 .navbtn .cnt{margin-left:auto; font-family:'IBM Plex Mono',monospace; font-size:11px; color:#7E93AA}
-.side .grp{font-family:'IBM Plex Mono',monospace; font-size:9.5px; letter-spacing:2px; color:#6F849B; margin:16px 10px 4px; white-space:nowrap}
-.side .foot{margin-top:auto; font-size:11px; color:#6F849B; line-height:1.6; white-space:normal; padding-top:14px}
+.side .grp{font-family:'IBM Plex Mono',monospace; font-size:9.5px; letter-spacing:2px; color:#7C90A6; margin:16px 10px 4px; white-space:nowrap}
+.side .foot{margin-top:auto; font-size:11px; color:#7C90A6; line-height:1.6; white-space:normal; padding-top:14px}
 .side .foot button{background:none; border:1px solid #35516F; color:#BCCCDD; border-radius:7px; padding:5px 9px; font-size:11px; cursor:pointer; margin:2px 4px 2px 0; font-family:'Public Sans',sans-serif}
 .side .foot button:hover{background:#1B3450; color:#fff}
 
@@ -107,7 +107,7 @@ button.stampbtn.static:hover{transform:rotate(-3deg)}
 .form .full{grid-column:1 / -1}
 .form .hint{grid-column:1 / -1; font-size:12px; color:var(--ink-soft)}
 .form .hint.ok{color:var(--moss)}
-.form .actions{grid-column:1 / -1; display:flex; gap:8px; justify-content:flex-end}
+.form .actions{grid-column:1 / -1; display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap}
 
 /* one-tap quick tags in the add form */
 .quicktags{display:flex; flex-wrap:wrap; gap:6px}
@@ -336,7 +336,7 @@ button.stampbtn.static:hover{transform:rotate(-3deg)}
 .trow.dragging{opacity:.45}
 .trow input[type=checkbox]{width:15px; height:15px; accent-color:var(--moss); flex-shrink:0; cursor:pointer}
 .tr-handle{left:5px; top:9px}
-.tr-text{flex:1; min-width:0; border:none; background:transparent; font-family:'Public Sans',sans-serif; font-size:13.5px; color:var(--ink); padding:2px}
+.tr-text{flex:1; min-width:0; text-overflow:ellipsis; border:none; background:transparent; font-family:'Public Sans',sans-serif; font-size:13.5px; color:var(--ink); padding:2px}
 .tr-text:focus{outline:none; border-bottom:1px dashed var(--moss)}
 .tr-del{background:none; border:none; color:var(--line); cursor:pointer; font-size:12px; padding:2px 5px; border-radius:5px; flex-shrink:0}
 .trow:hover .tr-del{color:var(--ink-soft)}
@@ -375,8 +375,12 @@ img.fpreview{height:auto}
 
 .doclib-head{display:flex; align-items:center; gap:14px; flex-wrap:wrap; margin-bottom:12px}
 .doclib-meta{font-size:11px; color:var(--ink-soft); letter-spacing:1px}
-.doctabs{display:flex; border:1px solid var(--line); border-radius:9px; overflow:hidden}
-.doctabs button{background:var(--panel); border:none; border-right:1px solid var(--line); color:var(--ink-soft); font-family:'Public Sans',sans-serif; font-size:12.5px; font-weight:600; padding:7px 14px; cursor:pointer}
+/* overflow-x:auto, not hidden: on narrow screens extra tabs must be
+   swipeable, never silently amputated (hidden also blocks touch panning,
+   which made clipped tabs unreachable on phones) */
+.doctabs{display:flex; border:1px solid var(--line); border-radius:9px; overflow-x:auto; overflow-y:hidden; scrollbar-width:none}
+.doctabs::-webkit-scrollbar{display:none}
+.doctabs button{background:var(--panel); border:none; border-right:1px solid var(--line); color:var(--ink-soft); font-family:'Public Sans',sans-serif; font-size:12.5px; font-weight:600; padding:7px 14px; cursor:pointer; flex-shrink:0; white-space:nowrap}
 .doctabs button:last-child{border-right:none}
 .doctabs button.on{background:var(--stamp); color:#fff}
 
@@ -498,7 +502,7 @@ img.fpreview{height:auto}
 
 /* ---------- kanban (project board + finance bills) */
 .boardmeta{display:flex; align-items:center; gap:12px; margin-bottom:14px; font-size:11px; color:var(--ink-soft); letter-spacing:1px}
-.kanban{display:grid; grid-template-columns:repeat(3,1fr); gap:12px; align-items:start}
+.kanban{display:grid; grid-template-columns:repeat(var(--kcols,3),1fr); gap:12px; align-items:start}
 .kcol{background:var(--bg); border:1px solid var(--line); border-radius:12px; padding:10px; min-height:120px; transition:border-color .15s, background .15s}
 .kcol.over{border-color:var(--moss); background:var(--moss-soft)}
 .kcol-head{display:flex; align-items:center; gap:8px; padding:2px 4px 10px}
@@ -537,7 +541,7 @@ img.fpreview{height:auto}
 .fcat{font-size:9.5px; letter-spacing:1px; text-transform:uppercase; color:var(--blue); background:var(--blue-soft); border-radius:5px; padding:3px 7px; flex-shrink:0; width:86px; text-align:center}
 .fdesc{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
 .famt{font-size:12.5px; font-weight:600; flex-shrink:0}
-.fcatrow{display:flex; align-items:center; gap:10px; padding:6px 0}
+.fcatrow{display:flex; align-items:center; gap:10px; padding:6px 0; flex-wrap:wrap}
 .fbar{flex:1; height:8px; background:var(--moss-soft); border-radius:99px; overflow:hidden}
 .fbar-fill{height:100%; background:var(--moss); border-radius:99px}
 .cursel{border:1px solid var(--line); border-radius:6px; padding:2px 6px; font-size:11px; background:var(--field); color:var(--ink); cursor:pointer}
@@ -594,7 +598,7 @@ img.fpreview{height:auto}
 .av-composer{flex:none; border-top:1px solid var(--line); padding:10px 14px 12px}
 .av-composer .av-controls{border-bottom:none; padding:0 0 8px}
 .av-inputrow{display:flex; align-items:center; gap:9px; background:var(--field); border:1px solid var(--moss); border-radius:12px; padding:7px 7px 7px 14px; box-shadow:0 0 0 3px var(--moss-soft)}
-.av-inputrow input{flex:1; border:none; background:transparent; font-family:'Public Sans',sans-serif; font-size:14px; color:var(--ink)}
+.av-inputrow input{flex:1; min-width:0; border:none; background:transparent; font-family:'Public Sans',sans-serif; font-size:14px; color:var(--ink)}
 .av-inputrow input:focus{outline:none}
 .av-send{width:32px; height:32px; flex:none; border:none; border-radius:9px; background:var(--moss); color:#fff; font-size:16px; font-weight:700; cursor:pointer; display:grid; place-items:center; line-height:1}
 .av-send:disabled{opacity:.5; cursor:default}
@@ -616,7 +620,7 @@ img.fpreview{height:auto}
 .digest{font-size:13.5px; line-height:1.75; color:var(--ink); white-space:pre-wrap}
 
 .smartbar{display:flex; align-items:center; gap:10px; background:var(--panel); border:1px solid var(--violet-soft); border-radius:12px; padding:10px 14px; margin-bottom:10px}
-.smartbar input{flex:1; border:none; background:transparent; font-family:'Public Sans',sans-serif; font-size:13.5px; color:var(--ink)}
+.smartbar input{flex:1; min-width:0; text-overflow:ellipsis; border:none; background:transparent; font-family:'Public Sans',sans-serif; font-size:13.5px; color:var(--ink)}
 .smartbar input:focus{outline:none}
 .smartbar input::placeholder{color:var(--ink-soft)}
 .smartmsg{font-size:12.5px; margin:-4px 0 10px 4px}
@@ -632,7 +636,7 @@ img.fpreview{height:auto}
 .mnav button:hover:not(:disabled){border-color:var(--moss); color:var(--moss)}
 .mnav button:disabled{opacity:.35; cursor:default}
 
-.brow{display:flex; align-items:center; gap:10px; padding:5px 0}
+.brow{display:flex; align-items:center; gap:10px; padding:5px 0; flex-wrap:wrap}
 .bstat{font-size:11px; flex-shrink:0; min-width:150px; text-align:right}
 .bcap{width:80px; border:1px solid var(--line); border-radius:7px; padding:5px 8px; font-family:'IBM Plex Mono',monospace; font-size:11.5px; background:var(--field); color:var(--ink)}
 .bcap:focus{outline:2px solid var(--moss); outline-offset:1px}
@@ -655,7 +659,7 @@ img.fpreview{height:auto}
 /* ---------- To-dos, simplified: quick add + smart sections */
 .todosimple{max-width:720px; display:flex; flex-direction:column; gap:14px}
 .tquick{display:flex; align-items:center; gap:8px; background:var(--panel); border:1.5px solid var(--moss); border-radius:12px; padding:10px 12px}
-.tquick-input{flex:1; border:none; background:transparent; font-family:'Public Sans',sans-serif; font-size:15px; color:var(--ink)}
+.tquick-input{flex:1; min-width:0; border:none; background:transparent; font-family:'Public Sans',sans-serif; font-size:15px; color:var(--ink)}
 .tquick-input:focus{outline:none}
 .tquick-chips{display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-top:-6px; padding:0 4px}
 .tquick-chips input[type=date]{border:1px solid var(--line); border-radius:99px; padding:4px 10px; font-family:'IBM Plex Mono',monospace; font-size:10.5px; background:var(--field); color:var(--ink-soft)}
@@ -1074,7 +1078,7 @@ img.fpreview{height:auto}
 .crow-ic{width:20px; text-align:center; font-size:15px; flex:none}
 .crow-title{flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
 .crow-tags{font-size:11px; color:var(--moss); white-space:nowrap; flex:none}
-.crow-date{font-size:11px; color:var(--ink-soft); width:66px; text-align:right; white-space:nowrap; flex:none}
+.crow-date{font-size:11px; color:var(--ink-soft); min-width:66px; text-align:right; white-space:nowrap; flex:none}
 .crow-acts{display:flex; align-items:center; gap:4px; flex:none}
 .crow-acts button{opacity:0; background:none; border:none; color:var(--ink-soft); cursor:pointer; font-size:13px; padding:2px 6px; border-radius:5px}
 .crow:hover .crow-acts button, .crow:focus .crow-acts button{opacity:1}
@@ -1095,7 +1099,7 @@ img.fpreview{height:auto}
 .bcard{position:relative; padding-right:26px}
 /* Jira-style task cards: title on the face, everything else in the detail view */
 .bcard{cursor:pointer}
-.bcard-title{display:block; font-size:13.5px; font-weight:600; color:var(--ink); line-height:1.45; overflow-wrap:anywhere}
+.bcard-title{display:block; width:100%; background:none; border:0; padding:0; text-align:left; cursor:pointer; font-family:inherit; font-size:13.5px; font-weight:600; color:var(--ink); line-height:1.45; overflow-wrap:anywhere}
 .bcard:hover .bcard-title{color:var(--moss)}
 .bkey{font-size:9.5px; letter-spacing:1px; color:var(--ink-soft); background:var(--field); border:1px solid var(--line); border-radius:5px; padding:2px 6px; white-space:nowrap}
 .cd-key{font-size:11px}
@@ -1265,12 +1269,36 @@ img.fpreview{height:auto}
   .side.rail .navbtn, .side.rail .qadd{padding:12px 6px}
   .kbtn{min-height:34px}
   .doctabs button{padding:9px 13px}
-  .tiles{grid-template-columns:repeat(2,1fr)}
-  .charts{grid-template-columns:1fr}
+  /* minmax(0,·) lets tracks shrink below their content's min-content width —
+     bare 1fr keeps an auto floor that overflows the page on phones */
+  .tiles{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .charts{grid-template-columns:minmax(0,1fr)}
   .graphwrap svg{height:380px}
   .row{flex-wrap:wrap}
+  /* a real flex base size, or the zero-basis body never overflows the line
+     and the nowrap stamp squeezes it to 0 — titles vanish */
+  .row .body{flex-basis:180px}
   .stamp{order:3}
-  .form{grid-template-columns:1fr}
+  .bstat{min-width:0}
+  .bboard-name{flex:1 1 100%}
+  .dl-pop{left:auto; right:0; min-width:0; max-width:calc(100vw - 32px)}
+  /* KPI figures must never paint outside their tile — 22px keeps the widest
+     sample figure ($4,045.77) inside a 2-up tile at 390px with margin */
+  .tile .n{font-size:22px}
+  /* savings-goal amounts get their own line instead of crushing the name */
+  .grow-head{flex-wrap:wrap}
+  .grow-head .famt{flex-basis:100%; order:3}
+  .form{grid-template-columns:minmax(0,1fr)}
+}
+/* ultra-narrow phones (320-360px) */
+@media (max-width:360px){
+  .tiles{grid-template-columns:minmax(0,1fr)}
+  .bboard-name{font-size:19px}
+  .pal .res .rd{display:none}
+}
+@media (max-width:560px){
+  .trow{flex-wrap:wrap}
+  .tr-text{min-width:120px}
 }
 /* ================================================================
    PRODUCTION POLISH LAYER
@@ -1544,3 +1572,36 @@ button:disabled{opacity:.5; cursor:not-allowed}
   .cd-panes { flex-direction: column; }
   .cd-side { flex-basis: auto; width: 100%; }
 }
+
+/* ---------- local models (Ollama) — Settings card */
+.lm-head{display:flex; align-items:center; gap:8px; padding:2px 8px 6px; font-size:12px; color:var(--ink)}
+.lm-dot{width:8px; height:8px; border-radius:50%; background:var(--line); flex-shrink:0}
+.lm-dot.on{background:var(--moss)}
+.lm-ver{font-size:11px; color:var(--ink-soft)}
+.lm-pull{display:flex; gap:6px; align-items:center; padding:4px 8px}
+.lm-pull .menu-input{flex:1; width:auto}
+.lm-chips{display:flex; flex-wrap:wrap; gap:6px; padding:4px 8px 2px}
+.lm-chip{font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.3px; padding:4px 10px; border-radius:99px; background:var(--field); color:var(--moss); border:1px solid var(--line); cursor:pointer}
+.lm-chip:hover{border-color:var(--moss); background:var(--moss-soft)}
+.lm-chip .lm-size{color:var(--ink-soft); margin-left:5px}
+.lm-progrow{display:flex; align-items:center; gap:8px; padding:8px}
+.lm-progrow .mono{font-size:11px; color:var(--ink-soft); white-space:nowrap}
+.lm-prog{flex:1; height:4px; border-radius:2px; background:var(--line); overflow:hidden; min-width:60px}
+.lm-prog i{display:block; height:100%; background:var(--moss); border-radius:2px; transition:width .2s}
+.lm-prog.busy i{width:30%; animation:lm-slide 1.2s ease-in-out infinite}
+@keyframes lm-slide{0%{margin-left:-30%}100%{margin-left:100%}}
+
+/* ---------- semantic search index — Settings card */
+.semidx-bar{height:4px; background:var(--line); border-radius:3px; overflow:hidden; margin:6px 8px 2px}
+.semidx-fill{height:100%; background:var(--moss); border-radius:3px; transition:width .2s ease}
+
+/* ---------- related-items chips (local semantic search) */
+.relrow{display:flex; align-items:center; flex-wrap:wrap; gap:6px; margin-top:8px}
+.relhead{font-size:9.5px; letter-spacing:2px; color:var(--ink-soft)}
+
+/* ---------- quick-capture dictation */
+.qcap-row{display:flex; align-items:center; gap:6px}
+.qcap-row .qcap-input{flex:1; width:auto; min-width:0}
+.qcap-mic{flex-shrink:0; font-size:14px; min-width:34px}
+.qcap-mic[aria-pressed="true"]{color:var(--stamp); border-color:var(--stamp); animation:mic-pulse 1.2s ease-in-out infinite}
+@keyframes mic-pulse{0%,100%{opacity:1}50%{opacity:.45}}

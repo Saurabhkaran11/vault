@@ -6,6 +6,8 @@ import { detectCloud } from "@/lib/cloud";
 import NoteBlocks from "./NoteBlocks";
 import { Ic } from "./Icons";
 import { resolveFileUrl, fileBodyMissing, formatSize } from "@/lib/files";
+import { relatedTo } from "@/lib/embed";
+import { extractTextFromImage } from "@/lib/ocr";
 
 /* Inline tag adder: type any custom tag (Enter) or pick an existing one. */
 export function TagAdder({ it, onUpdate, allItems = [] }) {
@@ -332,6 +334,10 @@ export default function ItemRow({ it, onTag, onUpdate, onRemove, allItems = [], 
   const [aliasEdit, setAliasEdit] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [dateEdit, setDateEdit] = useState(false);
+  const [rel, setRel] = useState(null);          // null | [{item}] | {empty:true}
+  const [relBusy, setRelBusy] = useState(false);
+  const [ocrPct, setOcrPct] = useState(null);    // null | 0..1 while reading
+  const [ocrErr, setOcrErr] = useState("");
   const rowRef = useRef(null);
   const badge = it.file ? fileKind(it.file.name) : null;
 
@@ -435,6 +441,17 @@ export default function ItemRow({ it, onTag, onUpdate, onRemove, allItems = [], 
             </span>
           ))}
           {onUpdate && <TagAdder it={it} onUpdate={onUpdate} allItems={allItems} />}
+          {onGoto && allItems.length > 3 && (
+            <button className="bexpand" style={{ marginTop: 0 }} disabled={relBusy}
+              title="Items about the same thing — local semantic search, nothing leaves this machine"
+              onClick={async () => {
+                if (rel) { setRel(null); return; }
+                setRelBusy(true);
+                try { const r = await relatedTo(it, allItems, 4); setRel(r.length ? r : { empty: true }); }
+                catch { setRel({ empty: true }); }
+                finally { setRelBusy(false); }
+              }}>≈ {relBusy ? "Finding…" : "Related"}</button>
+          )}
           {/* Documents are personal files to edit freely — no workflow status there */}
           {onUpdate && it.type !== "doc" && (
             <select className="status" value={it.status} aria-label="Status"
@@ -471,6 +488,26 @@ export default function ItemRow({ it, onTag, onUpdate, onRemove, allItems = [], 
               {showPreview ? "Close viewer" : "👁 View document"}
             </button>
           )}
+          {/* image files: pull the text out with local OCR so it becomes
+              searchable — the description field is where search looks */}
+          {it.type === "doc" && it.file && it.file.data && !fileBodyMissing(it.file) &&
+            previewKind(it.file) === "image" && onUpdate && (
+            <button className="btn sm" style={{ marginTop: 8, marginLeft: 4, background: "var(--violet)" }}
+              disabled={ocrPct != null}
+              title="Read the text in this image (runs on this machine; first use downloads ~15MB)"
+              onClick={async () => {
+                setOcrErr(""); setOcrPct(0);
+                try {
+                  const text = await extractTextFromImage(it.file.data, setOcrPct);
+                  if (!text) setOcrErr("No readable text in this image.");
+                  else onUpdate({ ...it, meta: [it.meta, text.slice(0, 600)].filter(Boolean).join(" — ") });
+                } catch (e) { setOcrErr(e.message); }
+                finally { setOcrPct(null); }
+              }}>
+              {ocrPct != null ? `Reading… ${Math.round(ocrPct * 100)}%` : "⌕ Extract text"}
+            </button>
+          )}
+          {ocrErr && <span className="m" style={{ color: "var(--stamp)" }}>{ocrErr}</span>}
           {it.type === "doc" && !it.file && cloud && (
             <a className="btn sm" style={{ marginTop: 8, background: "var(--blue)", textDecoration: "none" }}
               href={it.url} target="_blank" rel="noreferrer"
@@ -501,6 +538,20 @@ export default function ItemRow({ it, onTag, onUpdate, onRemove, allItems = [], 
             </FileDownload>
           ))}
         </div>
+
+        {rel && (Array.isArray(rel) ? (
+          <div className="relrow">
+            <span className="mono relhead">RELATED</span>
+            {rel.map(({ item }) => (
+              <button key={item.id} className="filechip" onClick={() => onGoto && onGoto(item)}
+                title={`Open “${item.title}”`}>≈ {item.alias || item.title}</button>
+            ))}
+          </div>
+        ) : (
+          <div className="m" style={{ marginTop: 4, color: "var(--ink-soft)" }}>
+            No related items yet — build the search index in Settings → Semantic search.
+          </div>
+        ))}
 
         {showPreview && it.file && <FilePreview file={it.file} />}
 

@@ -5,6 +5,7 @@ import { today } from "@/lib/seed";
 import { detectCloud, cloudTitle } from "@/lib/cloud";
 import { mirror, toCents } from "@/lib/api";
 import { uid } from "@/lib/id";
+import { useSpeechInput } from "@/lib/voice";
 
 /* Universal quick capture — one box that accepts anything and routes it:
  *   · YouTube link                → YouTube item
@@ -88,6 +89,16 @@ export default function QuickCapture({ open, onClose, onAddItem, onSaved }) {
   const inputRef = useRef(null);
   useEffect(() => { if (open) { setText(""); setOverride(null); setFlash(null); setTimeout(() => inputRef.current?.focus(), 30); } }, [open]);
 
+  /* dictation appends (not replaces) so voice composes with typed text,
+     and the normal setText path keeps the routing preview live */
+  const voice = useSpeechInput({
+    onText: (t) => {
+      setText((prev) => (prev ? prev + " " : "") + t);
+      setOverride(null);
+      inputRef.current?.focus();
+    },
+  });
+
   /* Escape closes from anywhere in the dialog (not just the input) */
   useEffect(() => {
     if (!open) return;
@@ -168,13 +179,28 @@ export default function QuickCapture({ open, onClose, onAddItem, onSaved }) {
   return (
     <div className="pal-overlay" onClick={onClose} role="dialog" aria-label="Quick capture">
       <div className="pal qcap" onClick={(e) => e.stopPropagation()}>
-        <input ref={inputRef} className="qcap-input" value={text} aria-label="Capture anything"
-          placeholder="Type or paste anything — a link, “coffee $4.50”, “call the bank tomorrow ⚑”, a thought…"
-          onChange={(e) => { setText(e.target.value); setOverride(null); }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") save();
-            if (e.key === "Escape") onClose();
-          }} />
+        <div className="qcap-row">
+          <input ref={inputRef} className="qcap-input" value={text} aria-label="Capture anything"
+            placeholder="Type or paste anything — a link, “coffee $4.50”, “call the bank tomorrow ⚑”, a thought…"
+            onChange={(e) => { setText(e.target.value); setOverride(null); }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") save();
+              if (e.key === "Escape") onClose();
+            }} />
+          {voice.supported && (
+            <button className="kbtn qcap-mic" aria-label={voice.listening ? "Stop listening" : "Dictate"}
+              aria-pressed={voice.listening} title={voice.listening ? "Listening — click to stop" : "Dictate instead of typing"}
+              onClick={voice.listening ? voice.stop : voice.start}>
+              {voice.listening ? "●" : "🎙"}
+            </button>
+          )}
+        </div>
+        {voice.listening && voice.interim && (
+          <div className="m" style={{ padding: "0 4px", color: "var(--ink-soft)" }}>…{voice.interim}</div>
+        )}
+        {voice.error && (
+          <div className="m" style={{ padding: "0 4px", color: "var(--stamp)" }}>{voice.error}</div>
+        )}
         <div className="qcap-foot">
           {text.trim() && decision ? (
             <>

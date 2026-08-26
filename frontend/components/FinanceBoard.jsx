@@ -106,7 +106,9 @@ const sampleFinance = () => ({
   ],
 });
 
-const seedFinance = { ...emptyFinance, ...sampleFinance() };
+/* exported so sample mode can seed the store eagerly — otherwise the
+ * dashboard reads empty finance data until this view first mounts */
+export const seedFinance = { ...emptyFinance, ...sampleFinance() };
 
 /* Payment methods — which card/wallet paid for what (Mint/Spendee pattern).
    Users add their own; two sensible defaults so the picker is never empty. */
@@ -894,7 +896,7 @@ export default function FinanceBoard() {
 
       {tab === "board" && (<>
       {/* daily expenses + category breakdown */}
-      <div className="charts" style={{ gridTemplateColumns: "1.6fr 1fr" }}>
+      <div className="charts">
         <div>
         <div className="card">
           <h3 style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>

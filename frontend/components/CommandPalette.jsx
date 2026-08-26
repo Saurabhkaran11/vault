@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { SECTIONS, fmtStamp } from "@/lib/seed";
+import { semanticSearch } from "@/lib/embed";
 
 /* Command palette — Ctrl+K (or Cmd+K) from anywhere.
    Runs COMMANDS (go-to a view, actions) and searches titles, notes and
@@ -52,7 +53,30 @@ export default function CommandPalette({ items, actions = [], open, onClose, onG
     return [...itemHits, ...tagHits, ...cmdHits];
   }, [q, items, actions]);
 
-  useEffect(() => setSel(0), [results.length]);
+  /* Semantic hits arrive async (local embeddings via Ollama) and only when an
+     index exists — an empty result with a .reason means "no index / no
+     Ollama", and the palette stays quiet about it by design. */
+  const [semantic, setSemantic] = useState([]);
+  useEffect(() => {
+    const needle = q.trim();
+    if (needle.length < 3) { setSemantic([]); return; }
+    let live = true;
+    const t = setTimeout(async () => {
+      try {
+        const hits = await semanticSearch(needle, items, 6);
+        if (live) setSemantic(hits.reason ? [] : hits.map(({ item }) => ({ kind: "item", item, group: "Related by meaning" })));
+      } catch { if (live) setSemantic([]); }
+    }, 350);
+    return () => { live = false; clearTimeout(t); };
+  }, [q, items]);
+
+  const rows = useMemo(() => {
+    if (!q.trim() || !semantic.length) return results;
+    const seen = new Set(results.filter((r) => r.kind === "item").map((r) => r.item.id));
+    return [...results, ...semantic.filter((s) => !seen.has(s.item.id))];
+  }, [results, semantic, q]);
+
+  useEffect(() => setSel(0), [rows.length]);
 
   if (!open && !inline) return null;
 
@@ -63,9 +87,9 @@ export default function CommandPalette({ items, actions = [], open, onClose, onG
   };
 
   const onKey = (e) => {
-    if (e.key === "ArrowDown") { e.preventDefault(); setSel((s) => Math.min(s + 1, results.length - 1)); }
+    if (e.key === "ArrowDown") { e.preventDefault(); setSel((s) => Math.min(s + 1, rows.length - 1)); }
     if (e.key === "ArrowUp") { e.preventDefault(); setSel((s) => Math.max(s - 1, 0)); }
-    if (e.key === "Enter" && results[sel]) go(results[sel]);
+    if (e.key === "Enter" && rows[sel]) go(rows[sel]);
     if (e.key === "Escape") onClose();
   };
 
@@ -74,14 +98,14 @@ export default function CommandPalette({ items, actions = [], open, onClose, onG
         <input ref={inputRef} value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={onKey}
           placeholder="Search your vault…" aria-label="Search" />
         <div className="results">
-          {!q.trim() && results.length > 0 && (
+          {!q.trim() && rows.length > 0 && (
             <div className="res-hint">Your latest items — or start typing to search everything you&rsquo;ve saved.</div>
           )}
-          {results.length === 0 && (
+          {rows.length === 0 && (
             <div className="none">{q.trim() ? <>Nothing matches &ldquo;{q.trim()}&rdquo; — try a shorter word.</> : "Your vault is empty — press C to capture your first item."}</div>
           )}
-          {results.map((r, i) => {
-            const header = r.group && (i === 0 || results[i - 1].group !== r.group)
+          {rows.map((r, i) => {
+            const header = r.group && (i === 0 || rows[i - 1].group !== r.group)
               ? <div className="res-h mono" key={`h-${r.group}`}>{r.group}</div> : null;
             if (r.kind === "cmd") return (
               <React.Fragment key={`c-${r.action.label}`}>

@@ -21,10 +21,12 @@ import AddForm from "./AddForm";
 import CommandPalette from "./CommandPalette";
 import ShortcutsHelp from "./ShortcutsHelp";
 import NoteBlocks from "./NoteBlocks";
-import TaskBoard from "./TaskBoard";
+import TaskBoard, { seedTodoStore } from "./TaskBoard";
 import ProjectBoard from "./ProjectBoard";
 import CustomBoards from "./CustomBoards";
-import FinanceBoard from "./FinanceBoard";
+import FinanceBoard, { seedFinance } from "./FinanceBoard";
+import LocalModels from "./LocalModels";
+import SearchIndexCard from "./SearchIndexCard";
 import AskVault from "./AskVault";
 import { emptyBlock } from "./NoteBlocks";
 import { inspectBackup, applyBackup } from "@/lib/backup";
@@ -741,7 +743,7 @@ export default function App() {
         ins: buildInsights(items, tasks, fin, t0),
       });
     } catch { setPulse(null); }
-  }, [view, items]);
+  }, [view, items, ob]); // ob: re-read the stores right after sample-mode seeds them
 
   /* instant drop-to-save for Documents */
   const quickFileRef = useRef(null);
@@ -1019,6 +1021,13 @@ export default function App() {
       {hydrated && ob === null && (
         <WelcomeModal onChoose={(c) => {
           if (c === "clean") { startClean(); window.location.reload(); return; }
+          /* seed the lazily-hydrated stores NOW — the dashboard reads them
+             from localStorage, and without this it shows zeros until the
+             Tasks and Finance views have each been visited once */
+          try {
+            if (!localStorage.getItem("vault.todos.v1")) safeSet("vault.todos.v1", JSON.stringify(seedTodoStore()));
+            if (!localStorage.getItem("vault.finance.v1")) safeSet("vault.finance.v1", JSON.stringify(seedFinance));
+          } catch { /* quota — the views still self-seed on first visit */ }
           setObState(setOB({ choice: "sample", startedAt: today(), dismissed: false }));
         }} />
       )}
@@ -1214,6 +1223,9 @@ export default function App() {
                     : "Pick a hosted model and paste its key, or point at a local model (Ollama, LM Studio) with no key at all."}
                 </div>
               </div>
+
+              <LocalModels />
+              <SearchIndexCard items={items} />
 
               <div className="set-sec">
                 <div className="menu-sec">🔗 CONNECTED APPS</div>
@@ -1736,7 +1748,7 @@ export default function App() {
             <Intro id="tags">Every project tag in your vault, with what it links together — click one to open the project.</Intro>
 
             <div className="bar">
-              <input placeholder="＋ Create a tag — e.g. “side-project” or “2026-goals”… (Enter)" aria-label="Create a tag"
+              <input placeholder="＋ Create a tag — e.g. “side-project” (Enter)" aria-label="Create a tag"
                 onKeyDown={(e) => {
                   if (e.key !== "Enter") return;
                   const t = normalizeTag(e.target.value);
@@ -2062,7 +2074,7 @@ export default function App() {
                           <span className="crow-date mono">{fmtStamp(it.date)}</span>
                           <span className="crow-acts">
                             <button title={it.pinned ? "Unpin" : "Pin"} onClick={(e) => { e.stopPropagation(); updateStamped({ ...it, pinned: !it.pinned }); }}>★</button>
-                            <button title="Delete" onClick={(e) => { e.stopPropagation(); removeWithUndo(it); }}>✕</button>
+                            <button title="Delete" onClick={(e) => { e.stopPropagation(); removeWithUndo(it.id); }}>✕</button>
                             <span className="crow-chev" aria-hidden="true">{open ? "▾" : "▸"}</span>
                           </span>
                         </div>

@@ -54,6 +54,9 @@ const DONE_OLDER = [
   "Set up S3 uploads", "Add account export", "Write the test suite",
   "Deploy the backend", "Model the database", "Sketch the first prototype",
 ];
+/* the full first-run store, exported so sample mode can seed it eagerly —
+ * otherwise the dashboard reads empty todos until this view first mounts */
+export const seedTodoStore = () => ({ version: 2, tasks: seedTasks() });
 const seedTasks = () => ([
   /* open — feeds Needs-you-now and the agenda buckets */
   { id: uid(), text: "Watch FastAPI course — section 3", done: false, due: dRel(0), high: true, created: dRel(-1) },
@@ -355,7 +358,7 @@ export default function TaskBoard() {
     <div className="todosimple">
       {/* quick add — the only input you need */}
       <div className="tquick">
-        <input className="tquick-input" placeholder="Add a task and press Enter — that's it"
+        <input className="tquick-input" placeholder="Add a task, press Enter"
           value={text} aria-label="Add a task"
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && add()} />

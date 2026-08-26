@@ -2,6 +2,7 @@
 
 import React, { useRef, useState } from "react";
 import { askJSON } from "@/lib/ai";
+import { aiCategorize } from "@/lib/aiActions";
 import { today } from "@/lib/seed";
 
 /* "＋ Import statement" — drop a credit-card/bank CSV (or paste statement
@@ -141,6 +142,7 @@ export default function StatementImport({ open, onClose, onImport, categories, c
   const [pasted, setPasted] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  const [catBusy, setCatBusy] = useState(false); // "✦ Fix categories" repair pass
 
   /* the ✕ promises "Close (Esc)" — honor it */
   React.useEffect(() => {
@@ -256,6 +258,25 @@ export default function StatementImport({ open, onClose, onImport, categories, c
                 Found <b>{rows.length}</b> transaction{rows.length === 1 ? "" : "s"}
                 {rows[0]?.via === "ai" ? " (parsed by your AI)" : " (read locally — nothing left your browser)"}.
                 Untick any you don't want, then import.
+                {aiReady && rows.some((r) => !r.cat || r.cat === "Other") && (
+                  <button className="kbtn" style={{ marginLeft: 8 }} disabled={catBusy}
+                    title="Let your AI pick a category for the uncategorized rows"
+                    onClick={async () => {
+                      setCatBusy(true); setErr("");
+                      try {
+                        const missing = rows.map((r, i) => ({ r, i })).filter(({ r }) => !r.cat || r.cat === "Other");
+                        const cats = await aiCategorize(missing.map(({ r }) => r), categories);
+                        setRows((prev) => {
+                          const next = [...prev];
+                          missing.forEach(({ i }, j) => { next[i] = { ...next[i], cat: cats[j] }; });
+                          return next;
+                        });
+                      } catch (e) { setErr(e.message); }
+                      finally { setCatBusy(false); }
+                    }}>
+                    {catBusy ? "Categorizing…" : "✦ Fix categories"}
+                  </button>
+                )}
               </div>
               <div className="stmt-source">
                 <label htmlFor="stmt-src">Statement from</label>
