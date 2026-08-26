@@ -10,6 +10,7 @@ import { askJSON } from "@/lib/ai";
 import { useAiReady } from "@/hooks/useAiReady";
 import { mirror, toCents } from "@/lib/api";
 import { uid } from "@/lib/id";
+import { safeSet } from "@/lib/safeStorage";
 
 /* Finance — expenses, bills (with recurrence), income, budgets and goals.
  *
@@ -198,7 +199,7 @@ export default function FinanceBoard() {
 
   useEffect(() => {
     if (!hydrated) return;
-    try { localStorage.setItem("vault.finance.v1", JSON.stringify(fin)); }
+    try { safeSet("vault.finance.v1", JSON.stringify(fin)); }
     catch (e) { console.error(e); }
   }, [fin, hydrated]);
 

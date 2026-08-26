@@ -12,6 +12,7 @@ import { initOnboarding, setOB, startClean, WelcomeModal, ChecklistCard } from "
 import { KEY_ACTIONS, NAV_ACTIONS, DEFAULT_KEYS, getKeymap, setKeymap, resetKeymap, validateKey } from "@/lib/keymap";
 import { ACCENTS, DEFAULT_ACCENT, applyAccent } from "@/lib/accents";
 import Intro from "./Intro";
+import { installGlobalHandlers } from "@/lib/monitor";
 import { getCustomTags, addCustomTag, removeCustomTag, normalizeTag } from "@/lib/tags";
 import { REPORTS, downloadReport, openReport } from "@/lib/report";
 import { downloadICS } from "@/lib/ics";
@@ -34,6 +35,7 @@ import GoogleDrivePicker from "./GoogleDrivePicker";
 import { getBackend, setBackend, backendHealthy, fullSync, flushQueue, pendingMirrors, pullAll, applyPulled, hydrateIfEmpty, hasVerifiedIdentity, api } from "@/lib/api";
 import { storeFile } from "@/lib/files";
 import AccountSection from "./AccountSection";
+import { safeSet, storageUsage, STORAGE_FULL_EVENT, STORAGE_WARN_BYTES, formatBytes } from "@/lib/safeStorage";
 
 /* flatten a note's blocks to plain text (for AI prompts + similarity) */
 const flatText = (b) => {
@@ -497,6 +499,20 @@ export default function App() {
     setOpen(window.innerWidth > 860);
   }, []);
 
+  /* production safety: report async errors, watch the storage quota */
+  const [storageWarn, setStorageWarn] = useState(null);   // null | "near" | "full"
+  useEffect(() => {
+    installGlobalHandlers();
+    const onFull = () => setStorageWarn("full");
+    window.addEventListener(STORAGE_FULL_EVENT, onFull);
+    if (storageUsage() > STORAGE_WARN_BYTES) setStorageWarn("near");
+    return () => window.removeEventListener(STORAGE_FULL_EVENT, onFull);
+  }, []);
+  /* QA hook: ?crashtest renders the error boundary on demand */
+  if (typeof window !== "undefined" && window.location.search.includes("crashtest")) {
+    throw new Error("Crash test — intentional (drop ?crashtest from the URL to recover)");
+  }
+
   /* load the saved profile after mount (avoids hydration mismatch) */
   useEffect(() => {
     try {
@@ -508,7 +524,7 @@ export default function App() {
 
   useEffect(() => {
     if (!profileLoaded) return;
-    try { localStorage.setItem("vault.profile", JSON.stringify(profile)); } catch (e) { console.error(e); }
+    try { safeSet("vault.profile", JSON.stringify(profile)); } catch (e) { console.error(e); }
   }, [profile, profileLoaded]);
 
   /* ---- per-feature reports ---- */
@@ -960,6 +976,14 @@ export default function App() {
 
   return (
     <div className="vault">
+      {storageWarn && (
+        <div className={`storage-warn ${storageWarn}`} role="alert">
+          {storageWarn === "full"
+            ? <>⚠ <b>Storage is full — your last change couldn&rsquo;t be saved.</b> Export a backup or turn on Backend sync (Settings), then remove some large files.</>
+            : <>Local storage is getting full ({formatBytes(storageUsage())} of ~5 MB). Turn on Backend sync or export a backup soon.</>}
+          <button className="kbtn" onClick={() => setStorageWarn(null)} aria-label="Dismiss">✕</button>
+        </div>
+      )}
       <CommandPalette items={items} actions={paletteActions} open={palette} onClose={() => setPalette(false)}
         onGo={(r) => (r.kind === "tag" ? openTag(r.tag) : openSection(r.item.type))} />
       <ShortcutsHelp open={helpOpen} onClose={() => setHelpOpen(false)} keymap={keymap} />
@@ -1292,7 +1316,7 @@ export default function App() {
               <span className="trust-chip"><span className="tc-dot ok" aria-hidden="true" />Local-first · your data</span>
               <span className="trust-chip"><span className="tc-dot accent" aria-hidden="true" />{aiReady ? "AI on your key" : "Bring your own AI"}</span>
             </div>
-            Data lives in this browser (localStorage).
+            Data lives in this browser ({formatBytes(storageUsage())} used).
             <div style={{ marginTop: 6 }}>
               <button onClick={() => importRef.current?.click()}>⬆ Import</button>
               <input ref={importRef} type="file" accept="application/json" hidden onChange={onImport} />

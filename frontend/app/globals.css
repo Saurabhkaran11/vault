@@ -937,6 +937,10 @@ img.fpreview{height:auto}
 .kpi.bad .kpi-v{color:var(--stamp)}
 .kpi-d{font-size:12px; color:var(--ink-soft); line-height:1.45}
 
+/* storage-quota warning — the one banner that must out-shout everything */
+.storage-warn{position:fixed; top:12px; left:50%; transform:translateX(-50%); z-index:300; display:flex; align-items:center; gap:12px; max-width:min(680px, calc(100vw - 32px)); background:var(--gold-soft); border:1.5px solid var(--gold); color:var(--ink); border-radius:12px; padding:10px 14px; font-size:13.5px; line-height:1.5; box-shadow:var(--shadow-3)}
+.storage-warn.full{background:var(--stamp-soft); border-color:var(--stamp)}
+
 /* collapsible one-time intros: shown until hidden, ⓘ brings them back */
 .intro-sub{position:relative}
 .intro-hide{background:none; border:none; cursor:pointer; color:var(--ink-soft); font-family:'Public Sans',sans-serif; font-size:11px; margin-left:10px; padding:2px 6px; border-radius:6px}

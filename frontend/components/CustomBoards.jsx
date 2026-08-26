@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { mirror } from "@/lib/api";
 import { uid } from "@/lib/id";
+import { safeSet } from "@/lib/safeStorage";
 
 /* Custom kanban boards — make a board for anything: a feature, a sprint,
  * this week's chores. Custom columns, cards with inline editing, drag &
@@ -151,7 +152,7 @@ export default function CustomBoards({ itemsBoard }) {
 
   useEffect(() => {
     if (!hydrated) return;
-    try { localStorage.setItem(KEY, JSON.stringify(store)); }
+    try { safeSet(KEY, JSON.stringify(store)); }
     catch (e) { console.error(e); }
   }, [store, hydrated]);
 

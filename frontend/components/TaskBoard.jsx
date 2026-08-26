@@ -7,6 +7,7 @@ import { MiniBars, weekSeries, weekLabels } from "./Charts";
 import { importICSFile, getCalendarEvents } from "@/lib/ics";
 import { mirror, api, backendOn, hasVerifiedIdentity } from "@/lib/api";
 import { uid } from "@/lib/id";
+import { safeSet } from "@/lib/safeStorage";
 
 /* To-dos, redesigned for simplicity: ONE quick-add bar, and the app sorts
  * everything into smart sections — Overdue, Today, Upcoming, Someday — by
@@ -131,7 +132,7 @@ export default function TaskBoard() {
 
   useEffect(() => {
     if (!hydrated) return;
-    try { localStorage.setItem(KEY, JSON.stringify(store)); }
+    try { safeSet(KEY, JSON.stringify(store)); }
     catch (e) { console.error(e); }
   }, [store, hydrated]);
 
