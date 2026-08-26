@@ -1470,7 +1470,11 @@ export default function App() {
         {view === "dash" && (
           <>
             <div className="crumb">Overview · {fmtStamp(today())}</div>
-            <h2 className="display">Your collection, at a glance</h2>
+            <h2 className="display">
+              {profile.name && profile.name.trim() && profile.name.trim() !== "You"
+                ? `Good ${new Date().getHours() < 12 ? "morning" : new Date().getHours() < 18 ? "afternoon" : "evening"}, ${profile.name.trim().split(/\s+/)[0]}`
+                : "Your collection, at a glance"}
+            </h2>
             <Intro id="dash">Search everything with <span className="kbd">Ctrl</span>+<span className="kbd">K</span> — here&rsquo;s just what matters today.</Intro>
 
             <button className="dash-search" onClick={() => setPalette(true)}>

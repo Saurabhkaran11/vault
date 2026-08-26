@@ -247,6 +247,9 @@ export async function flushQueue() {
 }
 
 export async function backendHealthy() {
+  /* signed-out (or sync off) means there is nothing to probe — asking anyway
+   * just paints a connection-refused error into every Settings open */
+  if (!backendOn()) return false;
   try { const r = await api("/health"); return !!r?.ok; } catch { return false; }
 }
 
