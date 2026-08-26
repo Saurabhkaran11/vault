@@ -26,6 +26,20 @@ class UploadRequest(BaseModel):
     client_id: str            # the item this file belongs to
     filename: str
     content_type: str = "application/octet-stream"
+    size: int = 0             # declared bytes, for the account storage quota
+
+
+def _fmt_mb(n: int) -> str:
+    return f"{n / (1024 * 1024):.0f} MB"
+
+
+async def used_storage_bytes(session: AsyncSession, user: str) -> int:
+    """Total bytes this account holds in the bucket, from the file metadata
+    stored on items — the same ledger the download path trusts."""
+    rows = (await session.execute(
+        select(Item.file_meta).where(Item.user_id == user, Item.file_meta.is_not(None))
+    )).scalars().all()
+    return sum(int((m or {}).get("size") or 0) for m in rows)
 
 
 @router.get("/status")
@@ -36,7 +50,20 @@ async def status():
 
 
 @router.post("/upload-url")
-async def upload_url(body: UploadRequest, user: str = Depends(current_user_id)):
+async def upload_url(body: UploadRequest, session: AsyncSession = Depends(get_session),
+                     user: str = Depends(current_user_id)):
+    """Quota first, then sign. The check runs before StorageNotConfigured so
+    it is enforced (and testable) regardless of bucket configuration."""
+    from ..config import settings
+    cap = settings.max_user_storage_mb * 1024 * 1024
+    if cap > 0:
+        used = await used_storage_bytes(session, user)
+        if used + max(body.size, 0) > cap:
+            raise HTTPException(
+                413,
+                f"Storage limit reached — {_fmt_mb(used)} of {_fmt_mb(cap)} used. "
+                "Delete some files (or their items) to free space.",
+            )
     try:
         signed = presign_upload(user, body.client_id, body.filename, body.content_type)
     except StorageNotConfigured as exc:

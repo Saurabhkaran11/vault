@@ -91,6 +91,16 @@ class Settings(BaseSettings):
     # Requests per window, per identity. Generous: a sync flush legitimately
     # fires a burst of mirrors. Set RATE_LIMIT_PER_MINUTE=0 to disable.
     rate_limit_per_minute: int = 300
+    # Tighter buckets for the endpoints that cost real money. The global cap
+    # stops scrapers; these stop one authenticated user from running up the
+    # NVIDIA bill or filling the bucket. 0 disables a bucket.
+    ai_rate_limit_per_minute: int = 20      # /ai/ask + /ai/complete
+    ai_rate_limit_per_day: int = 400        # same endpoints, daily ceiling
+    reindex_rate_limit_per_minute: int = 2  # /ai/reindex re-embeds everything
+    upload_rate_limit_per_minute: int = 30  # /files/upload-url
+    # Total S3 storage each account may hold, enforced when issuing upload
+    # URLs. 0 disables the quota.
+    max_user_storage_mb: int = 200
     log_level: str = "INFO"
 
     # ---- error reporting (optional; unset = logs only) ----
