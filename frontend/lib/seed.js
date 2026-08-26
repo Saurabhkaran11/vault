@@ -30,6 +30,9 @@ export const fmtK = (n) => {
 export const daysAgo = (iso) =>
   Math.floor((Date.now() - new Date(iso + "T00:00:00").getTime()) / 86400000);
 
+/* relative ISO date for seed data, so samples stay fresh forever */
+const rel = (days) => { const t = new Date(); t.setDate(t.getDate() + days); return t.toISOString().slice(0, 10); };
+
 export const ytId = (url) => {
   const m = (url || "").match(/(?:v=|youtu\.be\/|embed\/|shorts\/)([\w-]{11})/);
   return m ? m[1] : null;
@@ -73,6 +76,20 @@ export const seed = [
   { id: 8, type: "book",  title: "Designing Data-Intensive Applications", meta: "PDF · reread ch. 5 on replication", tags: ["engineering"], status: "In progress", date: "2026-07-27", progress: 42, links: [7], alias: "DDIA" },
   { id: 9, type: "doc",   title: "Portfolio README rewrite", meta: "Draft v2 · needs screenshots", tags: ["github"], status: "In progress", date: "2026-08-02" },
   { id: 10, type: "note", title: "Reading queue rule: 2-in, 1-out", meta: "Add two items → finish one before the next add.", tags: ["productivity"], status: "Done", date: "2026-08-11", folder: "Habits" },
+  /* documents of every kind the Documents section can file — PDF, Word,
+     Sheet, Image (previewable), CSV and an "Other" archive. File bodies are
+     details-only samples except the image, which carries a real data URI. */
+  { id: 12, type: "doc", title: "Q3 investor update", meta: "One-pager for the quarterly check-in", tags: ["business"], status: "Done", date: rel(-9), file: { name: "q3-investor-update.pdf", size: 482301 } },
+  { id: 13, type: "doc", title: "Budget model", meta: "Scenario tabs: base, stretch, worst-case", tags: ["finance"], status: "In progress", date: rel(-16), file: { name: "budget-model.xlsx", size: 29450 } },
+  /* base64 body, like a real upload — the preview pipeline decodes with atob */
+  { id: 14, type: "doc", title: "Dashboard mockup", meta: "Latest design frame — open to preview", tags: ["design"], status: "Inbox", date: rel(-4), file: { name: "dashboard-mockup.svg", size: 484, type: "image/svg+xml", data: "data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHdpZHRoPSc0MjAnIGhlaWdodD0nMTIwJz48cmVjdCB3aWR0aD0nNDIwJyBoZWlnaHQ9JzEyMCcgcng9JzEwJyBmaWxsPScjRTNFQkUyJy8+PHRleHQgeD0nMjInIHk9JzUwJyBmb250LWZhbWlseT0nbW9ub3NwYWNlJyBmb250LXNpemU9JzE3JyBmaWxsPScjM0U1QzQ4Jz5yZXF1ZXN0IOKGkiByb3V0ZXIg4oaSIHNlcnZpY2Ug4oaSIHJlcG88L3RleHQ+PHRleHQgeD0nMjInIHk9Jzg0JyBmb250LWZhbWlseT0nbW9ub3NwYWNlJyBmb250LXNpemU9JzEyJyBmaWxsPScjNUI2NjU3Jz5GYXN0QVBJIGZsb3cg4oCUIHNhbXBsZSBpbWFnZSBibG9jazwvdGV4dD48L3N2Zz4=" } },
+  { id: 15, type: "doc", title: "Launch checklist", meta: "Working copy — tick things off as they land", tags: ["launch"], status: "In progress", date: rel(-2), file: { name: "launch-checklist.docx", size: 18734 } },
+  { id: 16, type: "doc", title: "Meridian sample statement", meta: "Try it: Finance → ＋ Import statement", tags: ["finance"], status: "Inbox", date: rel(-1), file: { name: "meridian-sample-statement.csv", size: 1490 } },
+  { id: 17, type: "doc", title: "Design assets", meta: "Icons + fonts bundle from the brand pass", tags: ["design"], status: "Done", date: rel(-33), file: { name: "design-assets.zip", size: 8123456 } },
+  /* a few older items so charts and the donut have history to show */
+  { id: 18, type: "note", title: "Kanban WIP limits — worth trying?", meta: "Cap In-progress at 3 and see if throughput rises.", tags: ["productivity"], status: "Inbox", date: rel(-41), folder: "Ideas" },
+  { id: 19, type: "video", title: "Pricing psychology in 12 minutes", url: "https://www.youtube.com/watch?v=Vfw6JCF0zLo", meta: "Anchoring, decoys, charm pricing", tags: ["business"], status: "Done", date: rel(-58) },
+  { id: 20, type: "book", title: "Show Your Work", meta: "Finished — short and worth a reread", tags: ["business"], status: "Done", date: rel(-90), progress: 100 },
   /* sample for the Recently Deleted feature — restore or purge it freely */
   { id: 11, type: "doc",  title: "Old cover letter (draft)", meta: "Superseded draft — lives in Recently Deleted as a demo; restore or delete forever.", tags: [], status: "Inbox", date: "2026-08-10", deleted: today() },
 ];

@@ -29,7 +29,10 @@ def test_google_auth_url_builds_a_valid_consent_url():
     # These two are what make Google return a refresh token.
     assert q["access_type"] == ["offline"]
     assert q["prompt"] == ["consent"]
-    assert "calendar.readonly" in q["scope"][0]
+    # Two-way sync + Workspace import need write scopes, not readonly.
+    assert "calendar.events" in q["scope"][0]
+    assert "drive.readonly" in q["scope"][0]
+    assert "documents" in q["scope"][0]
 
 
 async def test_status_defaults_to_unconfigured(client):

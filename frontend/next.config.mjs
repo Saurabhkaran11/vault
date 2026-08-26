@@ -26,7 +26,9 @@ const csp = [
   "img-src 'self' data: blob: https:",
   "font-src 'self' https://fonts.gstatic.com",
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-  `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""} https://*.clerk.accounts.dev https://*.clerk.com https://challenges.cloudflare.com`,
+  /* 'wasm-unsafe-eval' admits WebAssembly ONLY (not JS eval) — needed by the
+   * local OCR engine (tesseract, served from /ocr/ on our own origin) */
+  `script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'${isDev ? " 'unsafe-eval'" : ""} https://*.clerk.accounts.dev https://*.clerk.com https://challenges.cloudflare.com`,
   // 'self' + any https (AI providers, the backend API, Clerk) + localhost and
   // websockets for local Ollama and dev HMR.
   "connect-src 'self' https: http://localhost:* ws://localhost:* wss:",

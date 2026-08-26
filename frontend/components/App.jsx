@@ -11,6 +11,8 @@ import QuickCapture from "./QuickCapture";
 import { initOnboarding, setOB, startClean, WelcomeModal, ChecklistCard } from "./Onboarding";
 import { KEY_ACTIONS, NAV_ACTIONS, DEFAULT_KEYS, getKeymap, setKeymap, resetKeymap, validateKey } from "@/lib/keymap";
 import { ACCENTS, DEFAULT_ACCENT, applyAccent } from "@/lib/accents";
+import Intro from "./Intro";
+import { installGlobalHandlers } from "@/lib/monitor";
 import { getCustomTags, addCustomTag, removeCustomTag, normalizeTag } from "@/lib/tags";
 import { REPORTS, downloadReport, openReport } from "@/lib/report";
 import { downloadICS } from "@/lib/ics";
@@ -19,10 +21,12 @@ import AddForm from "./AddForm";
 import CommandPalette from "./CommandPalette";
 import ShortcutsHelp from "./ShortcutsHelp";
 import NoteBlocks from "./NoteBlocks";
-import TaskBoard from "./TaskBoard";
+import TaskBoard, { seedTodoStore } from "./TaskBoard";
 import ProjectBoard from "./ProjectBoard";
 import CustomBoards from "./CustomBoards";
-import FinanceBoard from "./FinanceBoard";
+import FinanceBoard, { seedFinance } from "./FinanceBoard";
+import LocalModels from "./LocalModels";
+import SearchIndexCard from "./SearchIndexCard";
 import AskVault from "./AskVault";
 import { emptyBlock } from "./NoteBlocks";
 import { inspectBackup, applyBackup } from "@/lib/backup";
@@ -33,6 +37,7 @@ import GoogleDrivePicker from "./GoogleDrivePicker";
 import { getBackend, setBackend, backendHealthy, fullSync, flushQueue, pendingMirrors, pullAll, applyPulled, hydrateIfEmpty, hasVerifiedIdentity, api } from "@/lib/api";
 import { storeFile } from "@/lib/files";
 import AccountSection from "./AccountSection";
+import { safeSet, storageUsage, STORAGE_FULL_EVENT, STORAGE_WARN_BYTES, formatBytes } from "@/lib/safeStorage";
 
 /* flatten a note's blocks to plain text (for AI prompts + similarity) */
 const flatText = (b) => {
@@ -496,6 +501,20 @@ export default function App() {
     setOpen(window.innerWidth > 860);
   }, []);
 
+  /* production safety: report async errors, watch the storage quota */
+  const [storageWarn, setStorageWarn] = useState(null);   // null | "near" | "full"
+  useEffect(() => {
+    installGlobalHandlers();
+    const onFull = () => setStorageWarn("full");
+    window.addEventListener(STORAGE_FULL_EVENT, onFull);
+    if (storageUsage() > STORAGE_WARN_BYTES) setStorageWarn("near");
+    return () => window.removeEventListener(STORAGE_FULL_EVENT, onFull);
+  }, []);
+  /* QA hook: ?crashtest renders the error boundary on demand */
+  if (typeof window !== "undefined" && window.location.search.includes("crashtest")) {
+    throw new Error("Crash test — intentional (drop ?crashtest from the URL to recover)");
+  }
+
   /* load the saved profile after mount (avoids hydration mismatch) */
   useEffect(() => {
     try {
@@ -507,7 +526,7 @@ export default function App() {
 
   useEffect(() => {
     if (!profileLoaded) return;
-    try { localStorage.setItem("vault.profile", JSON.stringify(profile)); } catch (e) { console.error(e); }
+    try { safeSet("vault.profile", JSON.stringify(profile)); } catch (e) { console.error(e); }
   }, [profile, profileLoaded]);
 
   /* ---- per-feature reports ---- */
@@ -724,7 +743,7 @@ export default function App() {
         ins: buildInsights(items, tasks, fin, t0),
       });
     } catch { setPulse(null); }
-  }, [view, items]);
+  }, [view, items, ob]); // ob: re-read the stores right after sample-mode seeds them
 
   /* instant drop-to-save for Documents */
   const quickFileRef = useRef(null);
@@ -883,7 +902,7 @@ export default function App() {
     if (ext === "pdf") return "PDF";
     if (/^docx?$|^txt$|^md$/.test(ext)) return "Word";
     if (/^xlsx?$|^csv$/.test(ext)) return "Sheet";
-    if (/^png$|^jpe?g$|^webp$|^gif$/.test(ext)) return "Image";
+    if (/^png$|^jpe?g$|^webp$|^gif$|^svg$/.test(ext)) return "Image";
     return "Other";
   };
   const DOC_CATS = ["PDF", "Word", "Sheet", "Image", "Links", "Text", "Other"];
@@ -959,6 +978,14 @@ export default function App() {
 
   return (
     <div className="vault">
+      {storageWarn && (
+        <div className={`storage-warn ${storageWarn}`} role="alert">
+          {storageWarn === "full"
+            ? <>⚠ <b>Storage is full — your last change couldn&rsquo;t be saved.</b> Export a backup or turn on Backend sync (Settings), then remove some large files.</>
+            : <>Local storage is getting full ({formatBytes(storageUsage())} of ~5 MB). Turn on Backend sync or export a backup soon.</>}
+          <button className="kbtn" onClick={() => setStorageWarn(null)} aria-label="Dismiss">✕</button>
+        </div>
+      )}
       <CommandPalette items={items} actions={paletteActions} open={palette} onClose={() => setPalette(false)}
         onGo={(r) => (r.kind === "tag" ? openTag(r.tag) : openSection(r.item.type))} />
       <ShortcutsHelp open={helpOpen} onClose={() => setHelpOpen(false)} keymap={keymap} />
@@ -994,6 +1021,13 @@ export default function App() {
       {hydrated && ob === null && (
         <WelcomeModal onChoose={(c) => {
           if (c === "clean") { startClean(); window.location.reload(); return; }
+          /* seed the lazily-hydrated stores NOW — the dashboard reads them
+             from localStorage, and without this it shows zeros until the
+             Tasks and Finance views have each been visited once */
+          try {
+            if (!localStorage.getItem("vault.todos.v1")) safeSet("vault.todos.v1", JSON.stringify(seedTodoStore()));
+            if (!localStorage.getItem("vault.finance.v1")) safeSet("vault.finance.v1", JSON.stringify(seedFinance));
+          } catch { /* quota — the views still self-seed on first visit */ }
           setObState(setOB({ choice: "sample", startedAt: today(), dismissed: false }));
         }} />
       )}
@@ -1190,6 +1224,9 @@ export default function App() {
                 </div>
               </div>
 
+              <LocalModels />
+              <SearchIndexCard items={items} />
+
               <div className="set-sec">
                 <div className="menu-sec">🔗 CONNECTED APPS</div>
                 <div className="conn-row">
@@ -1291,7 +1328,10 @@ export default function App() {
               <span className="trust-chip"><span className="tc-dot ok" aria-hidden="true" />Local-first · your data</span>
               <span className="trust-chip"><span className="tc-dot accent" aria-hidden="true" />{aiReady ? "AI on your key" : "Bring your own AI"}</span>
             </div>
-            Data lives in this browser (localStorage).
+            Data lives in this browser ({formatBytes(storageUsage())} used).
+            <div className="foot-legal">
+              <a href="/privacy">Privacy</a> · <a href="/terms">Terms</a>
+            </div>
             <div style={{ marginTop: 6 }}>
               <button onClick={() => importRef.current?.click()}>⬆ Import</button>
               <input ref={importRef} type="file" accept="application/json" hidden onChange={onImport} />
@@ -1431,7 +1471,7 @@ export default function App() {
           <>
             <div className="crumb">Overview · {fmtStamp(today())}</div>
             <h2 className="display">Your collection, at a glance</h2>
-            <p className="sub">Search everything with <span className="kbd">Ctrl</span>+<span className="kbd">K</span> — here's just what matters today.</p>
+            <Intro id="dash">Search everything with <span className="kbd">Ctrl</span>+<span className="kbd">K</span> — here&rsquo;s just what matters today.</Intro>
 
             <button className="dash-search" onClick={() => setPalette(true)}>
               <span className="ds-ic" aria-hidden="true"><Ic name="search" size={16} /></span>
@@ -1669,7 +1709,7 @@ export default function App() {
           <>
             <div className="crumb">Boards</div>
             <h2 className="display">Boards</h2>
-            <p className="sub">Jira-style kanbans for anything — a feature, a sprint, this week — with any columns you like. Want an automatic board of everything you've saved, by status? Add the Vault items board from the tab bar.</p>
+            <Intro id="boards">Jira-style kanbans for anything — a feature, a sprint, this week — with any columns you like. Want an automatic board of everything you&rsquo;ve saved, by status? Add the Vault items board from the tab bar.</Intro>
             <CustomBoards itemsBoard={<ProjectBoard items={items} onUpdate={updateStamped} onGoto={goto} onTag={openTag} />} />
           </>
         )}
@@ -1678,7 +1718,7 @@ export default function App() {
           <>
             <div className="crumb">Money</div>
             <h2 className="display">Finance</h2>
-            <p className="sub">Track daily expenses and keep every pending payment — credit card, rent, subscriptions — on the board until it's paid.</p>
+            <Intro id="finance">Track daily expenses and keep every pending payment — credit card, rent, subscriptions — on the board until it&rsquo;s paid.</Intro>
             <FinanceBoard key={`fb-${capBump}`} />
           </>
         )}
@@ -1687,7 +1727,7 @@ export default function App() {
           <>
             <div className="crumb">Tasks</div>
             <h2 className="display">Tasks</h2>
-            <p className="sub">One box, zero setup — type a task and it sorts itself into Overdue, Today, Upcoming or Someday. ⚑ marks priority; click a date chip to reschedule.</p>
+            <Intro id="tasks">One box, zero setup — type a task and it sorts itself into Overdue, Today, Upcoming or Someday. ⚑ marks priority; click a date chip to reschedule.</Intro>
             <TaskBoard key={`tb-${capBump}`} />
           </>
         )}
@@ -1696,7 +1736,7 @@ export default function App() {
           <>
             <div className="crumb">Connections</div>
             <h2 className="display">Graph</h2>
-            <p className="sub">Each project tag is a hub with its items gathered around it. Hover anything to spotlight its connections; click to open.</p>
+            <Intro id="graph">Each project tag is a hub with its items gathered around it. Hover anything to spotlight its connections; click to open.</Intro>
             <GraphView items={items} onOpenTag={openTag} onOpenSection={openSection} />
           </>
         )}
@@ -1705,10 +1745,10 @@ export default function App() {
           <>
             <div className="crumb">Projects</div>
             <h2 className="display">Tags</h2>
-            <p className="sub">Every project tag in your vault, with what it links together — click one to open the project.</p>
+            <Intro id="tags">Every project tag in your vault, with what it links together — click one to open the project.</Intro>
 
             <div className="bar">
-              <input placeholder="＋ Create a tag — e.g. “side-project” or “2026-goals”… (Enter)" aria-label="Create a tag"
+              <input placeholder="＋ Create a tag — e.g. “side-project” (Enter)" aria-label="Create a tag"
                 onKeyDown={(e) => {
                   if (e.key !== "Enter") return;
                   const t = normalizeTag(e.target.value);
@@ -1762,7 +1802,7 @@ export default function App() {
           <>
             <div className="crumb">Trash</div>
             <h2 className="display">Recently deleted</h2>
-            <p className="sub">Deleted items stay here for 30 days, then they're removed forever — just like Apple Notes.</p>
+            <Intro id="trash">Deleted items stay here for 30 days, then they&rsquo;re removed forever — just like Apple Notes.</Intro>
             {trashed.length > 0 && (
               <div className="bar">
                 <div style={{ flex: 1 }} />
@@ -1815,7 +1855,7 @@ export default function App() {
           <>
             <div className="crumb">{view === "tag" ? "Project" : view === "all" ? "Collection" : "Section"}</div>
             <h2 className="display">{view === "tag" ? `#${tag}` : view === "all" ? "Content" : SECTIONS[view].label}</h2>
-            <p className="sub">
+            <Intro id={view === "tag" ? "tag" : `sec-${view}`}>
               {view === "tag"
                 ? `Everything linked to “${tag}” across notes, videos, PDFs and documents.`
                 : view === "all"
@@ -1825,7 +1865,7 @@ export default function App() {
                     : view === "book"
                       ? "Your reading hub — track progress on each book/PDF and link the notes, videos and docs that belong with it."
                       : "Click any #tag to jump to that project. Click item text to edit."}
-            </p>
+            </Intro>
 
             {/* Type switcher — the four saved-item kinds, unified. "All" shows
                 everything mixed; each type shows its own view and extras. */}
@@ -2034,7 +2074,7 @@ export default function App() {
                           <span className="crow-date mono">{fmtStamp(it.date)}</span>
                           <span className="crow-acts">
                             <button title={it.pinned ? "Unpin" : "Pin"} onClick={(e) => { e.stopPropagation(); updateStamped({ ...it, pinned: !it.pinned }); }}>★</button>
-                            <button title="Delete" onClick={(e) => { e.stopPropagation(); removeWithUndo(it); }}>✕</button>
+                            <button title="Delete" onClick={(e) => { e.stopPropagation(); removeWithUndo(it.id); }}>✕</button>
                             <span className="crow-chev" aria-hidden="true">{open ? "▾" : "▸"}</span>
                           </span>
                         </div>

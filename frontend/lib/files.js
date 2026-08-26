@@ -95,6 +95,7 @@ async function uploadToBucket(clientId, file) {
       client_id: String(clientId),
       filename: file.name,
       content_type: file.type || "application/octet-stream",
+      size: file.size || 0,   // the account storage quota is checked server-side
     },
   });
 

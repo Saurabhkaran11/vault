@@ -55,7 +55,7 @@ export default function ProjectBoard({ items, onUpdate, onGoto, onTag }) {
           title="Focus on what's left">{hideDone ? "Show Done" : "Hide Done"}</button>
       </div>
 
-      <div className="kanban" style={hideDone ? { gridTemplateColumns: "repeat(2,1fr)" } : undefined}>
+      <div className="kanban" style={hideDone ? { "--kcols": 2 } : undefined}>
         {shownCols.map((st) => {
           const cards = pool.filter((i) => i.status === st);
           const cs = COL_STYLE[st];

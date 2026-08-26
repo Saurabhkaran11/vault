@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { seed } from "@/lib/seed";
 import { mirror } from "@/lib/api";
+import { safeSet } from "@/lib/safeStorage";
 
 const KEY = "vault.items.v1";
 
@@ -73,7 +74,7 @@ export function useStore() {
   useEffect(() => {
     if (!hydrated) return;
     try {
-      localStorage.setItem(KEY, JSON.stringify(items));
+      safeSet(KEY, JSON.stringify(items));
     } catch (e) {
       console.error("Could not save data:", e);
     }

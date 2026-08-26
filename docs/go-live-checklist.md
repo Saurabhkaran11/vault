@@ -121,6 +121,18 @@ the nightly job no-ops instead of failing.
 ```
 Confirm by triggering one deliberate error; it should appear in Sentry, scrubbed.
 
+### Frontend errors — Vercel → Settings → Environment Variables
+
+```
+⬜ NEXT_PUBLIC_SENTRY_DSN = https://…@…ingest.sentry.io/…   (same project or a second one)
+```
+
+Without the DSN the frontend still shows friendly error screens and logs to
+the console — Sentry's chunk is only downloaded when the DSN is set.
+Confirm by visiting `/?crashtest`: the "Something went wrong" screen appears
+(data untouched), and with a DSN set the error lands in Sentry. Storage-quota
+failures surface as an in-app red banner automatically — no setup needed.
+
 ---
 
 ## 6. Production Clerk (when you have a domain)

@@ -41,7 +41,10 @@ export default function FinanceGoals({ goals, fmt, onChange }) {
   return (
     <div className="card">
       <h3>Savings goals</h3>
-      <div className="fin-how">Saving for something? Name it, say how much it costs, then press <b>＋ Add money</b> each time you put some aside. The bar fills as you get closer.</div>
+      <details className="howfold">
+        <summary>ⓘ How goals work</summary>
+        <div className="fin-how">Saving for something? Name it, say how much it costs, then press <b>＋ Add money</b> each time you put some aside. The bar fills as you get closer.</div>
+      </details>
       <div className="fform">
         <input placeholder="What are you saving for? — e.g. MacBook, a trip…" value={name}
           onChange={(e) => setName(e.target.value)} aria-label="Goal name"

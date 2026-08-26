@@ -56,29 +56,67 @@ def _identity(request: Request) -> str:
     return f"ip:{request.client.host if request.client else 'unknown'}"
 
 
+def class_limits(path: str) -> list[tuple[str, int, int, str]]:
+    """Extra buckets for endpoints that cost money, as
+    (bucket, limit, window_seconds, human description). Pure so it's unit-testable."""
+    out = []
+    if path == "/ai/reindex":
+        if settings.reindex_rate_limit_per_minute > 0:
+            out.append(("rix", settings.reindex_rate_limit_per_minute, 60,
+                        f"{settings.reindex_rate_limit_per_minute} reindexes/minute"))
+    elif path in ("/ai/ask", "/ai/complete"):
+        if settings.ai_rate_limit_per_minute > 0:
+            out.append(("aim", settings.ai_rate_limit_per_minute, 60,
+                        f"{settings.ai_rate_limit_per_minute} AI requests/minute"))
+        if settings.ai_rate_limit_per_day > 0:
+            out.append(("aid", settings.ai_rate_limit_per_day, 86400,
+                        f"{settings.ai_rate_limit_per_day} AI requests/day"))
+    elif path == "/files/upload-url":
+        if settings.upload_rate_limit_per_minute > 0:
+            out.append(("up", settings.upload_rate_limit_per_minute, 60,
+                        f"{settings.upload_rate_limit_per_minute} uploads/minute"))
+    return out
+
+
 async def rate_limit(request: Request, call_next):
     limit = settings.rate_limit_per_minute
-    if limit <= 0 or request.url.path in EXEMPT_PATHS:
+    path = request.url.path
+    extras = class_limits(path)
+    if (limit <= 0 and not extras) or path in EXEMPT_PATHS:
         return await call_next(request)
 
-    key = f"rl:{_identity(request)}:{int(__import__('time').time() // 60)}"
+    now = __import__("time").time()
+    ident = _identity(request)
+    checks = []          # (redis key, limit, ttl, retry_after, description)
+    if limit > 0:
+        checks.append((f"rl:{ident}:{int(now // 60)}", limit, 90, 60,
+                       f"{limit} requests/minute"))
+    for bucket, blimit, window, desc in extras:
+        retry = window - int(now % window)          # seconds until the window rolls
+        checks.append((f"rl:{bucket}:{ident}:{int(now // window)}", blimit,
+                       window + 60, retry, desc))
+
     try:
         redis = await get_redis()
         pipe = redis.pipeline()
-        pipe.incr(key)
-        pipe.expire(key, 90)          # outlives the window, then self-deletes
-        count, _ = await pipe.execute()
+        for key, _, ttl, _, _ in checks:
+            pipe.incr(key)
+            pipe.expire(key, ttl)
+        results = await pipe.execute()
+        counts = [int(results[i * 2]) for i in range(len(checks))]
     except Exception as exc:
         log.warning(f"Rate limiter unavailable, allowing request: {type(exc).__name__}: {exc}")
         return await call_next(request)
 
-    if int(count) > limit:
-        return JSONResponse(
-            status_code=429,
-            content={"detail": f"Rate limit exceeded ({limit}/minute). Retry shortly."},
-            headers={"Retry-After": "60"},
-        )
+    for (key, blimit, _, retry, desc), count in zip(checks, counts):
+        if count > blimit:
+            return JSONResponse(
+                status_code=429,
+                content={"detail": f"Rate limit exceeded ({desc}). Retry shortly."},
+                headers={"Retry-After": str(max(1, retry))},
+            )
     response = await call_next(request)
-    response.headers["X-RateLimit-Limit"] = str(limit)
-    response.headers["X-RateLimit-Remaining"] = str(max(0, limit - int(count)))
+    if limit > 0:
+        response.headers["X-RateLimit-Limit"] = str(limit)
+        response.headers["X-RateLimit-Remaining"] = str(max(0, limit - counts[0]))
     return response

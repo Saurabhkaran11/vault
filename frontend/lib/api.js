@@ -1,5 +1,7 @@
 "use client";
 
+import { authEnabled } from "./authConfig";
+
 /* Backend sync foundation (vault.backend.v1).
  *
  * Model for this phase: localStorage stays the instant, offline-capable
@@ -50,7 +52,14 @@ export function setBackend(patch) {
 
 export const backendOn = () => {
   const b = getBackend();
-  return !!(b.enabled && b.url);
+  if (!(b.enabled && b.url)) return false;
+  /* When sign-in exists, sync belongs to signed-in users only. A signed-out
+   * visitor must stay purely local: their mirrors would either be rejected
+   * (filling the retry queue with jobs that can never succeed) or land in
+   * the shared dev-header fallback account. Builds without auth configured
+   * keep the pre-auth behavior — an explicit backend URL is enough. */
+  if (authEnabled() && !hasVerifiedIdentity()) return false;
+  return true;
 };
 
 /* Money crosses this API as INTEGER CENTS. The local working copy still
