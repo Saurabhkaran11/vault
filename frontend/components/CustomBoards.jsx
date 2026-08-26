@@ -512,10 +512,13 @@ export default function CustomBoards({ itemsBoard }) {
               </div>
             ))}
           </div>
-          <div className="m" style={{ color: "var(--ink-soft)", fontSize: 12, marginTop: 8 }}>
-            Click a task to open it — title, description, status and sprint live inside · drag cards between columns ·
-            log ⏱ hours on finished tasks · ✓ Complete sprint rolls unfinished work into the next one.
-          </div>
+          <details className="howfold" style={{ marginTop: 8 }}>
+            <summary>ⓘ Board tips</summary>
+            <div className="fin-how">
+              Click a task to open it — title, description, status and sprint live inside · drag cards between columns ·
+              log ⏱ hours on finished tasks · ✓ Complete sprint rolls unfinished work into the next one.
+            </div>
+          </details>
         </>
         );
       })()}

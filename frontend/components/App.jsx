@@ -11,6 +11,7 @@ import QuickCapture from "./QuickCapture";
 import { initOnboarding, setOB, startClean, WelcomeModal, ChecklistCard } from "./Onboarding";
 import { KEY_ACTIONS, NAV_ACTIONS, DEFAULT_KEYS, getKeymap, setKeymap, resetKeymap, validateKey } from "@/lib/keymap";
 import { ACCENTS, DEFAULT_ACCENT, applyAccent } from "@/lib/accents";
+import Intro from "./Intro";
 import { getCustomTags, addCustomTag, removeCustomTag, normalizeTag } from "@/lib/tags";
 import { REPORTS, downloadReport, openReport } from "@/lib/report";
 import { downloadICS } from "@/lib/ics";
@@ -1431,7 +1432,7 @@ export default function App() {
           <>
             <div className="crumb">Overview · {fmtStamp(today())}</div>
             <h2 className="display">Your collection, at a glance</h2>
-            <p className="sub">Search everything with <span className="kbd">Ctrl</span>+<span className="kbd">K</span> — here's just what matters today.</p>
+            <Intro id="dash">Search everything with <span className="kbd">Ctrl</span>+<span className="kbd">K</span> — here&rsquo;s just what matters today.</Intro>
 
             <button className="dash-search" onClick={() => setPalette(true)}>
               <span className="ds-ic" aria-hidden="true"><Ic name="search" size={16} /></span>
@@ -1669,7 +1670,7 @@ export default function App() {
           <>
             <div className="crumb">Boards</div>
             <h2 className="display">Boards</h2>
-            <p className="sub">Jira-style kanbans for anything — a feature, a sprint, this week — with any columns you like. Want an automatic board of everything you've saved, by status? Add the Vault items board from the tab bar.</p>
+            <Intro id="boards">Jira-style kanbans for anything — a feature, a sprint, this week — with any columns you like. Want an automatic board of everything you&rsquo;ve saved, by status? Add the Vault items board from the tab bar.</Intro>
             <CustomBoards itemsBoard={<ProjectBoard items={items} onUpdate={updateStamped} onGoto={goto} onTag={openTag} />} />
           </>
         )}
@@ -1678,7 +1679,7 @@ export default function App() {
           <>
             <div className="crumb">Money</div>
             <h2 className="display">Finance</h2>
-            <p className="sub">Track daily expenses and keep every pending payment — credit card, rent, subscriptions — on the board until it's paid.</p>
+            <Intro id="finance">Track daily expenses and keep every pending payment — credit card, rent, subscriptions — on the board until it&rsquo;s paid.</Intro>
             <FinanceBoard key={`fb-${capBump}`} />
           </>
         )}
@@ -1687,7 +1688,7 @@ export default function App() {
           <>
             <div className="crumb">Tasks</div>
             <h2 className="display">Tasks</h2>
-            <p className="sub">One box, zero setup — type a task and it sorts itself into Overdue, Today, Upcoming or Someday. ⚑ marks priority; click a date chip to reschedule.</p>
+            <Intro id="tasks">One box, zero setup — type a task and it sorts itself into Overdue, Today, Upcoming or Someday. ⚑ marks priority; click a date chip to reschedule.</Intro>
             <TaskBoard key={`tb-${capBump}`} />
           </>
         )}
@@ -1696,7 +1697,7 @@ export default function App() {
           <>
             <div className="crumb">Connections</div>
             <h2 className="display">Graph</h2>
-            <p className="sub">Each project tag is a hub with its items gathered around it. Hover anything to spotlight its connections; click to open.</p>
+            <Intro id="graph">Each project tag is a hub with its items gathered around it. Hover anything to spotlight its connections; click to open.</Intro>
             <GraphView items={items} onOpenTag={openTag} onOpenSection={openSection} />
           </>
         )}
@@ -1705,7 +1706,7 @@ export default function App() {
           <>
             <div className="crumb">Projects</div>
             <h2 className="display">Tags</h2>
-            <p className="sub">Every project tag in your vault, with what it links together — click one to open the project.</p>
+            <Intro id="tags">Every project tag in your vault, with what it links together — click one to open the project.</Intro>
 
             <div className="bar">
               <input placeholder="＋ Create a tag — e.g. “side-project” or “2026-goals”… (Enter)" aria-label="Create a tag"
@@ -1762,7 +1763,7 @@ export default function App() {
           <>
             <div className="crumb">Trash</div>
             <h2 className="display">Recently deleted</h2>
-            <p className="sub">Deleted items stay here for 30 days, then they're removed forever — just like Apple Notes.</p>
+            <Intro id="trash">Deleted items stay here for 30 days, then they&rsquo;re removed forever — just like Apple Notes.</Intro>
             {trashed.length > 0 && (
               <div className="bar">
                 <div style={{ flex: 1 }} />
@@ -1815,7 +1816,7 @@ export default function App() {
           <>
             <div className="crumb">{view === "tag" ? "Project" : view === "all" ? "Collection" : "Section"}</div>
             <h2 className="display">{view === "tag" ? `#${tag}` : view === "all" ? "Content" : SECTIONS[view].label}</h2>
-            <p className="sub">
+            <Intro id={view === "tag" ? "tag" : `sec-${view}`}>
               {view === "tag"
                 ? `Everything linked to “${tag}” across notes, videos, PDFs and documents.`
                 : view === "all"
@@ -1825,7 +1826,7 @@ export default function App() {
                     : view === "book"
                       ? "Your reading hub — track progress on each book/PDF and link the notes, videos and docs that belong with it."
                       : "Click any #tag to jump to that project. Click item text to edit."}
-            </p>
+            </Intro>
 
             {/* Type switcher — the four saved-item kinds, unified. "All" shows
                 everything mixed; each type shows its own view and extras. */}

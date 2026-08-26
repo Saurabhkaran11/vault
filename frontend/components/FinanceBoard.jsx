@@ -718,11 +718,14 @@ export default function FinanceBoard() {
       {/* pending payments kanban */}
       <div className="card">
         <h3>Bills to pay {overdue.length > 0 && <span className="age">{overdue.length} OVERDUE</span>}</h3>
-        <div className="fin-how">
-          Each bill is a card. It sits in <b>Upcoming</b>, moves to <b>Due soon</b> as the date nears, and lands in
-          <b> Paid</b> when you press <b>✓ Paid</b> (or drag it there). Recurring bills come back by themselves for the next cycle.
-        </div>
-        <div className="bsub-head">Add a bill <span className="bsub-note">name it, the amount, and when it&rsquo;s due — set a repeat if it comes back every month</span></div>
+        <details className="howfold">
+          <summary>ⓘ How bills work</summary>
+          <div className="fin-how">
+            Each bill is a card. It sits in <b>Upcoming</b>, moves to <b>Due soon</b> as the date nears, and lands in
+            <b> Paid</b> when you press <b>✓ Paid</b> (or drag it there). Recurring bills come back by themselves for the next cycle.
+          </div>
+        </details>
+        <div className="bsub-head">Add a bill <span className="bsub-note">— name it, the amount, and when it&rsquo;s due; set a repeat if it comes back every month</span></div>
         <div className="fform">
           <input placeholder="Bill — e.g. credit card, rent, Netflix…" value={bTitle}
             onChange={(e) => setBTitle(e.target.value)} aria-label="Bill name"
