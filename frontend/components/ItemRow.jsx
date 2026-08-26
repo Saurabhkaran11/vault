@@ -51,9 +51,15 @@ const fileKind = (name) => {
 
 /* dataURL → Blob URL (blob: renders far more reliably than data: for PDFs) */
 const toBlobUrl = (file) => {
-  const [head, b64] = file.data.split(",");
+  const comma = file.data.indexOf(",");
+  const head = file.data.slice(0, comma), body = file.data.slice(comma + 1);
   const mime = (head.match(/data:([^;]+)/) || [])[1] || file.type || "application/octet-stream";
-  const bin = atob(b64);
+  /* uploads are always base64, but tolerate percent-encoded data URIs too —
+     a text body goes straight into the Blob, which handles UTF-8 itself */
+  if (!/;base64/i.test(head)) {
+    return URL.createObjectURL(new Blob([decodeURIComponent(body)], { type: mime }));
+  }
+  const bin = atob(body);
   const u8 = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
   return URL.createObjectURL(new Blob([u8], { type: mime }));
