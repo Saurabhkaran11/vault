@@ -1317,6 +1317,9 @@ export default function App() {
               <span className="trust-chip"><span className="tc-dot accent" aria-hidden="true" />{aiReady ? "AI on your key" : "Bring your own AI"}</span>
             </div>
             Data lives in this browser ({formatBytes(storageUsage())} used).
+            <div className="foot-legal">
+              <a href="/privacy">Privacy</a> · <a href="/terms">Terms</a>
+            </div>
             <div style={{ marginTop: 6 }}>
               <button onClick={() => importRef.current?.click()}>⬆ Import</button>
               <input ref={importRef} type="file" accept="application/json" hidden onChange={onImport} />

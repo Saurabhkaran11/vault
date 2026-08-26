@@ -1,7 +1,12 @@
 "use client";
 
 import { Show, SignIn } from "@clerk/nextjs";
+import { usePathname } from "next/navigation";
 import AuthBridge from "./AuthBridge";
+
+/* Pages anyone may read signed-out. Google's OAuth verification reviewers
+ * (and any privacy-conscious visitor) must reach these without an account. */
+const PUBLIC_PATHS = ["/privacy", "/terms"];
 
 /* What a signed-out visitor sees once Clerk is configured.
  *
@@ -17,6 +22,8 @@ import AuthBridge from "./AuthBridge";
  * than fail at import — which a build with real keys catches immediately.
  */
 export default function AuthGate({ children }) {
+  const pathname = usePathname();
+  if (PUBLIC_PATHS.includes(pathname)) return children;
   return (
     <>
       <Show when="signed-in">

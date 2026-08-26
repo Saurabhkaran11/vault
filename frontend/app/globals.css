@@ -937,6 +937,27 @@ img.fpreview{height:auto}
 .kpi.bad .kpi-v{color:var(--stamp)}
 .kpi-d{font-size:12px; color:var(--ink-soft); line-height:1.45}
 
+.foot-legal{margin-top:6px}
+.foot-legal a{color:#9DB2C8; text-decoration:none}
+.foot-legal a:hover{color:#E8F0F8; text-decoration:underline}
+
+/* public legal pages (/privacy, /terms) — readable, calm, signed-out safe */
+.legal-wrap{max-width:720px; margin:0 auto; padding:28px 22px 48px; font-family:'Public Sans',system-ui,sans-serif}
+.legal-head{display:flex; align-items:baseline; justify-content:space-between; gap:14px; padding-bottom:18px; border-bottom:1px solid var(--line)}
+.legal-brand{font-family:'Fraunces',Georgia,serif; font-size:22px; font-weight:750; color:var(--ink); text-decoration:none}
+.legal-nav{display:flex; gap:16px}
+.legal-nav a{color:var(--ink-soft); text-decoration:none; font-size:14px}
+.legal-nav a:hover{color:var(--moss)}
+.legal-main h1{font-size:32px; font-weight:650; margin:26px 0 4px}
+.legal-updated{font-size:12px; color:var(--ink-soft); letter-spacing:.04em; margin:0 0 22px}
+.legal-main h2{font-family:'Fraunces',Georgia,serif; font-size:19px; font-weight:650; margin:26px 0 8px}
+.legal-main p, .legal-main li{font-size:15px; line-height:1.7; color:var(--ink); max-width:65ch}
+.legal-main ul{padding-left:22px; display:flex; flex-direction:column; gap:8px; margin:8px 0}
+.legal-main a{color:var(--moss)}
+.legal-main .mono{font-size:13px}
+.legal-foot{display:flex; justify-content:space-between; gap:14px; flex-wrap:wrap; margin-top:36px; padding-top:16px; border-top:1px solid var(--line); font-size:13.5px; color:var(--ink-soft)}
+.legal-foot a{color:var(--moss); text-decoration:none}
+
 /* storage-quota warning — the one banner that must out-shout everything */
 .storage-warn{position:fixed; top:12px; left:50%; transform:translateX(-50%); z-index:300; display:flex; align-items:center; gap:12px; max-width:min(680px, calc(100vw - 32px)); background:var(--gold-soft); border:1.5px solid var(--gold); color:var(--ink); border-radius:12px; padding:10px 14px; font-size:13.5px; line-height:1.5; box-shadow:var(--shadow-3)}
 .storage-warn.full{background:var(--stamp-soft); border-color:var(--stamp)}
