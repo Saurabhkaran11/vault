@@ -3,6 +3,7 @@
 import React, { useMemo, useState } from "react";
 import { today } from "@/lib/seed";
 import { askText } from "@/lib/ai";
+import { TopMerchants } from "./Charts";
 import { useAiReady } from "@/hooks/useAiReady";
 
 /* Finance analytics: spending reports over daily / weekly / monthly / yearly
@@ -328,6 +329,16 @@ export default function FinanceAnalytics({ fin, fmt, spentByCat = {}, savingsRat
           : <div className="empty">Nothing in this range yet — switch to a longer period.</div>
       ) : (
         <TimeChart buckets={buckets} type={chart} fmt={fmt} />
+      )}
+
+      {expenses.length > 0 && (
+        <>
+          <h3 style={{ marginTop: 22 }}>Top merchants · last 90 days</h3>
+          <div className="m" style={{ color: "var(--ink-soft)", marginBottom: 4 }}>
+            Who actually gets your money — statement imports make these merchant names.
+          </div>
+          <TopMerchants expenses={expenses} fmt={fmt} />
+        </>
       )}
     </div>
   );

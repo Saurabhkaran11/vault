@@ -276,3 +276,197 @@ export function Resurface({ items, onOpen }) {
     </div>
   );
 }
+
+/* ---------- Budget burn: cumulative month-to-date spend vs the even-pace
+ * line to the monthly budget. The one glance that answers "am I ahead of
+ * my money or behind it" — above the dashes means spending ahead of pace. */
+export function BudgetBurn({ expenses, budget, fmt }) {
+  const { ref, tip, show, hide } = useChartTip();
+  const { pts, poly, todayIdx, spentNow, daysInMonth } = useMemo(() => {
+    const now = new Date();
+    const ym = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    const dim = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+    const day = now.getDate();
+    const perDay = Array.from({ length: day }, () => 0);
+    expenses.forEach((e) => {
+      if (!e.date?.startsWith(ym)) return;
+      const d = Number(e.date.slice(8, 10));
+      if (d >= 1 && d <= day) perDay[d - 1] += +e.amount || 0;
+    });
+    let run = 0;
+    const cum = perDay.map((v) => (run += v));
+    return { pts: cum, poly: null, todayIdx: day - 1, spentNow: run, daysInMonth: dim };
+  }, [expenses]);
+
+  const W = 560, H = 210, pad = 44;
+  const max = Math.max(budget, spentNow) * 1.08;
+  const X = (d) => pad + (d / (daysInMonth - 1)) * (W - pad - 12);
+  const Y = (v) => H - 26 - (v / max) * (H - 54);
+  const line = pts.map((v, i) => `${X(i)},${Y(v)}`).join(" ");
+  const monthName = new Date().toLocaleDateString(undefined, { month: "short" });
+
+  return (
+    <div className="chart-wrap" ref={ref} onMouseLeave={hide}>
+      <svg className="burn-svg" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img" aria-label="Cumulative spend against budget pace">
+        <line x1={pad} y1={H - 26} x2={W - 8} y2={H - 26} stroke="var(--line)" />
+        {[0.33, 0.66, 1].map((f) => (
+          <g key={f}>
+            <line x1={pad} y1={Y(budget * f)} x2={W - 8} y2={Y(budget * f)} stroke="var(--line)" strokeDasharray="2 4" />
+            <text x={2} y={Y(budget * f) + 3} fontFamily="IBM Plex Mono" fontSize="9.5" fill="var(--ink-soft)">{fmt(Math.round(budget * f))}</text>
+          </g>
+        ))}
+        <line x1={X(0)} y1={Y(0)} x2={X(daysInMonth - 1)} y2={Y(budget)}
+          stroke="var(--stamp)" strokeWidth="2.5" strokeDasharray="7 6" opacity="0.85" />
+        {pts.length > 1 && (
+          <polygon points={`${X(0)},${Y(0)} ${line} ${X(todayIdx)},${Y(0)}`} fill="var(--moss)" opacity="0.12" />
+        )}
+        <polyline points={line} fill="none" stroke="var(--moss)" strokeWidth="3.5" strokeLinejoin="round" />
+        <circle cx={X(todayIdx)} cy={Y(spentNow)} r="5.5" fill="var(--moss)" />
+        {pts.map((v, i) => (
+          <rect key={i} x={X(i) - (W - pad) / pts.length / 2} y="0" width={(W - pad) / Math.max(pts.length, 1)} height={H}
+            fill="transparent"
+            onMouseMove={(e) => show(e, `${monthName} ${i + 1} · ${fmt(Math.round(v))} so far · pace ${fmt(Math.round((budget / daysInMonth) * (i + 1)))}`)} />
+        ))}
+        <text x={pad} y={H - 9} fontFamily="IBM Plex Mono" fontSize="9.5" fill="var(--ink-soft)">{monthName} 1</text>
+        <text x={W - 56} y={H - 9} fontFamily="IBM Plex Mono" fontSize="9.5" fill="var(--ink-soft)">{monthName} {daysInMonth}</text>
+      </svg>
+      <ChartTip tip={tip} />
+    </div>
+  );
+}
+
+/* ---------- Top merchants: where the money actually goes, ranked. Fed by
+ * expense descriptions (statement imports make these merchant names). */
+export function TopMerchants({ expenses, fmt }) {
+  const rows = useMemo(() => {
+    const by = new Map();
+    expenses.forEach((e) => {
+      if (daysAgo(e.date) > 90) return;
+      const key = (e.desc || "—").trim().replace(/\s+/g, " ").toUpperCase().slice(0, 28);
+      const cur = by.get(key) || { total: 0, n: 0 };
+      cur.total += +e.amount || 0; cur.n += 1;
+      by.set(key, cur);
+    });
+    return [...by.entries()].sort((a, b) => b[1].total - a[1].total).slice(0, 5);
+  }, [expenses]);
+
+  if (!rows.length) return <div className="m" style={{ color: "var(--ink-soft)" }}>No expenses in the last 90 days yet.</div>;
+  const max = rows[0][1].total;
+  const COLORS = ["var(--moss)", "var(--gold)", "var(--azure)", "var(--violet)", "var(--blue)"];
+  return (
+    <div className="merchants">
+      {rows.map(([name, r], i) => (
+        <div key={name} className="merchant-row" data-tip={`${name}: ${fmt(Math.round(r.total))} across ${r.n} transaction${r.n === 1 ? "" : "s"} (90 days)`}>
+          <span className="merchant-name mono">{name}</span>
+          <span className="merchant-bar"><i style={{ width: `${Math.max((r.total / max) * 100, 3)}%`, background: COLORS[i] }} /></span>
+          <b className="mono">{fmt(Math.round(r.total))}</b>
+          <span className="merchant-n mono">· {r.n}×</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ---------- Vault growth: the collection compounding — cumulative items by
+ * type, monthly, since the vault began (capped at 12 months of x-axis). */
+export function VaultGrowth({ items }) {
+  const { ref, tip, show, hide } = useChartTip();
+  const TYPES = ["note", "video", "book", "doc"];
+  const { months, layers, totals } = useMemo(() => {
+    const now = new Date();
+    const n = 6;
+    const months = Array.from({ length: n }, (_, i) => {
+      const d = new Date(now.getFullYear(), now.getMonth() - (n - 1 - i), 1);
+      return { ym: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`, label: d.toLocaleDateString(undefined, { month: "short" }) };
+    });
+    const layers = TYPES.map((t) => months.map(({ ym }) =>
+      items.filter((it) => it.type === t && it.date && it.date.slice(0, 7) <= ym).length));
+    const totals = months.map((_, i) => layers.reduce((a, l) => a + l[i], 0));
+    return { months, layers, totals };
+  }, [items]);
+
+  const W = 560, H = 210, pad = 40;
+  const max = Math.max(...totals, 4) * 1.12;
+  const X = (i) => pad + (i / (months.length - 1)) * (W - pad - 14);
+  const Y = (v) => H - 26 - (v / max) * (H - 56);
+  let base = months.map(() => 0);
+  const polys = layers.map((l, li) => {
+    const top = l.map((v, i) => base[i] + v);
+    const up = top.map((v, i) => `${X(i)},${Y(v)}`).join(" ");
+    const down = base.map((v, i) => `${X(i)},${Y(v)}`).reverse().join(" ");
+    base = top;
+    return { points: `${up} ${down}`, type: TYPES[li] };
+  });
+
+  return (
+    <div className="chart-wrap" ref={ref} onMouseLeave={hide}>
+      <svg className="growth-svg" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img" aria-label="Items saved over time by type">
+        <line x1={pad} y1={H - 26} x2={W - 8} y2={H - 26} stroke="var(--line)" />
+        {polys.map((p, i) => (
+          <polygon key={p.type} points={p.points} fill={SECTIONS[p.type].color} opacity={0.9 - i * 0.07} />
+        ))}
+        {months.map((m, i) => (
+          <rect key={m.ym} x={X(i) - (W - pad) / months.length / 2} y="0" width={(W - pad) / months.length} height={H}
+            fill="transparent"
+            onMouseMove={(e) => show(e, `${m.label}: ${fmtK(totals[i])} item${totals[i] === 1 ? "" : "s"} total`)} />
+        ))}
+        {months.map((m, i) => (
+          <text key={m.ym} x={X(i) - 10} y={H - 9} fontFamily="IBM Plex Mono" fontSize="9.5" fill="var(--ink-soft)">{m.label}</text>
+        ))}
+        <text x={W - 90} y={Y(totals[months.length - 1]) - 10} fontFamily="Public Sans" fontSize="13" fontWeight="600" fill="var(--ink)">
+          {fmtK(totals[months.length - 1])} items
+        </text>
+      </svg>
+      <ChartTip tip={tip} />
+    </div>
+  );
+}
+
+/* ---------- Task rhythm: done-per-day for ten weeks with the live streak.
+ * Streaks are the cheapest daily-return mechanic there is — and gaps stay
+ * honest, which is what makes the streak worth protecting. */
+export function TaskRhythm({ doneDates }) {
+  const { ref, tip, show, hide } = useChartTip();
+  const { counts, streak } = useMemo(() => {
+    const days = 70;
+    const now = new Date();
+    const counts = Array.from({ length: days }, (_, i) => {
+      const d = new Date(now); d.setDate(d.getDate() - (days - 1 - i));
+      const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      return { iso, label: d.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" }), n: doneDates.filter((x) => x === iso).length };
+    });
+    let streak = 0;
+    for (let i = days - 1; i >= 0; i--) {
+      if (counts[i].n > 0) streak++;
+      else if (i === days - 1) continue;   // today can still be zero without breaking it
+      else break;
+    }
+    return { counts, streak };
+  }, [doneDates]);
+
+  const W = 560, H = 170, pad = 8;
+  const max = Math.max(...counts.map((c) => c.n), 3);
+  const bw = (W - pad * 2) / counts.length;
+  return (
+    <div className="chart-wrap" ref={ref} onMouseLeave={hide}>
+      <svg className="rhythm-svg" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img" aria-label="Tasks finished per day">
+        <line x1={pad} y1={H - 24} x2={W - pad} y2={H - 24} stroke="var(--line)" />
+        {counts.map((c, i) => {
+          const h = (c.n / max) * (H - 62);
+          const inStreak = streak > 0 && i >= counts.length - streak;
+          return (
+            <rect key={c.iso} x={pad + i * bw + 0.8} y={H - 24 - Math.max(h, 2.5)} width={bw - 1.6} height={Math.max(h, 2.5)} rx="1.5"
+              fill={inStreak ? "var(--stamp)" : "var(--moss)"} opacity={c.n ? 1 : 0.16}
+              onMouseMove={(e) => show(e, `${c.label} · ${c.n} done`)} />
+          );
+        })}
+        {streak > 1 && (
+          <text x={W - 122} y={20} fontFamily="IBM Plex Mono" fontSize="12.5" fontWeight="600" fill="var(--stamp)">{streak}-day streak 🔥</text>
+        )}
+        <text x={pad} y={H - 8} fontFamily="IBM Plex Mono" fontSize="9.5" fill="var(--ink-soft)">10 weeks ago</text>
+        <text x={W - 46} y={H - 8} fontFamily="IBM Plex Mono" fontSize="9.5" fill="var(--ink-soft)">today</text>
+      </svg>
+      <ChartTip tip={tip} />
+    </div>
+  );
+}

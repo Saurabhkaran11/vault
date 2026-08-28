@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { SECTIONS, fmtStamp, daysAgo, today, fmtK } from "@/lib/seed";
 import { useStore } from "@/hooks/useStore";
-import { Donut, rangeSeries, TinyBars, SparkArea } from "./Charts";
+import { Donut, rangeSeries, TinyBars, SparkArea, VaultGrowth, TaskRhythm } from "./Charts";
 import GraphView from "./GraphView";
 import ItemRow, { TagAdder } from "./ItemRow";
 import { Ic } from "./Icons";
@@ -1746,6 +1746,20 @@ export default function App() {
                       ) : (
                         <div className="m" style={{ color: "var(--ink-soft)" }}>No expenses logged {RANGE_WORD[range]} — add one in Finance.</div>
                       )}
+                    </div>
+                  </div>
+
+                  {/* second insight row: the collection compounding + the daily habit */}
+                  <div className="charts-row2">
+                    <div className="card">
+                      <h3>Your vault, compounding</h3>
+                      <div className="m" style={{ color: "var(--ink-soft)", marginBottom: 8 }}>Everything you&rsquo;ve saved, accumulating by type.</div>
+                      <VaultGrowth items={items} />
+                    </div>
+                    <div className="card">
+                      <h3>Task rhythm</h3>
+                      <div className="m" style={{ color: "var(--ink-soft)", marginBottom: 8 }}>Tasks finished per day — streaks glow.</div>
+                      <TaskRhythm doneDates={pulse?.doneDates || []} />
                     </div>
                   </div>
                 </>
