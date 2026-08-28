@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { mirror } from "@/lib/api";
 import { uid } from "@/lib/id";
 import { safeSet } from "@/lib/safeStorage";
+import { useCrossTab } from "@/lib/crosstab";
 
 /* Custom kanban boards — make a board for anything: a feature, a sprint,
  * this week's chores. Custom columns, cards with inline editing, drag &
@@ -128,6 +129,8 @@ export default function CustomBoards({ itemsBoard }) {
   const [store, setStore] = useState({ version: 1, seeded: true, showItems: false, boards: seedBoards() });
   const [hydrated, setHydrated] = useState(false);
   const [active, setActive] = useState(null);      // "items" | board id | null (empty state)
+  useCrossTab(KEY, (saved) =>
+    setStore({ version: 1, seeded: true, showItems: false, ...saved, boards: ensureKeys(saved.boards || []) }));
 
   useEffect(() => {
     try {
@@ -339,8 +342,21 @@ export default function CustomBoards({ itemsBoard }) {
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
   }, [detail]);
-  const deleteCard = (cid, kid) =>
+  /* delete with a 6-second undo — a card is real work, not a chip */
+  const [undo, setUndo] = useState(null);
+  const undoTimer = useRef(null);
+  const deleteCard = (cid, kid) => {
+    const col = board?.cols.find((c) => c.id === cid);
+    const card = col?.cards.find((k) => k.id === kid);
     patchBoard((b) => ({ ...b, cols: b.cols.map((c) => (c.id === cid ? { ...c, cards: c.cards.filter((k) => k.id !== kid) } : c)) }));
+    if (!card) return;
+    clearTimeout(undoTimer.current);
+    setUndo({
+      label: `Deleted “${(card.text || "card").slice(0, 40)}”`,
+      restore: () => patchBoard((b) => ({ ...b, cols: b.cols.map((c) => (c.id === cid ? { ...c, cards: [card, ...c.cards] } : c)) })),
+    });
+    undoTimer.current = setTimeout(() => setUndo(null), 6000);
+  };
 
   /* ---------- drag & drop */
   const drag = useRef(null);   // {fromCol, cardId}
@@ -369,6 +385,12 @@ export default function CustomBoards({ itemsBoard }) {
 
   return (
     <>
+      {undo && (
+        <div className="toast" role="status">
+          {undo.label}{" "}
+          <button className="av-link" onClick={() => { clearTimeout(undoTimer.current); undo.restore(); setUndo(null); }}>Undo</button>
+        </div>
+      )}
       {/* board tabs */}
       <div className="btabs">
         <div className="doctabs" role="tablist" aria-label="Boards">

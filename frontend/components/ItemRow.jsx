@@ -82,13 +82,22 @@ function FileDownload({ file, className = "btn sm", children }) {
       </a>
     );
   }
-  if (!file.s3_key) return null;   // nothing to download — caller explains why
+  if (!file.s3_key && !file.fid) return null;   // nothing to download — caller explains why
 
   const go = async () => {
     setBusy(true); setErr(null);
     try {
       const url = await resolveFileUrl(file);
       if (!url) throw new Error("no longer in storage");
+      if (file.fid) {
+        /* IndexedDB body: a blob URL has no server headers, so drive the
+           download with an explicit anchor to keep the filename */
+        const a = document.createElement("a");
+        a.href = url; a.download = file.name || "file";
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 4000);
+        return;
+      }
       /* The signed URL already carries a Content-Disposition, so a plain
          navigation downloads it with the right filename. */
       window.open(url, "_blank", "noopener");
@@ -135,11 +144,12 @@ function FilePreview({ file }) {
   const [loadErr, setLoadErr] = useState(null);
   const kind = previewKind(file);
 
-  /* Three shapes reach this component:
-   *   · `data`   — a local base64 body, available immediately
+  /* Four shapes reach this component:
+   *   · `data`   — a legacy local base64 body, available immediately
+   *   · `fid`    — a Blob in IndexedDB (the normal local shape now)
    *   · `s3_key` — in the bucket; needs a short-lived signed URL first
-   *   · neither  — the body only ever lived in another browser
-   * The async branch is why this isn't just toBlobUrl(). */
+   *   · none     — the body only ever lived in another browser
+   * The async branches are why this isn't just toBlobUrl(). */
   useEffect(() => {
     let alive = true;
     let objectUrl = null;
@@ -154,6 +164,24 @@ function FilePreview({ file }) {
         }
         objectUrl = toBlobUrl(file);
         if (alive) setUrl(objectUrl); else URL.revokeObjectURL(objectUrl);
+        return;
+      }
+
+      if (file.fid) {
+        const blobUrl = await resolveFileUrl(file);
+        if (!alive) { if (blobUrl) URL.revokeObjectURL(blobUrl); return; }
+        if (!blobUrl) { setLoadErr("This file's body is missing from this browser."); return; }
+        if (kind === "text") {
+          try {
+            const res = await fetch(blobUrl);
+            const body = await res.text();
+            if (alive) setText(body);
+          } catch { if (alive) setText("Could not decode this file."); }
+          URL.revokeObjectURL(blobUrl);
+          return;
+        }
+        objectUrl = blobUrl;
+        setUrl(blobUrl);
         return;
       }
 
@@ -490,7 +518,7 @@ export default function ItemRow({ it, onTag, onUpdate, onRemove, allItems = [], 
           )}
           {/* image files: pull the text out with local OCR so it becomes
               searchable — the description field is where search looks */}
-          {it.type === "doc" && it.file && it.file.data && !fileBodyMissing(it.file) &&
+          {it.type === "doc" && it.file && (it.file.data || it.file.fid) && !fileBodyMissing(it.file) &&
             previewKind(it.file) === "image" && onUpdate && (
             <button className="btn sm" style={{ marginTop: 8, marginLeft: 4, background: "var(--violet)" }}
               disabled={ocrPct != null}
@@ -498,7 +526,9 @@ export default function ItemRow({ it, onTag, onUpdate, onRemove, allItems = [], 
               onClick={async () => {
                 setOcrErr(""); setOcrPct(0);
                 try {
-                  const text = await extractTextFromImage(it.file.data, setOcrPct);
+                  const src = it.file.data || (await resolveFileUrl(it.file));
+                  if (!src) throw new Error("This file's body isn't available in this browser.");
+                  const text = await extractTextFromImage(src, setOcrPct);
                   if (!text) setOcrErr("No readable text in this image.");
                   else onUpdate({ ...it, meta: [it.meta, text.slice(0, 600)].filter(Boolean).join(" — ") });
                 } catch (e) { setOcrErr(e.message); }

@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { SECTIONS, fmtStamp } from "@/lib/seed";
-import { semanticSearch } from "@/lib/embed";
+import { semanticSearch, itemText } from "@/lib/embed";
 
 /* Command palette — Ctrl+K (or Cmd+K) from anywhere.
    Runs COMMANDS (go-to a view, actions) and searches titles, notes and
@@ -29,6 +29,12 @@ export default function CommandPalette({ items, actions = [], open, onClose, onG
   /* Calm ordering: an empty palette shows just your latest items — not a wall
      of commands. Typing puts YOUR CONTENT first, tags next, and at most four
      matching actions last. */
+  /* the search haystack includes note-body text (itemText flattens blocks and
+     sub-pages) — a phrase from inside a note MUST be findable, or search
+     breaks the product's core promise. Memoized: rebuilt only when items
+     change, not per keystroke. */
+  const hay = useMemo(() => new Map(items.map((i) => [i.id, itemText(i).toLowerCase()])), [items]);
+
   const results = useMemo(() => {
     const needle = q.trim().toLowerCase();
     if (!needle) {
@@ -38,7 +44,7 @@ export default function CommandPalette({ items, actions = [], open, onClose, onG
         .map((i) => ({ kind: "item", item: i, group: "Recent" }));
     }
     const itemHits = items
-      .filter((i) => (i.title + " " + i.meta + " " + i.tags.join(" ")).toLowerCase().includes(needle))
+      .filter((i) => (hay.get(i.id) || "").includes(needle) || i.tags.join(" ").toLowerCase().includes(needle))
       .sort((a, b) => b.date.localeCompare(a.date))
       .slice(0, 8)
       .map((i) => ({ kind: "item", item: i, group: "In your vault" }));
@@ -51,7 +57,7 @@ export default function CommandPalette({ items, actions = [], open, onClose, onG
       .slice(0, 4)
       .map((a) => ({ kind: "cmd", action: a, group: "Actions" }));
     return [...itemHits, ...tagHits, ...cmdHits];
-  }, [q, items, actions]);
+  }, [q, items, actions, hay]);
 
   /* Semantic hits arrive async (local embeddings via Ollama) and only when an
      index exists — an empty result with a .reason means "no index / no

@@ -11,6 +11,18 @@ export default function Error({ error, retry }) {
 
   useEffect(() => { reportError(error, { boundary: "app/error" }); }, [error]);
 
+  /* the ?crashtest drill would re-crash on every retry if the param survives —
+   * recovery controls must leave a URL that can actually recover */
+  const clearCrashParam = () => {
+    try {
+      const u = new URL(window.location.href);
+      if (u.searchParams.has("crashtest")) {
+        u.searchParams.delete("crashtest");
+        window.history.replaceState(null, "", u);
+      }
+    } catch {}
+  };
+
   return (
     <div style={{
       minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center",
@@ -27,11 +39,11 @@ export default function Error({ error, retry }) {
           Try again, and if it keeps happening, reload the page.
         </p>
         <div style={{ display: "flex", gap: 10, justifyContent: "center", marginBottom: 16 }}>
-          <button onClick={() => retry()} style={{
+          <button onClick={() => { clearCrashParam(); retry(); }} style={{
             background: "var(--moss, #1F5FA8)", color: "#fff", border: "none", borderRadius: 9,
             padding: "10px 18px", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit",
           }}>Try again</button>
-          <button onClick={() => window.location.reload()} style={{
+          <button onClick={() => { clearCrashParam(); window.location.reload(); }} style={{
             background: "none", color: "var(--moss, #1F5FA8)", border: "1px solid var(--moss, #1F5FA8)",
             borderRadius: 9, padding: "10px 18px", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit",
           }}>Reload Vault</button>

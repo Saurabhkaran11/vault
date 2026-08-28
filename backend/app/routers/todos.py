@@ -22,7 +22,8 @@ async def list_tasks(response: Response, page: Page = Depends(page_params),
 
 
 @router.post("", response_model=TaskOut, status_code=201)
-async def upsert_task(body: TaskIn, session: AsyncSession = Depends(get_session), user: str = Depends(current_user_id)):
+async def upsert_task(body: TaskIn, response: Response,
+                      session: AsyncSession = Depends(get_session), user: str = Depends(current_user_id)):
     """Idempotent upsert keyed on the frontend task id, so fire-and-forget
     mirrors (and retry-queue replays) are safe. Emits `task.completed` on the
     false→true done transition, same as the PUT path."""
@@ -33,6 +34,14 @@ async def upsert_task(body: TaskIn, session: AsyncSession = Depends(get_session)
         task = Task(user_id=user, **body.model_dump())
         session.add(task)
     else:
+        # LWW guard — same contract as items.upsert_item: 0 = unstamped
+        # legacy client, always applied; only a strictly older stamp is
+        # refused, with the stored row and 200 so the queue drains.
+        if body.updated_at and body.updated_at < task.updated_at:
+            response.status_code = 200
+            out = TaskOut.model_validate(task)
+            out.stale = True
+            return out
         was_done = task.done
         for k, v in body.model_dump().items():
             setattr(task, k, v)

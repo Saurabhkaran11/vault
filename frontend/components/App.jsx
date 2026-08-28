@@ -8,7 +8,7 @@ import GraphView from "./GraphView";
 import ItemRow, { TagAdder } from "./ItemRow";
 import { Ic } from "./Icons";
 import QuickCapture from "./QuickCapture";
-import { initOnboarding, setOB, startClean, WelcomeModal, ChecklistCard } from "./Onboarding";
+import { initOnboarding, setOB, startClean, removeSampleData, WelcomeModal, ChecklistCard } from "./Onboarding";
 import { KEY_ACTIONS, NAV_ACTIONS, DEFAULT_KEYS, getKeymap, setKeymap, resetKeymap, validateKey } from "@/lib/keymap";
 import { ACCENTS, DEFAULT_ACCENT, applyAccent } from "@/lib/accents";
 import Intro from "./Intro";
@@ -29,7 +29,9 @@ import LocalModels from "./LocalModels";
 import SearchIndexCard from "./SearchIndexCard";
 import AskVault from "./AskVault";
 import { emptyBlock } from "./NoteBlocks";
-import { inspectBackup, applyBackup } from "@/lib/backup";
+import { inspectBackup, applyBackup, downloadBackup } from "@/lib/backup";
+import { idbAvailable, putFile, dataUrlToBlob } from "@/lib/fileStore";
+import { uid } from "@/lib/id";
 import { AI_MODELS, OSS_PRESETS, OSS_MODEL_SUGGESTIONS, presetById, getAIConfig, setAIConfig, askText, askJSON } from "@/lib/ai";
 import { useAiReady } from "@/hooks/useAiReady";
 import CalendarConnect from "./CalendarConnect";
@@ -467,6 +469,53 @@ export default function App() {
     return () => { live = false; };
   }, [hydrated]);
 
+  /* one-time move of legacy base64 file bodies out of localStorage into
+     IndexedDB — frees most of the ~5 MB budget and lifts the per-file cap.
+     Idempotent: it only ever sees items that still carry `data`. */
+  const migratedFiles = useRef(false);
+  useEffect(() => {
+    if (!hydrated || migratedFiles.current) return;
+    migratedFiles.current = true;
+    (async () => {
+      if (!(await idbAvailable())) return;   // private window — leave legacy shape
+      for (const it of allItems) {
+        if (!it.file?.data) continue;
+        try {
+          const fid = uid();
+          await putFile(fid, dataUrlToBlob(it.file.data));
+          const { data: _dropped, ...meta } = it.file;
+          update({ ...it, file: { ...meta, fid } });
+        } catch {} // a failed move keeps the working base64 copy — retry next load
+      }
+    })();
+  }, [hydrated]);
+
+  /* drain the offline-mirror retry queue: on load, and whenever the network
+     comes back. Without this the durable queue is write-only — edits made
+     offline would never reach the server. flushQueue no-ops when sync is off. */
+  useEffect(() => {
+    const drain = () => { flushQueue().catch(() => {}); };
+    drain();
+    window.addEventListener("online", drain);
+    return () => window.removeEventListener("online", drain);
+  }, []);
+
+  /* ask the browser not to evict this origin's storage — everything the user
+     owns lives here, and e.g. Safari deletes script-writable storage after
+     7 days without a visit unless persistence is granted */
+  useEffect(() => {
+    if (!hydrated) return;
+    try { navigator.storage?.persist?.().catch(() => {}); } catch {}
+  }, [hydrated]);
+
+  /* offline shell: the service worker caches static assets and the last-good
+     page so an installed PWA still opens with no network (data is already
+     local). Production only — it would fight HMR in dev. */
+  useEffect(() => {
+    if (process.env.NODE_ENV !== "production") return;
+    try { navigator.serviceWorker?.register("/sw.js").catch(() => {}); } catch {}
+  }, []);
+
   /* purge items that have sat in the trash for more than 30 days */
   useEffect(() => {
     if (!hydrated) return;
@@ -547,6 +596,7 @@ export default function App() {
   useEffect(() => { setKm(getKeymap()); }, []);
   const [keyListen, setKeyListen] = useState(null);   // action id waiting for a keypress
   const [keyErr, setKeyErr] = useState(null);
+  const [armFresh, setArmFresh] = useState(false);    // "Start fresh" needs a second click
   useEffect(() => {
     if (!keyListen) return;
     const onKey = (e) => {
@@ -850,6 +900,7 @@ export default function App() {
       if (kl === km.search) { e.preventDefault(); if (filterRef.current) filterRef.current.focus(); else setPalette(true); return; }
       if (kl === km.theme) { e.preventDefault(); setProfile((p) => ({ ...p, theme: p.theme === "dark" ? "light" : "dark" })); return; }
       if (kl === km.sidebar) { e.preventDefault(); setOpen((o) => !o); return; }
+      if (kl === km.backup) { e.preventDefault(); downloadBackup(); setToast("Backup downloaded — keep it somewhere safe."); return; }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -1020,6 +1071,9 @@ export default function App() {
 
       {hydrated && ob === null && (
         <WelcomeModal onChoose={(c) => {
+          /* a real user gesture — the best moment to ask the browser to
+             protect this origin's storage from eviction */
+          try { navigator.storage?.persist?.().catch(() => {}); } catch {}
           if (c === "clean") { startClean(); window.location.reload(); return; }
           /* seed the lazily-hydrated stores NOW — the dashboard reads them
              from localStorage, and without this it shows zeros until the
@@ -1041,6 +1095,29 @@ export default function App() {
                 onClick={() => { setSettingsOpen(false); setKeyEdit(false); }}>✕</button>
             </div>
             <div className="cd-body">
+              <div className="set-sec">
+                <div className="menu-sec">Your data</div>
+                <button className="menu-item" onClick={() => { downloadBackup(); setToast("Backup downloaded — keep it somewhere safe."); }}>
+                  ⬇ Back up this vault (.json)
+                  <span className="menukey">{(keymap.backup || "e").toUpperCase()}</span>
+                </button>
+                {ob?.choice === "sample" && !ob?.sampleRemoved && (
+                  <button className="menu-item"
+                    title="Removes the demo notes, tasks, expenses and board — everything you created stays"
+                    onClick={() => { removeSampleData(); window.location.reload(); }}>
+                    Remove sample data
+                    <span className="menukey">keeps what you made</span>
+                  </button>
+                )}
+                <button className="menu-item danger"
+                  onClick={() => { if (!armFresh) { setArmFresh(true); return; } startClean(); window.location.reload(); }}
+                  onBlur={() => setArmFresh(false)}
+                  style={armFresh ? { color: "var(--stamp)", fontWeight: 700 } : undefined}>
+                  {armFresh ? "Click again to erase everything in this browser" : "Start fresh"}
+                  {!armFresh && <span className="menukey">erase this browser&rsquo;s vault</span>}
+                </button>
+              </div>
+
               <AccountSection />
 
               <div className="set-sec">
@@ -1436,8 +1513,8 @@ export default function App() {
               )}
               <div className="restore-actions">
                 <button className="btn ghost sm" onClick={() => setRestore(null)}>Cancel</button>
-                <button className="btn sm" onClick={() => {
-                  const c = applyBackup(restore);
+                <button className="btn sm" onClick={async () => {
+                  const c = await applyBackup(restore);
                   setRestore(null);
                   setToast(`Restored ${c.items} items, ${c.todos} to-dos, ${c.finance} finance records, ${c.boards} boards — reloading…`);
                   setTimeout(() => window.location.reload(), 1400);
@@ -1470,7 +1547,11 @@ export default function App() {
         {view === "dash" && (
           <>
             <div className="crumb">Overview · {fmtStamp(today())}</div>
-            <h2 className="display">Your collection, at a glance</h2>
+            <h2 className="display">
+              {profile.name && profile.name.trim() && profile.name.trim() !== "You"
+                ? `Good ${new Date().getHours() < 12 ? "morning" : new Date().getHours() < 18 ? "afternoon" : "evening"}, ${profile.name.trim().split(/\s+/)[0]}`
+                : "Your collection, at a glance"}
+            </h2>
             <Intro id="dash">Search everything with <span className="kbd">Ctrl</span>+<span className="kbd">K</span> — here&rsquo;s just what matters today.</Intro>
 
             <button className="dash-search" onClick={() => setPalette(true)}>

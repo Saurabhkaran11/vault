@@ -19,6 +19,8 @@
  */
 
 import { api, backendOn } from "./api";
+import { idbAvailable, putFile, getFile } from "./fileStore";
+import { uid } from "./id";
 
 /* /files/status is stable for the life of a page load, and every upload and
  * every preview would otherwise ask again. */
@@ -40,8 +42,12 @@ export async function fileStorageEnabled() {
   return _enabled;
 }
 
-/* The local-only path: bytes become a data URL living in localStorage. */
-export const LOCAL_MAX_BYTES = 2 * 1024 * 1024;
+/* The local-only path: real Blobs in IndexedDB (item keeps a `fid` pointer),
+ * which lifts local storage from the ~5 MB localStorage budget to the
+ * origin's quota. The old base64-in-localStorage shape (`data`) remains the
+ * fallback for browsers without IndexedDB, capped small as before. */
+export const LOCAL_MAX_BYTES = 25 * 1024 * 1024;
+export const LEGACY_MAX_BYTES = 2 * 1024 * 1024;
 
 export function readAsDataUrl(file) {
   return new Promise((resolve, reject) => {
@@ -68,11 +74,7 @@ export async function storeFile(clientId, file) {
        * browser if it fits, and say so — silently keeping it local would
        * leave them believing it had synced. */
       if (file.size <= LOCAL_MAX_BYTES) {
-        return {
-          name: file.name, type: file.type, size: file.size,
-          data: await readAsDataUrl(file),
-          localOnlyReason: err?.message || "Upload failed",
-        };
+        return { ...(await storeLocally(file)), localOnlyReason: err?.message || "Upload failed" };
       }
       throw err;
     }
@@ -81,8 +83,24 @@ export async function storeFile(clientId, file) {
   if (file.size > LOCAL_MAX_BYTES) {
     const mb = (file.size / 1048576).toFixed(1);
     throw new Error(
-      `“${file.name}” is ${mb} MB — the browser-only limit is 2 MB. ` +
+      `“${file.name}” is ${mb} MB — the local limit is ${LOCAL_MAX_BYTES / 1048576} MB. ` +
       `Turn on file storage in Settings to keep files this large, or save a link to it instead.`
+    );
+  }
+  return storeLocally(file);
+}
+
+async function storeLocally(file) {
+  if (await idbAvailable()) {
+    const fid = uid();
+    await putFile(fid, file);
+    return { name: file.name, type: file.type, size: file.size, fid };
+  }
+  /* no IndexedDB (some private windows): the old base64 path, old small cap */
+  if (file.size > LEGACY_MAX_BYTES) {
+    throw new Error(
+      `“${file.name}” is too large for this browser mode (2 MB limit without IndexedDB) — ` +
+      `try a normal window, or turn on file storage in Settings.`
     );
   }
   return { name: file.name, type: file.type, size: file.size, data: await readAsDataUrl(file) };
@@ -128,6 +146,10 @@ async function uploadToBucket(clientId, file) {
 export async function resolveFileUrl(file) {
   if (!file) return null;
   if (file.data) return file.data;
+  if (file.fid) {
+    const blob = await getFile(file.fid).catch(() => null);
+    return blob ? URL.createObjectURL(blob) : null;
+  }
   if (file.s3_key) {
     const r = await api(`/files/download-url?key=${encodeURIComponent(file.s3_key)}`);
     return r?.url || null;
@@ -136,7 +158,7 @@ export async function resolveFileUrl(file) {
 }
 
 /** True when we know the name but can't reach the bytes from here. */
-export const fileBodyMissing = (file) => !!file && !file.data && !file.s3_key;
+export const fileBodyMissing = (file) => !!file && !file.data && !file.fid && !file.s3_key;
 
 /** Human file size. Small files must not read "0 KB" — a 71-byte note is
  *  not zero, and showing zero makes a working file look broken. */

@@ -15,7 +15,9 @@
  * accepted — people have them on disk — and are treated as items-only.
  */
 
-export const BACKUP_VERSION = 2;
+import { getFile, putFile, blobToDataUrl, dataUrlToBlob } from "./fileStore";
+
+export const BACKUP_VERSION = 3;   // v3: adds `files` — IndexedDB bodies by fid
 
 /* Stores that are the user's DATA. Deliberately excluded: vault.backend.v1
  * (server URL and identity — machine-specific, and restoring it onto another
@@ -63,20 +65,36 @@ export function countRecords(stores) {
   };
 }
 
-export function buildBackup() {
+export async function buildBackup() {
   const stores = {};
   for (const s of BACKED_UP_STORES) stores[s.key] = read(s.key, s.fallback);
+
+  /* File bodies live in IndexedDB (item.file.fid) — a backup that skipped
+   * them would restore documents as names with nothing behind them. They
+   * ride along base64-encoded, keyed by fid, so the export stays one file. */
+  const files = {};
+  const items = Array.isArray(stores["vault.items.v1"]) ? stores["vault.items.v1"] : [];
+  for (const it of items) {
+    const fid = it?.file?.fid;
+    if (!fid || files[fid]) continue;
+    try {
+      const blob = await getFile(fid);
+      if (blob) files[fid] = { type: blob.type, b64: await blobToDataUrl(blob) };
+    } catch {} // an unreachable body is exported as details-only, same as sync
+  }
+
   return {
     format: "vault-backup",
     version: BACKUP_VERSION,
     exportedAt: new Date().toISOString(),
     counts: countRecords(stores),
     stores,
+    files,
   };
 }
 
-export function downloadBackup() {
-  const backup = buildBackup();
+export async function downloadBackup() {
+  const backup = await buildBackup();
   const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -130,6 +148,7 @@ export function inspectBackup(file) {
         legacy: false,
         exportedAt: data.exportedAt || null,
         stores: data.stores,
+        files: data.files || null,   // v3+: IndexedDB file bodies, keyed by fid
         counts: data.counts || countRecords(data.stores),
       });
     };
@@ -137,12 +156,18 @@ export function inspectBackup(file) {
   });
 }
 
-/** Write an inspected backup into localStorage. Caller has already confirmed. */
-export function applyBackup(inspected) {
+/** Write an inspected backup into localStorage (+ file bodies into
+ * IndexedDB). Caller has already confirmed. */
+export async function applyBackup(inspected) {
   for (const s of BACKED_UP_STORES) {
     const value = inspected.stores[s.key];
     if (value === undefined) continue;   // absent in a legacy file — leave alone
     localStorage.setItem(s.key, JSON.stringify(value));
+  }
+  if (inspected.files) {
+    for (const [fid, f] of Object.entries(inspected.files)) {
+      try { await putFile(fid, dataUrlToBlob(f.b64)); } catch {}
+    }
   }
   return inspected.counts;
 }

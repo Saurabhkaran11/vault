@@ -27,11 +27,15 @@ class ItemIn(BaseModel):
     links: list | None = None
     file_meta: dict | None = None
     added_on: date
+    # Client LWW clock, ms since epoch. 0 = unstamped → the server always
+    # applies the write (pre-versioning behavior).
+    updated_at: int = Field(0, ge=0)
 
 
 class ItemOut(ItemIn, ORM):
     id: int
     deleted_on: date | None = None
+    stale: bool = False    # true when an upsert was refused as older than the stored row
 
 
 # ---------- to-dos ----------
@@ -44,10 +48,12 @@ class TaskIn(BaseModel):
     high: bool = False
     label: str | None = None
     created_on: date
+    # Client LWW clock, ms since epoch — same contract as ItemIn.updated_at.
+    updated_at: int = Field(0, ge=0)
 
 
 class TaskOut(TaskIn, ORM):
-    pass
+    stale: bool = False    # true when an upsert was refused as older than the stored row
 
 
 # ---------- boards ----------

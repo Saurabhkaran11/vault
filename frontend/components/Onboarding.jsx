@@ -44,6 +44,37 @@ export function startClean() {
   setOB({ choice: "clean", startedAt: iso, dismissed: false });
 }
 
+/* "Remove sample data": strip only the demo records, keep everything the
+ * user made. Seed items carry lib/seed.js's numeric ids (user items get
+ * uid() strings); tasks/finance seeds are flagged sample:true at creation;
+ * the demo board carries seeded:true. */
+export function removeSampleData() {
+  const strip = (key, fn) => {
+    try {
+      const v = JSON.parse(localStorage.getItem(key) || "null");
+      if (v) localStorage.setItem(key, JSON.stringify(fn(v)));
+    } catch {}
+  };
+  /* seed ids are the small integers from lib/seed.js; user items mint
+   * Date.now() (13 digits) or uid() strings — the magnitude bound keeps
+   * every real item safe */
+  strip("vault.items.v1", (items) => items.filter((i) => !(typeof i.id === "number" && i.id < 100000)));
+  strip("vault.todos.v1", (s) => ({ ...s, tasks: (s.tasks || []).filter((t) => !t.sample) }));
+  strip("vault.finance.v1", (f) => ({
+    ...f,
+    expenses: (f.expenses || []).filter((r) => !r.sample),
+    bills: (f.bills || []).filter((r) => !r.sample),
+    incomes: (f.incomes || []).filter((r) => !r.sample),
+    goals: (f.goals || []).filter((r) => !r.sample),
+    payMethods: (f.payMethods || []).filter((p) => !String(p.id).startsWith("pm-sample") && !p.sample),
+  }));
+  strip("vault.boards.v1", (b) =>
+    Array.isArray(b)
+      ? b.filter((x) => !x.seeded && !x.sample)
+      : { ...b, boards: (b.boards || []).filter((x) => !x.seeded && !x.sample) });
+  setOB({ sampleRemoved: true });
+}
+
 export function WelcomeModal({ onChoose }) {
   return (
     <div className="pal-overlay" role="dialog" aria-label="Welcome to Vault">
@@ -98,7 +129,11 @@ export function ChecklistCard({ steps, sampleMode, onDismiss, onGo }) {
       {sampleMode && (
         <div className="m obsample">
           You're exploring with sample content — it's all deletable, and an export (E) backs up
-          anything you want to keep before experimenting.
+          anything you want to keep before experimenting.{" "}
+          <button className="av-link" title="Removes the demo content; everything you made stays"
+            onClick={() => { removeSampleData(); window.location.reload(); }}>
+            Done exploring? Remove sample data
+          </button>
         </div>
       )}
       <button className="btn ghost sm" style={{ marginTop: 10 }} onClick={onDismiss}>
