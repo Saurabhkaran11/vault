@@ -3,7 +3,7 @@
 import React, { useMemo, useState } from "react";
 import { today } from "@/lib/seed";
 import { askText } from "@/lib/ai";
-import { TopMerchants } from "./Charts";
+import { TopMerchants, MoneyFlow, CategoryShifts } from "./Charts";
 import { useAiReady } from "@/hooks/useAiReady";
 
 /* Finance analytics: spending reports over daily / weekly / monthly / yearly
@@ -333,6 +333,18 @@ export default function FinanceAnalytics({ fin, fmt, spentByCat = {}, savingsRat
 
       {expenses.length > 0 && (
         <>
+          <h3 style={{ marginTop: 22 }}>Category shifts · this month vs last</h3>
+          <div className="m" style={{ color: "var(--ink-soft)", marginBottom: 4 }}>
+            Red is growing spend, green is shrinking — the headline version of the trend charts.
+          </div>
+          <CategoryShifts expenses={fin.expenses} fmt={fmt} />
+
+          <h3 style={{ marginTop: 26 }}>Money flow · this month</h3>
+          <div className="m" style={{ color: "var(--ink-soft)", marginBottom: 4 }}>
+            Income → categories → where it lands. Ribbon width is dollars; hover any ribbon.
+          </div>
+          <MoneyFlow incomes={fin.incomes} expenses={fin.expenses} fmt={fmt} />
+
           <h3 style={{ marginTop: 22 }}>Top merchants · last 90 days</h3>
           <div className="m" style={{ color: "var(--ink-soft)", marginBottom: 4 }}>
             Who actually gets your money — statement imports make these merchant names.

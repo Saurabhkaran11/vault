@@ -1638,3 +1638,15 @@ button:disabled{opacity:.5; cursor:not-allowed}
 .merchant-n{font-size:11px; color:var(--ink-soft); flex-shrink:0}
 @media (max-width:560px){.merchant-name{width:110px}}
 .burn-hint{font-size:12.5px; color:var(--ink-soft); margin-top:8px}
+
+/* ---------- money flow + category shifts */
+.flow-svg{width:100%; height:clamp(230px, 30vh, 360px); flex:1}
+.shifts{display:flex; flex-direction:column; gap:12px; padding-top:6px}
+.shift-row{display:flex; align-items:center; gap:12px}
+.shift-name{width:96px; font-size:13.5px; flex-shrink:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.shift-spark{flex:1; min-width:0; height:30px}
+.shift-amt{font-size:13px; flex-shrink:0; min-width:52px; text-align:right}
+.shift-chip{font-size:12px; font-weight:600; border-radius:99px; padding:3px 10px; flex-shrink:0; color:var(--ink-soft); background:var(--field)}
+.shift-chip.up{color:var(--stamp); background:var(--stamp-soft)}
+.shift-chip.down{color:#1F7A4D; background:#E1F2E8}
+@media (max-width:560px){.shift-name{width:74px; font-size:12.5px}}

@@ -470,3 +470,163 @@ export function TaskRhythm({ doneDates }) {
     </div>
   );
 }
+
+/* ---------- Money flow: income → categories → merchants for this month,
+ * as a Sankey. Ribbon width is dollars — one picture of the whole month. */
+export function MoneyFlow({ incomes, expenses, fmt }) {
+  const { ref, tip, show, hide } = useChartTip();
+  const model = useMemo(() => {
+    const ym = new Date().toISOString().slice(0, 7);
+    const exp = expenses.filter((e) => e.date?.startsWith(ym));
+    const inc = incomes.filter((i) => i.date?.startsWith(ym));
+    if (!exp.length) return null;
+
+    const catTotals = {};
+    exp.forEach((e) => { catTotals[e.cat || "Other"] = (catTotals[e.cat || "Other"] || 0) + (+e.amount || 0); });
+    const cats = Object.entries(catTotals).sort((a, b) => b[1] - a[1]).slice(0, 5);
+    const spendTotal = cats.reduce((a, [, v]) => a + v, 0);
+
+    let sources = inc.map((i) => [i.source || "Income", +i.amount || 0]);
+    const merged = {};
+    sources.forEach(([n, v]) => { merged[n] = (merged[n] || 0) + v; });
+    sources = Object.entries(merged).sort((a, b) => b[1] - a[1]).slice(0, 3);
+    if (!sources.length) sources = [["This month's spending", spendTotal]];
+
+    /* income above spending doesn't vanish — it flows to an explicit Saved
+       node, which keeps the picture honest AND is the happiest ribbon here */
+    const srcSum = sources.reduce((a, [, v]) => a + v, 0);
+    if (srcSum > spendTotal * 1.02) cats.push(["Saved", srcSum - spendTotal]);
+
+    const merchTotals = {};
+    exp.forEach((e) => {
+      const k = (e.desc || "—").trim().replace(/\s+/g, " ").toUpperCase().slice(0, 20);
+      merchTotals[k] = merchTotals[k] || { v: 0, cat: e.cat || "Other" };
+      merchTotals[k].v += +e.amount || 0;
+    });
+    const merchants = Object.entries(merchTotals).sort((a, b) => b[1].v - a[1].v).slice(0, 4);
+    return { sources, cats, merchants, spendTotal };
+  }, [incomes, expenses]);
+
+  if (!model) return <div className="m" style={{ color: "var(--ink-soft)" }}>No expenses this month yet — the flow draws itself as you spend.</div>;
+  const { sources, cats, merchants, spendTotal } = model;
+
+  const W = 560, H = 260, w = 13, x0 = 8, x1 = 235, x2 = 470;
+  const CAT_COLORS = ["var(--moss)", "var(--gold)", "var(--violet)", "var(--azure)", "var(--blue)"];
+  const srcTotal = sources.reduce((a, [, v]) => a + v, 0);
+  const scaleH = (H - 70) / Math.max(srcTotal, spendTotal, 1);
+  const ribbon = (xa, ya, ha, xb, yb, hb) => {
+    const mx = (xa + xb) / 2;
+    return `M${xa},${ya} C${mx},${ya} ${mx},${yb} ${xb},${yb} L${xb},${yb + hb} C${mx},${yb + hb} ${mx},${ya + ha} ${xa},${ya + ha} Z`;
+  };
+
+  let y = 28;
+  const S = sources.map(([n, v]) => { const o = { n, v, h: v * scaleH, y }; y += v * scaleH + 26; return o; });
+  y = 20;
+  const M = cats.map(([n, v], i) => { const o = { n, v, h: v * scaleH, y, c: n === "Saved" ? "#1F7A4D" : CAT_COLORS[i % CAT_COLORS.length] }; y += v * scaleH + 16; return o; });
+  y = 26;
+  const R = merchants.map(([n, m]) => { const o = { n, v: m.v, cat: m.cat, h: m.v * scaleH, y }; y += m.v * scaleH + 22; return o; });
+
+  const paths = [];
+  const catOff = M.map(() => 0);
+  S.forEach((s) => {
+    let sy = s.y;
+    M.forEach((m, mi) => {
+      const share = (s.v / srcTotal) * m.h;   // this source's slice of the category
+      if (share < 0.8) return;
+      paths.push({ d: ribbon(x0 + w, sy, share, x1, m.y + catOff[mi], share), fill: m.c, op: 0.28,
+        tip: `${s.n} → ${m.n} · ${fmt(Math.round((share / scaleH)))}` });
+      sy += share; catOff[mi] += share;
+    });
+  });
+  const merchOff = M.map(() => 0);
+  R.forEach((r) => {
+    const mi = M.findIndex((m) => m.n === r.cat);
+    if (mi < 0) return;
+    paths.push({ d: ribbon(x1 + w, M[mi].y + merchOff[mi], r.h, x2, r.y, r.h), fill: M[mi].c, op: 0.20,
+      tip: `${M[mi].n} → ${r.n} · ${fmt(Math.round(r.v))}` });
+    merchOff[mi] += r.h;
+  });
+
+  return (
+    <div className="chart-wrap" ref={ref} onMouseLeave={hide}>
+      <svg className="flow-svg" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img" aria-label="Money flow from income to categories to merchants">
+        {paths.map((p, i) => (
+          <path key={i} d={p.d} fill={p.fill} opacity={p.op}
+            onMouseMove={(e) => show(e, p.tip)} />
+        ))}
+        {S.map((s) => (
+          <g key={s.n}>
+            <rect x={x0} y={s.y} width={w} height={Math.max(s.h, 3)} rx="3.5" fill="var(--moss)" />
+            <text x={x0} y={s.y - 6} fontFamily="IBM Plex Mono" fontSize="10.5" fontWeight="600" fill="var(--ink)">{s.n.slice(0, 18)} · {fmt(Math.round(s.v))}</text>
+          </g>
+        ))}
+        {M.map((m) => (
+          <g key={m.n}>
+            <rect x={x1} y={m.y} width={w} height={Math.max(m.h, 3)} rx="3.5" fill={m.c} />
+            <text x={x1 + 19} y={m.y + m.h / 2 + 3.5} fontFamily="IBM Plex Mono" fontSize="10.5" fill="var(--ink)">{m.n}</text>
+          </g>
+        ))}
+        {R.map((r) => (
+          <g key={r.n}>
+            <rect x={x2} y={r.y} width={w} height={Math.max(r.h, 3)} rx="3.5" fill="var(--ink-soft)" opacity="0.55" />
+            <text x={x2 + 18} y={r.y + r.h / 2 + 3.5} fontFamily="IBM Plex Mono" fontSize="9.5" fill="var(--ink-soft)">{r.n.slice(0, 12)}</text>
+          </g>
+        ))}
+      </svg>
+      <ChartTip tip={tip} />
+    </div>
+  );
+}
+
+/* ---------- Category shifts: this month vs last, per category — the
+ * headline version of the trend charts. Red grows, green shrinks. */
+export function CategoryShifts({ expenses, fmt }) {
+  const rows = useMemo(() => {
+    const now = new Date();
+    const thisYm = now.toISOString().slice(0, 7);
+    const lastD = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const lastYm = `${lastD.getFullYear()}-${String(lastD.getMonth() + 1).padStart(2, "0")}`;
+    const by = {};
+    expenses.forEach((e) => {
+      const c = e.cat || "Other";
+      by[c] = by[c] || { cur: 0, prev: 0, weeks: Array(8).fill(0) };
+      if (e.date?.startsWith(thisYm)) by[c].cur += +e.amount || 0;
+      if (e.date?.startsWith(lastYm)) by[c].prev += +e.amount || 0;
+      const w = Math.floor(daysAgo(e.date) / 7);
+      if (w >= 0 && w < 8) by[c].weeks[7 - w] += +e.amount || 0;
+    });
+    return Object.entries(by)
+      .filter(([, v]) => v.cur > 0 || v.prev > 0)
+      .sort((a, b) => b[1].cur - a[1].cur)
+      .slice(0, 6)
+      .map(([cat, v]) => {
+        const pct = v.prev > 0 ? Math.round(((v.cur - v.prev) / v.prev) * 100) : (v.cur > 0 ? null : 0);
+        return { cat, ...v, pct };
+      });
+  }, [expenses]);
+
+  if (!rows.length) return <div className="m" style={{ color: "var(--ink-soft)" }}>Two months of expenses make this light up.</div>;
+  return (
+    <div className="shifts">
+      {rows.map((r) => {
+        const up = r.pct !== null && r.pct > 3, down = r.pct !== null && r.pct < -3;
+        const max = Math.max(...r.weeks, 1);
+        const pts = r.weeks.map((v, i) => `${i * 34},${26 - (v / max) * 22}`).join(" ");
+        return (
+          <div key={r.cat} className="shift-row"
+            data-tip={`${r.cat}: ${fmt(Math.round(r.cur))} this month vs ${fmt(Math.round(r.prev))} last month`}>
+            <span className="shift-name">{r.cat}</span>
+            <svg className="shift-spark" viewBox="0 0 238 30" preserveAspectRatio="none" aria-hidden="true">
+              <polyline points={pts} fill="none" strokeWidth="2.5" strokeLinejoin="round"
+                stroke={up ? "var(--stamp)" : down ? "#1F7A4D" : "var(--ink-soft)"} />
+            </svg>
+            <b className="mono shift-amt">{fmt(Math.round(r.cur))}</b>
+            <span className={`shift-chip mono ${up ? "up" : down ? "down" : ""}`}>
+              {r.pct === null ? "new" : `${r.pct > 0 ? "+" : ""}${r.pct}%`}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
