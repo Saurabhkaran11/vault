@@ -47,7 +47,9 @@ body{background:var(--bg)}
 .side .foot button:hover{background:#1B3450; color:#fff}
 
 /* ---------- main */
-.main{flex:1; padding:30px 36px; max-width:1080px; min-width:0}
+/* fill the screen: dashboards earn their width on big monitors. The cap
+   only exists so ultrawides don't stretch lines absurdly. */
+.main{flex:1; padding:30px clamp(24px, 3vw, 52px); max-width:1560px; min-width:0}
 .crumb{font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:2px; text-transform:uppercase; color:var(--ink-soft); margin-bottom:6px}
 .main h2{font-family:'Fraunces',serif; font-size:32px; font-weight:650; margin-bottom:4px}
 .sub{color:var(--ink-soft); font-size:14px; margin-bottom:22px}
@@ -869,10 +871,10 @@ img.fpreview{height:auto}
 .need-big{font-family:'Fraunces',serif; font-size:24px; font-weight:650; line-height:1.15}
 .need-meta{font-size:12px; color:var(--ink-soft)}
 .prog-grid{display:flex; flex-wrap:wrap; gap:12px}
-.ringcard{display:flex; align-items:center; gap:13px; background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:14px 15px; min-width:200px; min-height:96px; flex:1 1 215px; text-align:left; font-family:inherit; color:var(--ink); cursor:pointer; transition:border-color .12s, box-shadow .12s, transform .12s}
+.ringcard{display:flex; align-items:center; gap:16px; background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:18px 20px; min-width:220px; min-height:clamp(128px, 15vh, 176px); flex:1 1 240px; text-align:left; font-family:inherit; color:var(--ink); cursor:pointer; transition:border-color .12s, box-shadow .12s, transform .12s}
 .ringcard:hover{box-shadow:var(--shadow-2); transform:translateY(-1px)}
-.spark-card{align-items:stretch; flex:1.6 1 300px; min-height:128px}
-.tinybars{width:100%; height:64px; flex:1}
+.spark-card{align-items:stretch; flex:1.6 1 300px; min-height:180px}
+.tinybars{width:100%; height:clamp(96px, 12vh, 160px); flex:1}
 
 /* cursor-following chart tooltip (TinyBars, SparkArea, Donut) */
 .chart-wrap{position:relative; flex:1; display:flex; min-width:0}
@@ -880,8 +882,11 @@ img.fpreview{height:auto}
 /* the donut fills its card: it tracks the card's HEIGHT (the dimension that
    actually grows when the row stretches), square via the viewBox ratio,
    with width as a secondary bound so the legend always keeps its room */
-.donut-wrap{flex:1; align-self:stretch; min-height:170px}
-.donut-svg{height:clamp(150px, 100%, 250px); width:auto; max-width:48%; flex:none}
+.donut-wrap{flex:1; align-self:stretch; min-height:300px}
+/* scales with the viewport so a big monitor gets a genuinely big chart */
+.donut-svg{height:clamp(300px, 42vh, 560px); width:auto; max-width:62%; flex:none}
+.donut-legend{font-size:15px; line-height:2.2; flex:1; min-width:0}
+.donut-legend .mono{font-size:14px}
 .chart-tip{position:absolute; transform:translate(-50%,-135%); background:var(--ink); color:var(--bg); font-size:11px; font-weight:600; padding:5px 10px; border-radius:7px; white-space:nowrap; pointer-events:none; z-index:60; box-shadow:var(--shadow-2)}
 .dseg{transition:stroke-width .1s; cursor:pointer}
 .dseg:hover{stroke-width:20}
@@ -1043,11 +1048,13 @@ img.fpreview{height:auto}
 .spark-head{display:flex; align-items:baseline; justify-content:space-between; gap:10px}
 .spark-delta{font-size:14px; color:var(--moss); font-weight:600}
 .spark-delta.down{color:var(--stamp)}
-.sparkline{width:100%; height:64px; flex:1}
+.sparkline{width:100%; height:clamp(96px, 12vh, 160px); flex:1}
 .spark-span{font-size:10px; color:var(--ink-soft)}
-.charts-duo{display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:18px}
+/* the donut card leads: wider column and a real minimum height, so the
+   chart is unmistakably large on every monitor */
+.charts-duo{display:grid; grid-template-columns:1.35fr 1fr; gap:12px; margin-top:18px}
 @media (max-width:760px){.charts-duo{grid-template-columns:1fr}}
-.charts-duo .card{margin-bottom:0}
+.charts-duo .card{margin-bottom:0; min-height:clamp(360px, 46vh, 620px)}
 .proglist{display:flex; flex-direction:column; gap:13px; padding-top:4px}
 .prog-top{display:flex; justify-content:space-between; gap:10px; font-size:13px; color:var(--ink-soft); margin-bottom:5px}
 .prog-top b{color:var(--ink); font-weight:600; font-size:12px}
@@ -1055,11 +1062,13 @@ img.fpreview{height:auto}
 .prog-fill{height:100%; border-radius:20px; transition:width .3s}
 .progrings{display:flex; flex-direction:column; gap:14px; padding-top:4px}
 .progring-card{display:flex; align-items:center; gap:14px}
-.progring{width:58px; height:58px; border-radius:50%; flex:none; display:grid; place-items:center}
-.progring-hole{width:42px; height:42px; border-radius:50%; background:var(--panel); display:grid; place-items:center; font-size:11.5px; font-weight:600; color:var(--ink)}
-.progring-meta{display:flex; flex-direction:column; gap:1px; min-width:0}
-.progring-label{font-size:13px; color:var(--ink-soft); line-height:1.3; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden}
-.progring-meta b{font-size:13.5px; color:var(--ink); font-weight:600}
+/* progress rings scale with the screen — 58px rings read as decoration,
+   not data */
+.progring{width:clamp(88px, 8.5vw, 118px); height:clamp(88px, 8.5vw, 118px); border-radius:50%; flex:none; display:grid; place-items:center}
+.progring-hole{width:72%; height:72%; border-radius:50%; background:var(--panel); display:grid; place-items:center; font-size:clamp(16px, 1.4vw, 20px); font-weight:600; color:var(--ink)}
+.progring-meta{display:flex; flex-direction:column; gap:3px; min-width:0}
+.progring-label{font-size:15px; color:var(--ink-soft); line-height:1.35; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden}
+.progring-meta b{font-size:clamp(16px, 1.3vw, 19px); color:var(--ink); font-weight:600}
 .dash-search{display:flex; align-items:center; gap:10px; width:100%; max-width:560px; text-align:left; margin:14px 0 2px; background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:10px 14px; cursor:pointer; color:var(--ink-soft); font-family:'Public Sans',sans-serif; font-size:14px; transition:border-color .12s}
 .dash-search:hover{border-color:var(--moss)}
 .ds-ic{color:var(--ink-soft); display:flex; flex:none}
@@ -1274,6 +1283,14 @@ img.fpreview{height:auto}
   .tiles{grid-template-columns:repeat(2,minmax(0,1fr))}
   .charts{grid-template-columns:minmax(0,1fr)}
   .graphwrap svg{height:380px}
+  /* phones: side-by-side starves the legend (long labels push their counts
+     out of the row) — stack instead: a big centered donut, legend below at
+     full width */
+  .chart-wrap.donut-wrap{flex-direction:column; align-items:center}
+  .donut-svg{height:clamp(200px, 56vw, 280px); max-width:100%}
+  .donut-legend{width:100%}
+  .donut-wrap{min-height:0}
+  .charts-duo .card{min-height:0}
   .row{flex-wrap:wrap}
   /* a real flex base size, or the zero-basis body never overflows the line
      and the nowrap stamp squeezes it to 0 — titles vanish */
