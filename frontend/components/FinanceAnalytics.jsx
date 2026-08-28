@@ -272,6 +272,7 @@ export default function FinanceAnalytics({ fin, fmt, spentByCat = {}, savingsRat
   }, [expenses, fin, fmt, spentByCat, recurringMonthly]);
 
   return (
+    <>
     <div className="card">
       <div className="fanal-head">
         <div className="doctabs" role="tablist" aria-label="Report period">
@@ -331,42 +332,44 @@ export default function FinanceAnalytics({ fin, fmt, spentByCat = {}, savingsRat
         <TimeChart buckets={buckets} type={chart} fmt={fmt} />
       )}
 
-      {expenses.length > 0 && (
-        <>
-          <h3 style={{ marginTop: 22 }}>Category shifts · this month vs last</h3>
-          <div className="m" style={{ color: "var(--ink-soft)", marginBottom: 4 }}>
-            Red is growing spend, green is shrinking — the headline version of the trend charts.
-          </div>
-          <CategoryShifts expenses={fin.expenses} fmt={fmt} />
 
-          <h3 style={{ marginTop: 26 }}>Income vs spend · last 5 months</h3>
-          <div className="m" style={{ color: "var(--ink-soft)", marginBottom: 4 }}>
-            Blue in, teal out — the green haze is what you kept.
-          </div>
-          <IncomeVsSpend incomes={fin.incomes} expenses={fin.expenses} fmt={fmt} />
-
-          <h3 style={{ marginTop: 26 }}>Savings waterfall · this month</h3>
-          <div className="m" style={{ color: "var(--ink-soft)", marginBottom: 4 }}>
-            Income at the left, categories stepping down, what you kept at the right.
-          </div>
-          <SavingsWaterfall incomes={fin.incomes} expenses={fin.expenses} fmt={fmt} />
-
-          <h3 style={{ marginTop: 26 }}>Weekend premium · last 8 weeks</h3>
-          <WeekendPremium expenses={fin.expenses} fmt={fmt} />
-
-          <h3 style={{ marginTop: 26 }}>Money flow · this month</h3>
-          <div className="m" style={{ color: "var(--ink-soft)", marginBottom: 4 }}>
-            Income → categories → where it lands. Ribbon width is dollars; hover any ribbon.
-          </div>
-          <MoneyFlow incomes={fin.incomes} expenses={fin.expenses} fmt={fmt} />
-
-          <h3 style={{ marginTop: 22 }}>Top merchants · last 90 days</h3>
-          <div className="m" style={{ color: "var(--ink-soft)", marginBottom: 4 }}>
-            Who actually gets your money — statement imports make these merchant names.
-          </div>
-          <TopMerchants expenses={expenses} fmt={fmt} />
-        </>
-      )}
     </div>
+
+    {/* every insight chart gets its OWN card — one mega-card buried them all */}
+    {expenses.length > 0 && (
+      <div className="fanal-grid">
+        <div className="card fanal-card">
+          <h3>Category shifts</h3>
+          <div className="m fanal-sub">This month vs last — red grows, green shrinks.</div>
+          <CategoryShifts expenses={fin.expenses} fmt={fmt} />
+        </div>
+        <div className="card fanal-card">
+          <h3>Income vs spend</h3>
+          <div className="m fanal-sub">Last 5 months — the green haze is what you kept.</div>
+          <IncomeVsSpend incomes={fin.incomes} expenses={fin.expenses} fmt={fmt} />
+        </div>
+        <div className="card fanal-card">
+          <h3>Savings waterfall</h3>
+          <div className="m fanal-sub">This month: income stepping down to what you kept.</div>
+          <SavingsWaterfall incomes={fin.incomes} expenses={fin.expenses} fmt={fmt} />
+        </div>
+        <div className="card fanal-card">
+          <h3>Weekend premium</h3>
+          <div className="m fanal-sub">Average daily spend, weekday vs weekend · last 8 weeks.</div>
+          <WeekendPremium expenses={fin.expenses} fmt={fmt} />
+        </div>
+        <div className="card fanal-card fanal-wide">
+          <h3>Money flow</h3>
+          <div className="m fanal-sub">This month: income → categories → where it lands. Hover any ribbon.</div>
+          <MoneyFlow incomes={fin.incomes} expenses={fin.expenses} fmt={fmt} />
+        </div>
+        <div className="card fanal-card fanal-wide">
+          <h3>Top merchants</h3>
+          <div className="m fanal-sub">Last 90 days — click a merchant for its habit math.</div>
+          <TopMerchants expenses={expenses} fmt={fmt} />
+        </div>
+      </div>
+    )}
+    </>
   );
 }
