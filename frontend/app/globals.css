@@ -1677,20 +1677,12 @@ button:disabled{opacity:.5; cursor:not-allowed}
 .bullet-over{background:var(--stamp); opacity:0.55}
 .bullet-tick{width:2.5px !important; background:var(--ink); border-radius:0 !important; top:-3px !important; height:24px !important}
 .bullet-amt{font-size:11.5px; color:var(--ink-soft); flex-shrink:0}
-.momentum{display:flex; flex-direction:column; gap:8px; margin:14px 0 18px}
-.mom-row{display:flex; align-items:center; gap:12px; background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:10px 14px; cursor:pointer; font-family:inherit; color:var(--ink); text-align:left}
-.mom-row:hover{border-color:var(--moss); box-shadow:var(--shadow-2)}
-.mom-tag{font-size:13.5px; font-weight:600; width:132px; flex-shrink:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
-.mom-dir{font-size:15px; font-weight:700; flex-shrink:0}
-.mom-blocks{flex:1; min-width:0; display:flex; gap:4px}
-.mom-blocks i{width:22px; height:14px; border-radius:3px}
-.mom-n{font-size:11px; color:var(--ink-soft); flex-shrink:0}
 .habit-card{margin-top:14px; background:var(--field); border-radius:12px; padding:16px 18px}
 .habit-name{font-family:'IBM Plex Mono',monospace; font-size:12.5px; font-weight:600}
 .habit-mo{font-family:'Fraunces',Georgia,serif; font-size:clamp(26px,3vw,36px); font-weight:650; color:var(--gold); margin:6px 0 2px}
 .habit-yr{font-family:'Fraunces',Georgia,serif; font-size:clamp(16px,2vw,21px); font-weight:650; color:var(--stamp)}
 .habit-sub{font-size:12px; color:var(--ink-soft); margin-top:6px}
-@media (max-width:560px){.srcname{width:92px; font-size:12px}.mom-tag{width:96px}}
+@media (max-width:560px){.srcname{width:92px; font-size:12px}}
 .merchant-row{background:none; border:none; font-family:inherit; color:var(--ink); cursor:pointer; padding:4px 6px; border-radius:8px; width:100%}
 .merchant-row:hover{background:var(--field)}
 .merchant-row.on{background:var(--moss-soft)}
@@ -1714,7 +1706,6 @@ button:disabled{opacity:.5; cursor:not-allowed}
 .vault.glass .tagcard,
 .vault.glass .exp-total-card,
 .vault.glass .smartbar,
-.vault.glass .mom-row,
 .vault.glass .dash-search,
 .vault.glass .trow,
 .vault.glass .kcol{

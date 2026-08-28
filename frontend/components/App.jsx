@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { SECTIONS, fmtStamp, daysAgo, today, fmtK } from "@/lib/seed";
 import { useStore } from "@/hooks/useStore";
-import { Donut, rangeSeries, TinyBars, SparkArea, VaultGrowth, TaskRhythm, CaptureSources, TagMomentum } from "./Charts";
+import { Donut, rangeSeries, TinyBars, SparkArea, VaultGrowth, TaskRhythm, CaptureSources } from "./Charts";
 import GraphView from "./GraphView";
 import ItemRow, { TagAdder } from "./ItemRow";
 import { Ic } from "./Icons";
@@ -1853,9 +1853,6 @@ export default function App() {
             <div className="crumb">Projects</div>
             <h2 className="display">Tags</h2>
             <Intro id="tags">Every project tag in your vault, with what it links together — click one to open the project.</Intro>
-
-            <div className="sec-label mono" style={{ marginTop: 4 }}>Momentum · this month vs last</div>
-            <TagMomentum items={items} onOpenTag={openTag} />
 
             <div className="bar">
               <input placeholder="＋ Create a tag — e.g. “side-project” (Enter)" aria-label="Create a tag"
