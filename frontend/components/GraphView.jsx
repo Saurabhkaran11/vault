@@ -20,7 +20,7 @@ const TOP_TAGS = 60;
 const MAX_PER_HUB = 20;
 const MAX_ITEMS_TOTAL = 360;
 const K_MIN = 0.4, K_MAX = 6;
-const LABEL_K = 1.05;
+const LABEL_K = 0.8;   // labels appear earlier — clarity beats minimalism here
 
 /* physics tuning */
 const ALPHA_FLOOR = 0.02;      // never fully freezes — the "alive" part
@@ -358,7 +358,7 @@ export default function GraphView({ items, onOpenTag, onOpenSection }) {
                 onClick={onNodeClick(key, () => onOpenTag(t))}>
                 <circle cx={h.x} cy={h.y} r={24} fill="var(--violet)" stroke="var(--panel)" strokeWidth="3" />
                 <text x={h.x} y={h.y + 4} textAnchor="middle" fontSize="12" fontFamily="IBM Plex Mono" fontWeight="600" fill="#fff" style={{ pointerEvents: "none" }}>{g.counts[t]}</text>
-                <text x={h.x} y={h.y - 33} textAnchor="middle" fontSize="14" fontFamily="Fraunces" fontWeight="650" fill="var(--ink)" style={{ pointerEvents: "none" }}>#{t}</text>
+                <text x={h.x} y={h.y - 33} textAnchor="middle" fontSize="16" fontFamily="Fraunces" fontWeight="650" fill="var(--ink)" style={{ pointerEvents: "none" }}>#{t}</text>
               </g>
             );
           })}
@@ -379,7 +379,7 @@ export default function GraphView({ items, onOpenTag, onOpenSection }) {
                 <title>{`${g.untagged} untagged item${g.untagged === 1 ? "" : "s"} — add a #tag to file them`}</title>
                 <circle cx={h.x} cy={h.y} r={24} fill="var(--ink-soft)" stroke="var(--panel)" strokeWidth="3" strokeDasharray="4 4" />
                 <text x={h.x} y={h.y + 4} textAnchor="middle" fontSize="12" fontFamily="IBM Plex Mono" fontWeight="600" fill="#fff" style={{ pointerEvents: "none" }}>{g.untagged}</text>
-                <text x={h.x} y={h.y - 33} textAnchor="middle" fontSize="14" fontFamily="Fraunces" fontWeight="650" fill="var(--ink-soft)" style={{ pointerEvents: "none" }}>Untagged</text>
+                <text x={h.x} y={h.y - 33} textAnchor="middle" fontSize="16" fontFamily="Fraunces" fontWeight="650" fill="var(--ink-soft)" style={{ pointerEvents: "none" }}>Untagged</text>
               </g>
             );
           })()}
@@ -408,7 +408,7 @@ export default function GraphView({ items, onOpenTag, onOpenSection }) {
                 <circle cx={p.x} cy={p.y} r={10} fill={s.color} stroke="var(--panel)" strokeWidth="2.5" />
                 <text x={p.x} y={p.y + 3.5} textAnchor="middle" fontSize="9" fill="#fff" style={{ pointerEvents: "none" }}>{s.icon}</text>
                 {(showItemLabels || hover === n.key) && (
-                  <text x={p.x} y={p.y + 24} textAnchor="middle" fontSize={11.5 / Math.max(1, view.k * 0.8)} fontFamily="Public Sans"
+                  <text x={p.x} y={p.y + 24} textAnchor="middle" fontSize={13 / Math.max(1, view.k * 0.8)} fontFamily="Public Sans"
                     fill={hover === n.key ? "var(--ink)" : "var(--ink-soft)"} fontWeight={hover === n.key ? 600 : 400}
                     style={{ pointerEvents: "none" }}>
                     {label.length > 22 ? label.slice(0, 20) + "…" : label}

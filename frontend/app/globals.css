@@ -1695,3 +1695,68 @@ button:disabled{opacity:.5; cursor:not-allowed}
 .merchant-row:hover{background:var(--field)}
 .merchant-row.on{background:var(--moss-soft)}
 .gmode button.on{background:var(--moss); color:#fff; border-color:var(--moss)}
+
+/* ================================================================
+   GLASS UI — frosted surfaces over a soft ambient wash. A Settings
+   toggle (on by default); the flat look remains underneath it. */
+.vault.glass{
+  background:
+    radial-gradient(900px 520px at 12% -4%, rgba(31,95,168,0.10), transparent 60%),
+    radial-gradient(760px 460px at 88% 12%, rgba(12,110,140,0.10), transparent 62%),
+    radial-gradient(820px 560px at 55% 105%, rgba(76,85,168,0.08), transparent 60%),
+    var(--bg);
+  background-attachment: fixed;
+}
+.vault.glass .card,
+.vault.glass .tile,
+.vault.glass .needcard,
+.vault.glass .ringcard,
+.vault.glass .tagcard,
+.vault.glass .exp-total-card,
+.vault.glass .smartbar,
+.vault.glass .mom-row,
+.vault.glass .dash-search,
+.vault.glass .trow,
+.vault.glass .kcol{
+  background: rgba(255,255,255,0.62);
+  backdrop-filter: blur(16px) saturate(1.25);
+  -webkit-backdrop-filter: blur(16px) saturate(1.25);
+  border-color: rgba(255,255,255,0.75);
+  box-shadow: 0 6px 22px rgba(22,40,60,0.07), inset 0 1px 0 rgba(255,255,255,0.85);
+}
+.vault.glass .tile:hover,
+.vault.glass .needcard:hover,
+.vault.glass .ringcard:hover,
+.vault.glass .tagcard:hover{
+  background: rgba(255,255,255,0.78);
+  box-shadow: 0 10px 30px rgba(22,40,60,0.12), inset 0 1px 0 rgba(255,255,255,0.9);
+}
+.vault.glass .doctabs{background:rgba(255,255,255,0.5); backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px)}
+.vault.glass .doctabs button{background:transparent}
+.vault.glass .doctabs button.on{background:var(--stamp)}
+.vault.glass .pal, .vault.glass .settingsdlg{
+  background: rgba(255,255,255,0.82);
+  backdrop-filter: blur(24px) saturate(1.3);
+  -webkit-backdrop-filter: blur(24px) saturate(1.3);
+  border: 1px solid rgba(255,255,255,0.8);
+}
+.vault.glass .pal-overlay{background:rgba(15,34,55,0.28); backdrop-filter:blur(3px); -webkit-backdrop-filter:blur(3px)}
+/* charts keep a whisper of glass but text stays fully solid */
+.vault.glass .chart-tip{background:rgba(22,40,60,0.92); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px)}
+
+/* ---------- clarity pass: finance tiles, tabs, tags, card headers */
+.tile .k{font-size:12px; letter-spacing:1.2px; display:flex; align-items:center; gap:7px}
+.tile .k .icn{width:18px; height:18px; vertical-align:-4px}
+.tile .d{font-size:13px; margin-top:7px; line-height:1.45}
+.doctabs button{font-size:13px; padding:8px 15px}
+.tabbadge{font-size:11px}
+.card h3{font-size:18px}
+.cardsub{font-size:12.5px}
+.fcat{font-size:12px; padding:4px 11px}
+.fexp{font-size:14px}
+.famt{font-size:13.5px}
+.tagcard{padding:18px 20px}
+.tg-name{font-size:19px}
+.tg-count{font-size:12.5px; margin:4px 0 10px}
+.tg-secs .pill{font-size:12px; padding:4px 11px}
+.glegend{font-size:13px; line-height:2}

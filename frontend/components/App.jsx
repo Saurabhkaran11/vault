@@ -1029,7 +1029,7 @@ export default function App() {
   };
 
   return (
-    <div className="vault">
+    <div className={`vault ${profile?.glass === false ? "" : "glass"}`}>
       {storageWarn && (
         <div className={`storage-warn ${storageWarn}`} role="alert">
           {storageWarn === "full"
@@ -1154,6 +1154,12 @@ export default function App() {
                       );
                     })}
                   </div>
+                  <button className="menu-item" aria-pressed={profile.glass !== false}
+                    title="Frosted card surfaces over a soft ambient wash"
+                    onClick={() => setProfile({ ...profile, glass: profile.glass === false ? true : false })}>
+                    ❄ Glass surfaces
+                    <span className="menukey">{profile.glass === false ? "off" : "on"}</span>
+                  </button>
                 </div>
 
                 <button className="menu-item" onClick={() => { setHelpOpen(true); setSettingsOpen(false); }}>
