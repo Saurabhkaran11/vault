@@ -882,9 +882,9 @@ img.fpreview{height:auto}
 /* the donut fills its card: it tracks the card's HEIGHT (the dimension that
    actually grows when the row stretches), square via the viewBox ratio,
    with width as a secondary bound so the legend always keeps its room */
-.donut-wrap{flex:1; align-self:stretch; min-height:300px}
+.donut-wrap{flex:1; align-self:stretch; min-height:340px}
 /* scales with the viewport so a big monitor gets a genuinely big chart */
-.donut-svg{height:clamp(300px, 42vh, 560px); width:auto; max-width:62%; flex:none}
+.donut-svg{height:clamp(340px, 48vh, 640px); width:auto; max-width:62%; flex:none}
 .donut-legend{font-size:15px; line-height:2.2; flex:1; min-width:0}
 .donut-legend .mono{font-size:14px}
 .chart-tip{position:absolute; transform:translate(-50%,-135%); background:var(--ink); color:var(--bg); font-size:11px; font-weight:600; padding:5px 10px; border-radius:7px; white-space:nowrap; pointer-events:none; z-index:60; box-shadow:var(--shadow-2)}
@@ -1050,11 +1050,11 @@ img.fpreview{height:auto}
 .spark-delta.down{color:var(--stamp)}
 .sparkline{width:100%; height:clamp(96px, 12vh, 160px); flex:1}
 .spark-span{font-size:10px; color:var(--ink-soft)}
-/* the donut card leads: wider column and a real minimum height, so the
-   chart is unmistakably large on every monitor */
-.charts-duo{display:grid; grid-template-columns:1.35fr 1fr; gap:12px; margin-top:18px}
+/* two equal hero cards with real height — the breakdown charts are the
+   dashboard's centerpiece, sized like it */
+.charts-duo{display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:18px}
 @media (max-width:760px){.charts-duo{grid-template-columns:1fr}}
-.charts-duo .card{margin-bottom:0; min-height:clamp(360px, 46vh, 620px)}
+.charts-duo .card{margin-bottom:0; min-height:clamp(430px, 54vh, 720px)}
 .proglist{display:flex; flex-direction:column; gap:13px; padding-top:4px}
 .prog-top{display:flex; justify-content:space-between; gap:10px; font-size:13px; color:var(--ink-soft); margin-bottom:5px}
 .prog-top b{color:var(--ink); font-weight:600; font-size:12px}
