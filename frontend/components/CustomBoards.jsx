@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { mirror } from "@/lib/api";
 import { uid } from "@/lib/id";
 import { safeSet } from "@/lib/safeStorage";
+import { useCrossTab } from "@/lib/crosstab";
 
 /* Custom kanban boards — make a board for anything: a feature, a sprint,
  * this week's chores. Custom columns, cards with inline editing, drag &
@@ -128,6 +129,8 @@ export default function CustomBoards({ itemsBoard }) {
   const [store, setStore] = useState({ version: 1, seeded: true, showItems: false, boards: seedBoards() });
   const [hydrated, setHydrated] = useState(false);
   const [active, setActive] = useState(null);      // "items" | board id | null (empty state)
+  useCrossTab(KEY, (saved) =>
+    setStore({ version: 1, seeded: true, showItems: false, ...saved, boards: ensureKeys(saved.boards || []) }));
 
   useEffect(() => {
     try {

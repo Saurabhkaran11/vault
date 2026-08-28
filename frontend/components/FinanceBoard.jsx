@@ -11,6 +11,7 @@ import { useAiReady } from "@/hooks/useAiReady";
 import { mirror, toCents } from "@/lib/api";
 import { uid } from "@/lib/id";
 import { safeSet } from "@/lib/safeStorage";
+import { useCrossTab } from "@/lib/crosstab";
 
 /* Finance — expenses, bills (with recurrence), income, budgets and goals.
  *
@@ -199,6 +200,7 @@ const goalToApi = (g) => ({ id: g.id, name: g.name, target_cents: toCents(g.targ
 export default function FinanceBoard() {
   const [fin, setFin] = useState(seedFinance);
   const [hydrated, setHydrated] = useState(false);
+  useCrossTab("vault.finance.v1", (v) => setFin(migrate(v)));
 
   useEffect(() => {
     try {

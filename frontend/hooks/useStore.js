@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { seed } from "@/lib/seed";
 import { mirror } from "@/lib/api";
 import { safeSet } from "@/lib/safeStorage";
+import { useCrossTab } from "@/lib/crosstab";
 
 const KEY = "vault.items.v1";
 
@@ -40,6 +41,10 @@ const toApi = (it) => {
       : undefined,
     added_on: it.date,
     deleted_on: it.deleted ?? null,
+    /* ms-epoch stamp of the last local mutation — the server's upsert guard
+     * refuses to let an OLDER stamp (a replayed offline write from another
+     * device) overwrite a newer row. 0 = unstamped legacy row, always applies. */
+    updated_at: it.ts || 0,
   };
   Object.keys(body).forEach((k) => body[k] === undefined && delete body[k]);
   return body;
@@ -60,6 +65,10 @@ const toApi = (it) => {
 export function useStore() {
   const [items, setItems] = useState(seed);
   const [hydrated, setHydrated] = useState(false);
+
+  /* another tab wrote the store — adopt its value instead of clobbering it
+     on this tab's next save */
+  useCrossTab(KEY, setItems);
 
   useEffect(() => {
     try {
@@ -86,12 +95,14 @@ export function useStore() {
    * restore arrive here as update(it) with `deleted` set/cleared — toApi's
    * deleted_on carries that state through the same upsert. */
   const add = (it) => {
-    setItems((xs) => [it, ...xs]);
-    mirror("/items/upsert", { method: "POST", body: toApi(it) });
+    const stamped = { ...it, ts: Date.now() };
+    setItems((xs) => [stamped, ...xs]);
+    mirror("/items/upsert", { method: "POST", body: toApi(stamped) });
   };
   const update = (it) => {
-    setItems((xs) => xs.map((x) => (x.id === it.id ? it : x)));
-    mirror("/items/upsert", { method: "POST", body: toApi(it) });
+    const stamped = { ...it, ts: Date.now() };
+    setItems((xs) => xs.map((x) => (x.id === stamped.id ? stamped : x)));
+    mirror("/items/upsert", { method: "POST", body: toApi(stamped) });
   };
   const remove = (id) => {
     /* Purge the stored body too, or deleting an item leaks an orphaned

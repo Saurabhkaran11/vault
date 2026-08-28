@@ -102,6 +102,14 @@ async def upsert_item(body: ItemUpsert, session: AsyncSession = Depends(get_sess
         )).scalars().first()
     )
     if item:
+        # LWW guard: an incoming clock strictly behind the stored one is a
+        # replay that lost the race — keep the row, answer it with stale:true.
+        # A 0 stamp is a client from before versioning; those must keep
+        # applying unconditionally until every frontend ships stamps.
+        if body.updated_at and body.updated_at < item.updated_at:
+            out = ItemOut.model_validate(item)
+            out.stale = True
+            return out
         for k, v in data.items():
             setattr(item, k, v)
     else:

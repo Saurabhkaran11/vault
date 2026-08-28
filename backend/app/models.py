@@ -66,6 +66,12 @@ class Item(Base, TimestampMixin):
     added_on: Mapped[date] = mapped_column(Date, index=True)               # the user's visible date stamp
     deleted_on: Mapped[date | None] = mapped_column(Date, index=True)      # 30-day trash
 
+    # Shadows TimestampMixin: on synced rows this is the CLIENT's clock —
+    # milliseconds since epoch, the last-write-wins version the upsert guard
+    # compares. 0 = unstamped (a client from before versioning); the guard
+    # never rejects those.
+    updated_at: Mapped[int] = mapped_column(BigInteger, nullable=False, server_default="0", default=0)
+
     # Text pulled out of an uploaded document (see extract.py). Stored rather
     # than re-derived so re-embedding never re-downloads and re-parses the
     # file. `extracted_at` records that we TRIED — distinguishing "not yet
@@ -122,6 +128,8 @@ class Task(Base, TimestampMixin):
     high: Mapped[bool] = mapped_column(Boolean, default=False)
     label: Mapped[str | None] = mapped_column(String(60))
     created_on: Mapped[date] = mapped_column(Date)
+    # Client LWW clock in ms — shadows TimestampMixin; see Item.updated_at.
+    updated_at: Mapped[int] = mapped_column(BigInteger, nullable=False, server_default="0", default=0)
 
 
 class Board(Base, TimestampMixin):

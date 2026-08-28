@@ -48,6 +48,17 @@ def _cents(v) -> int:
         return 0
 
 
+def _ms(v) -> int:
+    """Client LWW clock, ms since epoch. Import keeps its replace-everything
+    semantics (no staleness check), but it must WRITE the clocks through —
+    dropping them would zero every row and disarm the upsert guard until the
+    next stamped edit. Anything unparseable is 0 = unstamped."""
+    try:
+        return max(int(v or 0), 0)
+    except (TypeError, ValueError):
+        return 0
+
+
 async def _upsert(session: AsyncSession, model, pk: str, user: str, values: dict, conflicts: list):
     """Insert-or-update by string PK, refusing to touch another user's row."""
     row = await session.get(model, pk)
@@ -80,6 +91,7 @@ async def import_snapshot(snap: Snapshot, session: AsyncSession = Depends(get_se
             links=it.get("links"),
             file_meta={k: v for k, v in (it.get("file") or {}).items() if k != "data"} or None,
             added_on=_d(it.get("date"), date.today()), deleted_on=_d(it.get("deleted")),
+            updated_at=_ms(it.get("updated_at", it.get("updated"))),
         )
         cid = str(it.get("id"))
         row = existing_items.get(cid)
@@ -97,6 +109,7 @@ async def import_snapshot(snap: Snapshot, session: AsyncSession = Depends(get_se
             text=t.get("text", ""), done=bool(t.get("done")), done_at=_d(t.get("doneAt")),
             due=_d(t.get("due")), high=bool(t.get("high")), label=t.get("label"),
             created_on=_d(t.get("created"), date.today()),
+            updated_at=_ms(t.get("updated_at", t.get("updated"))),
         ), conflicts)
     counts["tasks"] = len(tasks)
 

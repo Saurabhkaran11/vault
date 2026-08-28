@@ -1,8 +1,17 @@
 "use client";
 
 import React, { useRef, useState } from "react";
-import { askJSON } from "@/lib/ai";
+import { askJSON, getAIConfig } from "@/lib/ai";
 import { aiCategorize } from "@/lib/aiActions";
+
+/* Statement text is sensitive — say so before it leaves the machine. A
+ * local Ollama/LM Studio endpoint keeps everything on-device; anything
+ * else is a cloud provider and deserves a consent line. */
+const isCloudAI = () => {
+  const c = getAIConfig();
+  if (c.provider === "oss") return !/localhost|127\.0\.0\.1/.test(c.ossBaseUrl || "");
+  return true; // hosted Claude
+};
 import { today } from "@/lib/seed";
 
 /* "＋ Import statement" — drop a credit-card/bank CSV (or paste statement
@@ -143,6 +152,7 @@ export default function StatementImport({ open, onClose, onImport, categories, c
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [catBusy, setCatBusy] = useState(false); // "✦ Fix categories" repair pass
+  const cloudAI = isCloudAI();
 
   /* the ✕ promises "Close (Esc)" — honor it */
   React.useEffect(() => {
@@ -238,6 +248,13 @@ export default function StatementImport({ open, onClose, onImport, categories, c
           {!rows && (
             <>
               <p className="stmt-lead">Drop in a credit-card or bank statement and Vault pulls out every transaction — name, amount, date and time. CSV files are read right here in your browser; nothing is uploaded.</p>
+              {aiReady && cloudAI && (
+                <p className="stmt-lead" style={{ fontSize: "12px", color: "var(--ink-soft)" }}>
+                  ⓘ Pasted text that can&rsquo;t be read locally is sent to your configured AI
+                  provider to parse — statement text included. Using a local model (Ollama)
+                  keeps everything on this machine.
+                </p>
+              )}
               <button className="stmt-drop" onClick={() => fileRef.current?.click()} disabled={busy}>
                 <span className="stmt-plus" aria-hidden="true">＋</span>
                 {busy ? "Reading…" : "Choose a statement file"}

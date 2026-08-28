@@ -30,6 +30,8 @@ import SearchIndexCard from "./SearchIndexCard";
 import AskVault from "./AskVault";
 import { emptyBlock } from "./NoteBlocks";
 import { inspectBackup, applyBackup, downloadBackup } from "@/lib/backup";
+import { idbAvailable, putFile, dataUrlToBlob } from "@/lib/fileStore";
+import { uid } from "@/lib/id";
 import { AI_MODELS, OSS_PRESETS, OSS_MODEL_SUGGESTIONS, presetById, getAIConfig, setAIConfig, askText, askJSON } from "@/lib/ai";
 import { useAiReady } from "@/hooks/useAiReady";
 import CalendarConnect from "./CalendarConnect";
@@ -465,6 +467,27 @@ export default function App() {
       .then((res) => { if (live && res) window.location.reload(); })
       .catch(() => {});   // offline or backend down — stay local-only, as designed
     return () => { live = false; };
+  }, [hydrated]);
+
+  /* one-time move of legacy base64 file bodies out of localStorage into
+     IndexedDB — frees most of the ~5 MB budget and lifts the per-file cap.
+     Idempotent: it only ever sees items that still carry `data`. */
+  const migratedFiles = useRef(false);
+  useEffect(() => {
+    if (!hydrated || migratedFiles.current) return;
+    migratedFiles.current = true;
+    (async () => {
+      if (!(await idbAvailable())) return;   // private window — leave legacy shape
+      for (const it of allItems) {
+        if (!it.file?.data) continue;
+        try {
+          const fid = uid();
+          await putFile(fid, dataUrlToBlob(it.file.data));
+          const { data: _dropped, ...meta } = it.file;
+          update({ ...it, file: { ...meta, fid } });
+        } catch {} // a failed move keeps the working base64 copy — retry next load
+      }
+    })();
   }, [hydrated]);
 
   /* drain the offline-mirror retry queue: on load, and whenever the network
@@ -1490,8 +1513,8 @@ export default function App() {
               )}
               <div className="restore-actions">
                 <button className="btn ghost sm" onClick={() => setRestore(null)}>Cancel</button>
-                <button className="btn sm" onClick={() => {
-                  const c = applyBackup(restore);
+                <button className="btn sm" onClick={async () => {
+                  const c = await applyBackup(restore);
                   setRestore(null);
                   setToast(`Restored ${c.items} items, ${c.todos} to-dos, ${c.finance} finance records, ${c.boards} boards — reloading…`);
                   setTimeout(() => window.location.reload(), 1400);

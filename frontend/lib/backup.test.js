@@ -22,27 +22,27 @@ const seedStores = () => {
 describe("buildBackup", () => {
   beforeEach(seedStores);
 
-  it("captures every data store, not just items", () => {
-    const b = buildBackup();
+  it("captures every data store, not just items", async () => {
+    const b = await buildBackup();
     expect(b.format).toBe("vault-backup");
     expect(b.version).toBe(BACKUP_VERSION);
     for (const s of BACKED_UP_STORES) expect(b.stores).toHaveProperty(s.key);
   });
 
-  it("never includes the AI key store", () => {
-    const b = buildBackup();
+  it("never includes the AI key store", async () => {
+    const b = await buildBackup();
     expect(b.stores).not.toHaveProperty("vault.ai.v1");
     expect(JSON.stringify(b)).not.toContain("secret-api-key");
   });
 
-  it("counts records across stores", () => {
-    const c = buildBackup().counts;
+  it("counts records across stores", async () => {
+    const c = (await buildBackup()).counts;
     expect(c).toMatchObject({ items: 2, todos: 1, finance: 3, boards: 1, cards: 3 });
   });
 });
 
 describe("countRecords", () => {
-  it("is defensive about missing/oddly-shaped stores", () => {
+  it("is defensive about missing/oddly-shaped stores", async () => {
     const c = countRecords({});
     expect(c).toMatchObject({ items: 0, todos: 0, finance: 0, boards: 0, cards: 0 });
   });
@@ -51,7 +51,7 @@ describe("countRecords", () => {
 describe("inspectBackup", () => {
   it("reads a v2 envelope without writing anything", async () => {
     seedStores();
-    const backup = buildBackup();
+    const backup = await buildBackup();
     localStorage.clear();
     const result = await inspectBackup(asFile(backup));
     expect(result.legacy).toBe(false);
@@ -84,10 +84,10 @@ describe("inspectBackup", () => {
 describe("applyBackup", () => {
   it("round-trips: build -> clear -> inspect -> apply restores the data", async () => {
     seedStores();
-    const backup = buildBackup();
+    const backup = await buildBackup();
     localStorage.clear();
     const inspected = await inspectBackup(asFile(backup));
-    applyBackup(inspected);
+    await applyBackup(inspected);
     expect(JSON.parse(localStorage.getItem("vault.items.v1"))).toHaveLength(2);
     expect(JSON.parse(localStorage.getItem("vault.boards.v1")).boards).toHaveLength(1);
   });
@@ -95,7 +95,7 @@ describe("applyBackup", () => {
   it("leaves stores absent from a legacy file untouched", async () => {
     localStorage.setItem("vault.boards.v1", JSON.stringify({ boards: [{ id: "keep" }] }));
     const inspected = await inspectBackup(asFile([{ id: 1 }]));
-    applyBackup(inspected);
+    await applyBackup(inspected);
     expect(JSON.parse(localStorage.getItem("vault.items.v1"))).toHaveLength(1);
     // boards were not in the legacy file, so they must survive
     expect(JSON.parse(localStorage.getItem("vault.boards.v1")).boards[0].id).toBe("keep");

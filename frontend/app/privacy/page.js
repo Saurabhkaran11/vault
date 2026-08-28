@@ -84,6 +84,12 @@ export default function PrivacyPage() {
         <li>No reading your content, except automated processing you invoke
           (search indexing, AI answers) or debugging with your explicit consent.</li>
       </ul>
+      <p>
+        One operational exception: when error reporting is enabled, crashes
+        send a technical report (the error, stack trace, and browser details —
+        never your notes, files, or finance records) to Sentry so we can fix
+        what broke. That&rsquo;s diagnostics, not analytics.
+      </p>
 
       <h2>Cookies</h2>
       <p>
