@@ -184,3 +184,19 @@ Then tell me and I'll build the "Connect Google" button + the pull (Phase 1).
 5. Check the **backup** workflow ran (Actions tab) and left an artifact.
 
 Done = every checkbox above is ticked.
+
+---
+
+## 6. Local AI — nothing to configure
+
+Since the AI-features release, every AI capability also works with **zero server
+config**, entirely on the user's machine via Ollama: Ask Vault chat, semantic
+search + related items, image OCR, voice capture, and statement category repair.
+Users manage models in **Settings → Local models** (pull/delete with progress).
+
+- §1 (server AI) is still worth setting for signed-in users on devices without
+  Ollama — the two paths coexist; the app prefers whatever is configured.
+- The OCR engine is self-hosted under `frontend/public/ocr/` (~19 MB) — no CDN
+  at runtime. CSP includes `'wasm-unsafe-eval'` (WebAssembly only) for it.
+- Error-page drill: `/?crashtest` shows the recovery screen; **Try again** now
+  clears the flag and genuinely recovers.
