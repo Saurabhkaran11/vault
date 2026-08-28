@@ -107,8 +107,17 @@ const sampleFinance = () => ({
 });
 
 /* exported so sample mode can seed the store eagerly — otherwise the
- * dashboard reads empty finance data until this view first mounts */
-export const seedFinance = { ...emptyFinance, ...sampleFinance() };
+ * dashboard reads empty finance data until this view first mounts.
+ * sample:true marks every seed row so "Remove sample data" can strip the
+ * demo ledger without touching real records. */
+const tagSample = (f) => ({
+  ...f,
+  expenses: (f.expenses || []).map((r) => ({ ...r, sample: true })),
+  bills: (f.bills || []).map((r) => ({ ...r, sample: true })),
+  incomes: (f.incomes || []).map((r) => ({ ...r, sample: true })),
+  goals: (f.goals || []).map((r) => ({ ...r, sample: true })),
+});
+export const seedFinance = { ...emptyFinance, ...tagSample(sampleFinance()) };
 
 /* Payment methods — which card/wallet paid for what (Mint/Spendee pattern).
    Users add their own; two sensible defaults so the picker is never empty. */
@@ -141,7 +150,7 @@ function migrate(saved) {
     payMethods: saved.payMethods?.length ? saved.payMethods : DEFAULT_PAY_METHODS,
   };
   const isEmpty = !out.expenses.length && !out.bills.length && !out.incomes.length && !out.goals.length;
-  if (!saved.seeded && isEmpty) Object.assign(out, sampleFinance());
+  if (!saved.seeded && isEmpty) Object.assign(out, tagSample(sampleFinance()));
   out.seeded = true;
   return out;
 }
@@ -208,6 +217,15 @@ export default function FinanceBoard() {
   const cur = (CURRENCIES.find((c) => c.code === fin.currency) || CURRENCIES[0]).sym;
   const fmt = (n) => `${cur}${(+n || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
 
+  /* 6-second undo for destructive rows (expenses, incomes) */
+  const [undo, setUndo] = useState(null);
+  const undoTimer = React.useRef(null);
+  const offerUndo = (label, restore) => {
+    clearTimeout(undoTimer.current);
+    setUndo({ label, restore });
+    undoTimer.current = setTimeout(() => setUndo(null), 6000);
+  };
+
   /* ---------- month browsing (expenses + income lists) */
   const thisMonth = today().slice(0, 7);
   const [month, setMonth] = useState(thisMonth);
@@ -262,9 +280,15 @@ export default function FinanceBoard() {
     if (pay === id) setPay("");
     setPmArm(null);
   };
+  /* deletes get a 6-second undo — one mis-tap must never erase a real record */
   const delExpense = (id) => {
+    const rec = fin.expenses.find((e) => e.id === id);
     setFin((f) => ({ ...f, expenses: f.expenses.filter((e) => e.id !== id) }));
     mirror(`/finance/expenses/${id}`, { method: "DELETE" });
+    if (rec) offerUndo(`Deleted “${rec.desc}” (${fmt(rec.amount)})`, () => {
+      setFin((f) => ({ ...f, expenses: [rec, ...f.expenses] }));
+      mirror("/finance/expenses", { method: "POST", body: expToApi(rec) });
+    });
   };
   const saveExpEdit = () => {
     const a = parseAmount(editExp.amount);
@@ -348,8 +372,13 @@ export default function FinanceBoard() {
     setIncSource(""); setIncAmount("");
   };
   const delIncome = (id) => {
+    const rec = fin.incomes.find((i) => i.id === id);
     setFin((f) => ({ ...f, incomes: f.incomes.filter((i) => i.id !== id) }));
     mirror(`/finance/incomes/${id}`, { method: "DELETE" });
+    if (rec) offerUndo(`Deleted income “${rec.source || rec.desc || ""}” (+${fmt(rec.amount)})`, () => {
+      setFin((f) => ({ ...f, incomes: [rec, ...f.incomes] }));
+      mirror("/finance/incomes", { method: "POST", body: incToApi(rec) });
+    });
   };
   const incomeMonth = fin.incomes.filter((i) => i.date.startsWith(thisMonth)).reduce((a, i) => a + i.amount, 0);
   const incomesShown = fin.incomes.filter((i) => i.date.startsWith(month));
@@ -625,6 +654,12 @@ export default function FinanceBoard() {
 
   return (
     <>
+      {undo && (
+        <div className="toast" role="status">
+          {undo.label}{" "}
+          <button className="av-link" onClick={() => { clearTimeout(undoTimer.current); undo.restore(); setUndo(null); }}>Undo</button>
+        </div>
+      )}
       {/* summary tiles */}
       <div className="tiles">
         <div className="tile"><div className="k" style={{ color: "var(--stamp)" }}>◎ Spent today</div><div className="n">{fmt(spentToday)}</div><div className="d">{fin.expenses.filter((e) => e.date === today()).length} expense(s)</div></div>

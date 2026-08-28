@@ -55,8 +55,10 @@ const DONE_OLDER = [
   "Deploy the backend", "Model the database", "Sketch the first prototype",
 ];
 /* the full first-run store, exported so sample mode can seed it eagerly —
- * otherwise the dashboard reads empty todos until this view first mounts */
-export const seedTodoStore = () => ({ version: 2, tasks: seedTasks() });
+ * otherwise the dashboard reads empty todos until this view first mounts.
+ * sample:true marks every seed row so "Remove sample data" can strip demo
+ * content without touching anything the user made. */
+export const seedTodoStore = () => ({ version: 2, tasks: seedTasks().map((t) => ({ ...t, sample: true })) });
 const seedTasks = () => ([
   /* open — feeds Needs-you-now and the agenda buckets */
   { id: uid(), text: "Watch FastAPI course — section 3", done: false, due: dRel(0), high: true, created: dRel(-1) },
@@ -122,8 +124,10 @@ const dueLabel = (due) => {
 };
 
 export default function TaskBoard() {
-  const [store, setStore] = useState({ version: 2, tasks: seedTasks() });
+  const [store, setStore] = useState(seedTodoStore);
   const [hydrated, setHydrated] = useState(false);
+  const [undo, setUndo] = useState(null);       // { label, restore } for 6s after a delete
+  const undoTimer = React.useRef(null);
 
   useEffect(() => {
     try {
@@ -165,9 +169,22 @@ export default function TaskBoard() {
     const cur = tasks.find((t) => t.id === id);
     if (cur) mirror("/todos", { method: "POST", body: toApi({ ...cur, ...p }) });
   };
+  /* delete with a 6-second undo — a one-tap ✕ must never silently destroy
+   * work (items got this from day one; tasks deserve the same) */
   const del = (id) => {
-    setTasks((ts) => ts.filter((t) => t.id !== id));
+    const t = tasks.find((x) => x.id === id);
+    setTasks((ts) => ts.filter((x) => x.id !== id));
     mirror("/todos/" + id, { method: "DELETE" });
+    if (!t) return;
+    clearTimeout(undoTimer.current);
+    setUndo({
+      label: `Deleted “${(t.text || "task").slice(0, 40)}”`,
+      restore: () => {
+        setTasks((ts) => [t, ...ts]);
+        mirror("/todos", { method: "POST", body: toApi(t) });
+      },
+    });
+    undoTimer.current = setTimeout(() => setUndo(null), 6000);
   };
   const toggle = (t) => {
     const nowDone = !t.done;
@@ -356,6 +373,12 @@ export default function TaskBoard() {
 
   return (
     <div className="todosimple">
+      {undo && (
+        <div className="toast" role="status">
+          {undo.label}{" "}
+          <button className="av-link" onClick={() => { clearTimeout(undoTimer.current); undo.restore(); setUndo(null); }}>Undo</button>
+        </div>
+      )}
       {/* quick add — the only input you need */}
       <div className="tquick">
         <input className="tquick-input" placeholder="Add a task, press Enter"

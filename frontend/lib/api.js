@@ -395,7 +395,14 @@ export async function hydrateIfEmpty() {
   const localEmpty = (() => {
     try {
       const items = JSON.parse(localStorage.getItem("vault.items.v1") || "null");
-      return !Array.isArray(items) || items.length === 0;
+      if (!Array.isArray(items) || items.length === 0) return true;
+      /* An untouched sample vault counts as empty too. Seed items carry the
+       * SMALL numeric ids from lib/seed.js; user items mint Date.now() or
+       * uid() strings — so "all small-numeric, none edited" means the
+       * welcome ran but the user made nothing here, and their real vault on
+       * the server should win. Without this, second-device sign-in shows
+       * sample data forever. */
+      return items.every((i) => typeof i.id === "number" && i.id < 100000 && !i.edited);
     } catch { return false; }
   })();
   if (!localEmpty) return null;

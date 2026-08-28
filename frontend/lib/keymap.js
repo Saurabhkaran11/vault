@@ -12,6 +12,7 @@ export const KEY_ACTIONS = [
   { id: "search", label: "Focus the filter / search box", def: "/" },
   { id: "theme", label: "Toggle dark / light theme", def: "t" },
   { id: "sidebar", label: "Toggle the sidebar", def: "b" },
+  { id: "backup", label: "Download a backup (.json)", def: "e" },
 ];
 
 /* navigation chords: G, then one of these (own namespace — a nav key may
