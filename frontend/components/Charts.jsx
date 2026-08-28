@@ -338,6 +338,7 @@ export function BudgetBurn({ expenses, budget, fmt }) {
 /* ---------- Top merchants: where the money actually goes, ranked. Fed by
  * expense descriptions (statement imports make these merchant names). */
 export function TopMerchants({ expenses, fmt }) {
+  const [sel, setSel] = React.useState(null);   // click a row → the habit card
   const rows = useMemo(() => {
     const by = new Map();
     expenses.forEach((e) => {
@@ -353,16 +354,32 @@ export function TopMerchants({ expenses, fmt }) {
   if (!rows.length) return <div className="m" style={{ color: "var(--ink-soft)" }}>No expenses in the last 90 days yet.</div>;
   const max = rows[0][1].total;
   const COLORS = ["var(--moss)", "var(--gold)", "var(--azure)", "var(--violet)", "var(--blue)"];
+  const habit = sel !== null && rows[sel] ? rows[sel] : null;
   return (
     <div className="merchants">
       {rows.map(([name, r], i) => (
-        <div key={name} className="merchant-row" data-tip={`${name}: ${fmt(Math.round(r.total))} across ${r.n} transaction${r.n === 1 ? "" : "s"} (90 days)`}>
+        <button key={name} type="button" className={`merchant-row ${sel === i ? "on" : ""}`}
+          data-tip={`${name}: ${fmt(Math.round(r.total))} across ${r.n} transaction${r.n === 1 ? "" : "s"} (90 days) — click for the habit math`}
+          onClick={() => setSel(sel === i ? null : i)}>
           <span className="merchant-name mono">{name}</span>
           <span className="merchant-bar"><i style={{ width: `${Math.max((r.total / max) * 100, 3)}%`, background: COLORS[i] }} /></span>
           <b className="mono">{fmt(Math.round(r.total))}</b>
           <span className="merchant-n mono">· {r.n}×</span>
-        </div>
+        </button>
       ))}
+      {habit && (() => {
+        /* the price of a habit: 90 days of this merchant, annualized */
+        const [name, r] = habit;
+        const perMonth = r.total / 3;
+        return (
+          <div className="habit-card">
+            <div className="habit-name">{name} · {r.n} visit{r.n === 1 ? "" : "s"} · {fmt(Math.round((r.total / r.n) * 100) / 100)} avg</div>
+            <div className="habit-mo">{fmt(Math.round(perMonth))}/mo</div>
+            <div className="habit-yr">→ {fmt(Math.round(perMonth * 12))} a year</div>
+            <div className="habit-sub">Kept up for a year, this habit costs a holiday. Or funds one — your call.</div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
@@ -625,6 +642,248 @@ export function CategoryShifts({ expenses, fmt }) {
               {r.pct === null ? "new" : `${r.pct > 0 ? "+" : ""}${r.pct}%`}
             </span>
           </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ---------- Capture sources: how things actually enter the vault. If voice
+ * or the clipper ever lags, this is where the friction shows. */
+export function CaptureSources({ items, importedCount }) {
+  const rows = useMemo(() => {
+    let typed = 0, links = 0, cloud = 0, files = 0;
+    items.forEach((it) => {
+      if (it.cloud) cloud++;
+      else if (it.file) files++;
+      else if (it.url) links++;
+      else typed++;
+    });
+    const r = [
+      ["Typed", typed, "var(--moss)"],
+      ["Pasted links", links, "var(--azure)"],
+      ["Files dropped", files, "var(--blue)"],
+      ["Cloud imports", cloud, "var(--violet)"],
+      ["Statement rows", importedCount, "var(--gold)"],
+    ].filter(([, v]) => v > 0);
+    const total = r.reduce((a, [, v]) => a + v, 0) || 1;
+    return r.map(([n, v, c]) => [n, v, Math.round((v / total) * 100), c]);
+  }, [items, importedCount]);
+
+  return (
+    <div className="srcrows">
+      {rows.map(([n, v, pct, c]) => (
+        <div key={n} className="srcrow" data-tip={`${n}: ${fmtK(v)} record${v === 1 ? "" : "s"} (${pct}%)`}>
+          <span className="srcname">{n}</span>
+          <span className="srcbar"><i style={{ width: `${Math.max(pct, 3)}%`, background: c }} /></span>
+          <span className="mono srcpct">{pct}%</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ---------- Income vs spend: paired monthly bars with the kept-money gap
+ * shaded green — savings made visible instead of implied. */
+export function IncomeVsSpend({ incomes, expenses, fmt }) {
+  const { ref, tip, show, hide } = useChartTip();
+  const months = useMemo(() => {
+    const now = new Date();
+    return Array.from({ length: 5 }, (_, i) => {
+      const d = new Date(now.getFullYear(), now.getMonth() - (4 - i), 1);
+      const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      const inc = incomes.filter((x) => x.date?.startsWith(ym)).reduce((a, x) => a + (+x.amount || 0), 0);
+      const sp = expenses.filter((x) => x.date?.startsWith(ym)).reduce((a, x) => a + (+x.amount || 0), 0);
+      return { label: d.toLocaleDateString(undefined, { month: "short" }), inc, sp };
+    });
+  }, [incomes, expenses]);
+
+  const max = Math.max(...months.map((m) => Math.max(m.inc, m.sp)), 1) * 1.1;
+  const W = 560, H = 210, pad = 14, gw = (W - pad * 2) / 5;
+  const Y = (v) => H - 30 - (v / max) * (H - 60);
+  return (
+    <div className="chart-wrap" ref={ref} onMouseLeave={hide}>
+      <svg className="ivs-svg" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img" aria-label="Income vs spending by month">
+        <line x1={pad} y1={H - 30} x2={W - pad} y2={H - 30} stroke="var(--line)" />
+        {months.map((m, i) => {
+          const x = pad + i * gw + gw * 0.14, bw = gw * 0.3;
+          return (
+            <g key={m.label} onMouseMove={(e) => show(e, `${m.label}: ${fmt(Math.round(m.inc))} in · ${fmt(Math.round(m.sp))} out · kept ${fmt(Math.round(m.inc - m.sp))}`)}>
+              <rect x={pad + i * gw} y="0" width={gw} height={H} fill="transparent" />
+              <rect x={x} y={Y(m.inc)} width={bw} height={Math.max(H - 30 - Y(m.inc), 2)} rx="4" fill="var(--moss)" style={{ pointerEvents: "none" }} />
+              <rect x={x + bw + 5} y={Y(m.sp)} width={bw} height={Math.max(H - 30 - Y(m.sp), 2)} rx="4" fill="var(--gold)" style={{ pointerEvents: "none" }} />
+              {m.inc > m.sp && (
+                <rect x={x + bw + 5} y={Y(m.inc)} width={bw} height={Y(m.sp) - Y(m.inc)} rx="4" fill="#1F7A4D" opacity="0.22" style={{ pointerEvents: "none" }} />
+              )}
+              <text x={pad + i * gw + gw / 2 - 12} y={H - 11} fontFamily="IBM Plex Mono" fontSize="10" fill="var(--ink-soft)" style={{ pointerEvents: "none" }}>{m.label}</text>
+            </g>
+          );
+        })}
+      </svg>
+      <ChartTip tip={tip} />
+    </div>
+  );
+}
+
+/* ---------- Savings waterfall: this month as a staircase — income at the
+ * left, categories stepping down, what you kept at the right. */
+export function SavingsWaterfall({ incomes, expenses, fmt }) {
+  const model = useMemo(() => {
+    const ym = new Date().toISOString().slice(0, 7);
+    const income = incomes.filter((x) => x.date?.startsWith(ym)).reduce((a, x) => a + (+x.amount || 0), 0);
+    const byCat = {};
+    expenses.filter((x) => x.date?.startsWith(ym)).forEach((e) => {
+      byCat[e.cat || "Other"] = (byCat[e.cat || "Other"] || 0) + (+e.amount || 0);
+    });
+    let cats = Object.entries(byCat).sort((a, b) => b[1] - a[1]);
+    if (cats.length > 4) cats = [...cats.slice(0, 3), ["Other", cats.slice(3).reduce((a, [, v]) => a + v, 0)]];
+    const spend = cats.reduce((a, [, v]) => a + v, 0);
+    if (!income || !spend) return null;
+    return { income, cats, saved: income - spend };
+  }, [incomes, expenses]);
+
+  if (!model) return <div className="m" style={{ color: "var(--ink-soft)" }}>Log income and expenses this month and the staircase appears.</div>;
+  const { income, cats, saved } = model;
+  const steps = [["Income", income, "var(--moss)", "start"],
+    ...cats.map(([n, v], i) => [n, -v, ["var(--gold)", "var(--violet)", "var(--azure)", "var(--blue)"][i % 4], "drop"]),
+    ["Kept", Math.max(saved, 0), saved >= 0 ? "#1F7A4D" : "var(--stamp)", "end"]];
+  const W = 560, H = 220, n = steps.length, gw = (W - 20) / n;
+  const scale = (H - 66) / income;
+  let run = 0;
+  return (
+    <div className="chart-wrap">
+      <svg className="wf-svg" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img" aria-label="Income minus categories equals savings">
+        {steps.map(([name, v, color, kind], i) => {
+          const x = 10 + i * gw;
+          let top, h;
+          if (kind === "start") { run = v; h = v * scale; top = H - 40 - h; }
+          else if (kind === "end") { h = Math.abs(v) * scale; top = H - 40 - h; }
+          else { h = Math.abs(v) * scale; top = H - 40 - run * scale; run += v; }
+          return (
+            <g key={name} data-tip={name}>
+              <rect x={x} y={top} width={gw - 14} height={Math.max(h, 2)} rx="4" fill={color} opacity={kind === "drop" ? 0.9 : 1} />
+              <text x={x} y={top - 7} fontFamily="IBM Plex Mono" fontSize="10" fontWeight="600" fill="var(--ink)">
+                {kind === "drop" ? "−" : ""}{fmt(Math.round(Math.abs(v)))}
+              </text>
+              <text x={x} y={H - 22} fontFamily="IBM Plex Mono" fontSize="9.5" fill="var(--ink-soft)">{String(name).slice(0, 9)}</text>
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
+/* ---------- Weekend premium: weekday vs weekend average daily spend.
+ * One ratio, instantly felt. */
+export function WeekendPremium({ expenses, fmt }) {
+  const m = useMemo(() => {
+    let wd = 0, we = 0, wdDays = 0, weDays = 0;
+    const seen = new Set();
+    expenses.forEach((e) => {
+      if (!e.date || daysAgo(e.date) > 56) return;
+      const day = new Date(e.date + "T00:00:00").getDay();
+      const isWe = day === 0 || day === 6;
+      if (isWe) we += +e.amount || 0; else wd += +e.amount || 0;
+      if (!seen.has(e.date)) { seen.add(e.date); isWe ? weDays++ : wdDays++; }
+    });
+    if (!wdDays || !weDays) return null;
+    const a = wd / Math.max(wdDays, 1), b = we / Math.max(weDays, 1);
+    return { a, b, ratio: (b / Math.max(a, 0.01)).toFixed(1) };
+  }, [expenses]);
+
+  if (!m) return <div className="m" style={{ color: "var(--ink-soft)" }}>A few weeks of expenses make this comparison meaningful.</div>;
+  const max = Math.max(m.a, m.b);
+  return (
+    <div className="wkprem">
+      <div className="wkrow" data-tip={`Weekday days average ${fmt(Math.round(m.a))} of spending`}>
+        <span className="wkl">weekday avg</span>
+        <span className="wkbar"><i style={{ width: `${(m.a / max) * 100}%`, background: "var(--moss)" }} /></span>
+        <b className="mono">{fmt(Math.round(m.a))}/day</b>
+      </div>
+      <div className="wkrow" data-tip={`Weekend days average ${fmt(Math.round(m.b))} of spending`}>
+        <span className="wkl">weekend avg</span>
+        <span className="wkbar"><i style={{ width: `${(m.b / max) * 100}%`, background: m.b > m.a ? "var(--stamp)" : "#1F7A4D" }} /></span>
+        <b className="mono" style={{ color: m.b > m.a ? "var(--stamp)" : "#1F7A4D" }}>{fmt(Math.round(m.b))}/day</b>
+      </div>
+      <div className="m" style={{ color: "var(--ink-soft)" }}>
+        {m.b > m.a ? `Weekends cost ${m.ratio}× a weekday — worth knowing before Saturday.` : `Your weekends are cheaper than weekdays (${m.ratio}×) — rare.`}
+      </div>
+    </div>
+  );
+}
+
+/* ---------- Budget bullets: every capped category as a bullet bar — the
+ * black tick is the cap, red overflow is the overrun. */
+export function BudgetBullets({ byCat, spentByCat, fmt }) {
+  const rows = Object.entries(byCat || {})
+    .filter(([, cap]) => +cap > 0)
+    .map(([cat, cap]) => ({ cat, cap: +cap, spent: spentByCat[cat] || 0 }))
+    .sort((a, b) => b.spent / b.cap - a.spent / a.cap);
+  if (!rows.length) return <div className="m" style={{ color: "var(--ink-soft)" }}>Cap a category above and its bullet appears here.</div>;
+  const maxCap = Math.max(...rows.map((r) => Math.max(r.cap, r.spent)));
+  return (
+    <div className="bullets">
+      {rows.map((r) => {
+        const capPct = (r.cap / maxCap) * 100;
+        const spentPct = (Math.min(r.spent, r.cap) / maxCap) * 100;
+        const overPct = r.spent > r.cap ? ((r.spent - r.cap) / maxCap) * 100 : 0;
+        return (
+          <div key={r.cat} className="bullet-row" data-tip={`${r.cat}: ${fmt(Math.round(r.spent))} of ${fmt(r.cap)} (${Math.round((r.spent / r.cap) * 100)}%)`}>
+            <span className="bullet-name">{r.cat}</span>
+            <span className="bullet-track">
+              <i className="bullet-cap" style={{ width: `${capPct}%` }} />
+              <i className="bullet-fill" style={{ width: `${spentPct}%`, background: r.spent > r.cap ? "var(--stamp)" : "var(--moss)" }} />
+              {overPct > 0 && <i className="bullet-over" style={{ left: `${capPct}%`, width: `${overPct}%` }} />}
+              <i className="bullet-tick" style={{ left: `${capPct}%` }} />
+            </span>
+            <span className="mono bullet-amt">{fmt(Math.round(r.spent))} / {fmt(r.cap)}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ---------- Tag momentum: which projects are gaining or losing steam,
+ * by items added under each tag this month vs last. */
+export function TagMomentum({ items, onOpenTag }) {
+  const rows = useMemo(() => {
+    const now = new Date();
+    const thisYm = now.toISOString().slice(0, 7);
+    const lastD = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const lastYm = `${lastD.getFullYear()}-${String(lastD.getMonth() + 1).padStart(2, "0")}`;
+    const by = {};
+    items.forEach((it) => (it.tags || []).forEach((t) => {
+      by[t] = by[t] || { cur: 0, prev: 0, total: 0 };
+      by[t].total++;
+      if (it.date?.startsWith(thisYm)) by[t].cur++;
+      if (it.date?.startsWith(lastYm)) by[t].prev++;
+    }));
+    return Object.entries(by)
+      .sort((a, b) => b[1].cur - a[1].cur || b[1].total - a[1].total)
+      .slice(0, 8);
+  }, [items]);
+
+  if (!rows.length) return null;
+  const max = Math.max(...rows.map(([, v]) => v.cur), 1);
+  return (
+    <div className="momentum">
+      {rows.map(([tag, v]) => {
+        const dir = v.cur > v.prev ? "▲" : v.cur < v.prev ? "▼" : "—";
+        const col = v.cur > v.prev ? "var(--moss)" : v.cur < v.prev ? "var(--stamp)" : "var(--ink-soft)";
+        return (
+          <button key={tag} className="mom-row" onClick={() => onOpenTag && onOpenTag(tag)}
+            title={`Open #${tag} — ${v.cur} added this month, ${v.prev} last month, ${v.total} total`}>
+            <span className="mom-tag mono">#{tag}</span>
+            <span className="mom-dir" style={{ color: col }}>{dir}</span>
+            <span className="mom-blocks">
+              {Array.from({ length: Math.max(v.cur, v.cur === 0 ? 0 : 1) }, (_, i) => (
+                <i key={i} style={{ background: col, opacity: 0.85 }} />
+              ))}
+            </span>
+            <span className="mono mom-n">{v.cur} this month</span>
+          </button>
         );
       })}
     </div>

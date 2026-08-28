@@ -3,7 +3,7 @@
 import React, { useMemo, useState } from "react";
 import { today } from "@/lib/seed";
 import { askText } from "@/lib/ai";
-import { TopMerchants, MoneyFlow, CategoryShifts } from "./Charts";
+import { TopMerchants, MoneyFlow, CategoryShifts, IncomeVsSpend, SavingsWaterfall, WeekendPremium } from "./Charts";
 import { useAiReady } from "@/hooks/useAiReady";
 
 /* Finance analytics: spending reports over daily / weekly / monthly / yearly
@@ -338,6 +338,21 @@ export default function FinanceAnalytics({ fin, fmt, spentByCat = {}, savingsRat
             Red is growing spend, green is shrinking — the headline version of the trend charts.
           </div>
           <CategoryShifts expenses={fin.expenses} fmt={fmt} />
+
+          <h3 style={{ marginTop: 26 }}>Income vs spend · last 5 months</h3>
+          <div className="m" style={{ color: "var(--ink-soft)", marginBottom: 4 }}>
+            Blue in, teal out — the green haze is what you kept.
+          </div>
+          <IncomeVsSpend incomes={fin.incomes} expenses={fin.expenses} fmt={fmt} />
+
+          <h3 style={{ marginTop: 26 }}>Savings waterfall · this month</h3>
+          <div className="m" style={{ color: "var(--ink-soft)", marginBottom: 4 }}>
+            Income at the left, categories stepping down, what you kept at the right.
+          </div>
+          <SavingsWaterfall incomes={fin.incomes} expenses={fin.expenses} fmt={fmt} />
+
+          <h3 style={{ marginTop: 26 }}>Weekend premium · last 8 weeks</h3>
+          <WeekendPremium expenses={fin.expenses} fmt={fmt} />
 
           <h3 style={{ marginTop: 26 }}>Money flow · this month</h3>
           <div className="m" style={{ color: "var(--ink-soft)", marginBottom: 4 }}>

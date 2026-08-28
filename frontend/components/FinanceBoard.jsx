@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { fmtStamp, today, daysAgo } from "@/lib/seed";
-import { BudgetBurn } from "./Charts";
+import { BudgetBurn, BudgetBullets } from "./Charts";
 import FinanceAnalytics from "./FinanceAnalytics";
 import FinanceBudgets from "./FinanceBudgets";
 import StatementImport from "./StatementImport";
@@ -928,6 +928,15 @@ export default function FinanceBoard() {
         })}
         categories={CATEGORIES}
         onChange={changeBudgets} />
+      {Object.values(fin.budgets?.byCat || {}).some((v) => +v > 0) && (
+        <div className="card">
+          <h3>Category bullets · {PERIOD_WORD[budgetPeriod]}</h3>
+          <div className="m" style={{ color: "var(--ink-soft)", marginBottom: 6 }}>
+            Spend against each cap — the black tick is the cap, red past it is the overrun.
+          </div>
+          <BudgetBullets byCat={fin.budgets?.byCat} spentByCat={spentByCatPeriod} fmt={fmt} />
+        </div>
+      )}
       {(() => {
         /* budget burn wants the MONTHLY overall, whichever period tab is open */
         const b = fin.budgets || {};

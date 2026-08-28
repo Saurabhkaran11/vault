@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { SECTIONS, fmtStamp, daysAgo, today, fmtK } from "@/lib/seed";
 import { useStore } from "@/hooks/useStore";
-import { Donut, rangeSeries, TinyBars, SparkArea, VaultGrowth, TaskRhythm } from "./Charts";
+import { Donut, rangeSeries, TinyBars, SparkArea, VaultGrowth, TaskRhythm, CaptureSources, TagMomentum } from "./Charts";
 import GraphView from "./GraphView";
 import ItemRow, { TagAdder } from "./ItemRow";
 import { Ic } from "./Icons";
@@ -790,6 +790,7 @@ export default function App() {
         inbox: items.filter((i) => i.status === "Inbox").length,
         doneDates: tasks.filter((t) => t.done && t.doneAt).map((t) => t.doneAt),
         expensesRaw: (fin.expenses || []).map((e) => ({ date: e.date, amt: +e.amount || 0, cat: e.cat || "Other" })),
+        importedCount: (fin.expenses || []).filter((e) => e.pay).length,
         ins: buildInsights(items, tasks, fin, t0),
       });
     } catch { setPulse(null); }
@@ -1761,6 +1762,11 @@ export default function App() {
                       <div className="m" style={{ color: "var(--ink-soft)", marginBottom: 8 }}>Tasks finished per day — streaks glow.</div>
                       <TaskRhythm doneDates={pulse?.doneDates || []} />
                     </div>
+                    <div className="card">
+                      <h3>How things arrive</h3>
+                      <div className="m" style={{ color: "var(--ink-soft)", marginBottom: 8 }}>Your capture mix — typed, pasted, dropped, imported.</div>
+                      <CaptureSources items={items} importedCount={pulse?.importedCount || 0} />
+                    </div>
                   </div>
                 </>
               );
@@ -1841,6 +1847,9 @@ export default function App() {
             <div className="crumb">Projects</div>
             <h2 className="display">Tags</h2>
             <Intro id="tags">Every project tag in your vault, with what it links together — click one to open the project.</Intro>
+
+            <div className="sec-label mono" style={{ marginTop: 4 }}>Momentum · this month vs last</div>
+            <TagMomentum items={items} onOpenTag={openTag} />
 
             <div className="bar">
               <input placeholder="＋ Create a tag — e.g. “side-project” (Enter)" aria-label="Create a tag"

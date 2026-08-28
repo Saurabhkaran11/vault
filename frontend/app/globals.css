@@ -1626,7 +1626,8 @@ button:disabled{opacity:.5; cursor:not-allowed}
 /* ---------- new insight charts (burn / growth / rhythm / merchants) */
 .burn-svg,.growth-svg{width:100%; height:clamp(200px, 26vh, 320px); flex:1}
 .rhythm-svg{width:100%; height:clamp(160px, 20vh, 240px); flex:1}
-.charts-row2{display:grid; grid-template-columns:1.25fr 1fr; gap:12px; margin-top:12px}
+.charts-row2{display:grid; grid-template-columns:1.3fr 1fr 1fr; gap:12px; margin-top:12px}
+@media (max-width:1180px){.charts-row2{grid-template-columns:1fr 1fr}}
 @media (max-width:760px){.charts-row2{grid-template-columns:1fr}}
 .charts-row2 .card{margin-bottom:0; display:flex; flex-direction:column; min-height:clamp(280px, 34vh, 420px)}
 .merchants{display:flex; flex-direction:column; gap:14px; padding-top:6px}
@@ -1650,3 +1651,47 @@ button:disabled{opacity:.5; cursor:not-allowed}
 .shift-chip.up{color:var(--stamp); background:var(--stamp-soft)}
 .shift-chip.down{color:#1F7A4D; background:#E1F2E8}
 @media (max-width:560px){.shift-name{width:74px; font-size:12.5px}}
+
+/* ---------- wave-3 insight charts */
+.ivs-svg{width:100%; height:clamp(190px, 25vh, 300px)}
+.wf-svg{width:100%; height:clamp(200px, 26vh, 310px)}
+.srcrows{display:flex; flex-direction:column; gap:11px; padding-top:4px; flex:1; justify-content:center}
+.srcrow{display:flex; align-items:center; gap:10px}
+.srcname{font-size:13px; width:118px; flex-shrink:0}
+.srcbar{flex:1; min-width:0; height:16px; background:var(--field); border-radius:6px; overflow:hidden}
+.srcbar i{display:block; height:100%; border-radius:6px}
+.srcpct{font-size:12px; color:var(--ink-soft); min-width:34px; text-align:right}
+.wkprem{display:flex; flex-direction:column; gap:14px; padding-top:8px}
+.wkrow{display:flex; align-items:center; gap:12px}
+.wkl{font-size:13px; width:104px; flex-shrink:0; color:var(--ink-soft)}
+.wkbar{flex:1; min-width:0; height:26px; background:var(--field); border-radius:8px; overflow:hidden}
+.wkbar i{display:block; height:100%; border-radius:8px}
+.wkrow b{font-size:14px; flex-shrink:0}
+.bullets{display:flex; flex-direction:column; gap:13px; padding-top:4px}
+.bullet-row{display:flex; align-items:center; gap:10px}
+.bullet-name{font-size:13px; width:88px; flex-shrink:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.bullet-track{flex:1; min-width:0; height:18px; background:transparent; position:relative}
+.bullet-track i{position:absolute; top:0; height:100%; border-radius:5px}
+.bullet-cap{left:0; background:var(--field)}
+.bullet-fill{left:0}
+.bullet-over{background:var(--stamp); opacity:0.55}
+.bullet-tick{width:2.5px !important; background:var(--ink); border-radius:0 !important; top:-3px !important; height:24px !important}
+.bullet-amt{font-size:11.5px; color:var(--ink-soft); flex-shrink:0}
+.momentum{display:flex; flex-direction:column; gap:8px; margin:14px 0 18px}
+.mom-row{display:flex; align-items:center; gap:12px; background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:10px 14px; cursor:pointer; font-family:inherit; color:var(--ink); text-align:left}
+.mom-row:hover{border-color:var(--moss); box-shadow:var(--shadow-2)}
+.mom-tag{font-size:13.5px; font-weight:600; width:132px; flex-shrink:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.mom-dir{font-size:15px; font-weight:700; flex-shrink:0}
+.mom-blocks{flex:1; min-width:0; display:flex; gap:4px}
+.mom-blocks i{width:22px; height:14px; border-radius:3px}
+.mom-n{font-size:11px; color:var(--ink-soft); flex-shrink:0}
+.habit-card{margin-top:14px; background:var(--field); border-radius:12px; padding:16px 18px}
+.habit-name{font-family:'IBM Plex Mono',monospace; font-size:12.5px; font-weight:600}
+.habit-mo{font-family:'Fraunces',Georgia,serif; font-size:clamp(26px,3vw,36px); font-weight:650; color:var(--gold); margin:6px 0 2px}
+.habit-yr{font-family:'Fraunces',Georgia,serif; font-size:clamp(16px,2vw,21px); font-weight:650; color:var(--stamp)}
+.habit-sub{font-size:12px; color:var(--ink-soft); margin-top:6px}
+@media (max-width:560px){.srcname{width:92px; font-size:12px}.mom-tag{width:96px}}
+.merchant-row{background:none; border:none; font-family:inherit; color:var(--ink); cursor:pointer; padding:4px 6px; border-radius:8px; width:100%}
+.merchant-row:hover{background:var(--field)}
+.merchant-row.on{background:var(--moss-soft)}
+.gmode button.on{background:var(--moss); color:#fff; border-color:var(--moss)}
