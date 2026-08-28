@@ -882,9 +882,11 @@ img.fpreview{height:auto}
 /* the donut fills its card: it tracks the card's HEIGHT (the dimension that
    actually grows when the row stretches), square via the viewBox ratio,
    with width as a secondary bound so the legend always keeps its room */
-.donut-wrap{flex:1; align-self:stretch; min-height:260px}
+.donut-wrap{flex:1; align-self:stretch; min-height:300px}
 /* scales with the viewport so a big monitor gets a genuinely big chart */
-.donut-svg{height:clamp(240px, 36vh, 480px); width:auto; max-width:58%; flex:none}
+.donut-svg{height:clamp(300px, 42vh, 560px); width:auto; max-width:62%; flex:none}
+.donut-legend{font-size:15px; line-height:2.2; flex:1; min-width:0}
+.donut-legend .mono{font-size:14px}
 .chart-tip{position:absolute; transform:translate(-50%,-135%); background:var(--ink); color:var(--bg); font-size:11px; font-weight:600; padding:5px 10px; border-radius:7px; white-space:nowrap; pointer-events:none; z-index:60; box-shadow:var(--shadow-2)}
 .dseg{transition:stroke-width .1s; cursor:pointer}
 .dseg:hover{stroke-width:20}
@@ -1048,9 +1050,11 @@ img.fpreview{height:auto}
 .spark-delta.down{color:var(--stamp)}
 .sparkline{width:100%; height:clamp(96px, 12vh, 160px); flex:1}
 .spark-span{font-size:10px; color:var(--ink-soft)}
-.charts-duo{display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:18px}
+/* the donut card leads: wider column and a real minimum height, so the
+   chart is unmistakably large on every monitor */
+.charts-duo{display:grid; grid-template-columns:1.35fr 1fr; gap:12px; margin-top:18px}
 @media (max-width:760px){.charts-duo{grid-template-columns:1fr}}
-.charts-duo .card{margin-bottom:0}
+.charts-duo .card{margin-bottom:0; min-height:clamp(360px, 46vh, 620px)}
 .proglist{display:flex; flex-direction:column; gap:13px; padding-top:4px}
 .prog-top{display:flex; justify-content:space-between; gap:10px; font-size:13px; color:var(--ink-soft); margin-bottom:5px}
 .prog-top b{color:var(--ink); font-weight:600; font-size:12px}
@@ -1277,10 +1281,14 @@ img.fpreview{height:auto}
   .tiles{grid-template-columns:repeat(2,minmax(0,1fr))}
   .charts{grid-template-columns:minmax(0,1fr)}
   .graphwrap svg{height:380px}
-  /* phones: the donut is width-limited, so let height follow width — a
-     vh-based height would just pad the circle with empty space */
-  .donut-svg{height:clamp(170px, 46vw, 240px)}
-  .donut-wrap{min-height:190px}
+  /* phones: side-by-side starves the legend (long labels push their counts
+     out of the row) — stack instead: a big centered donut, legend below at
+     full width */
+  .chart-wrap.donut-wrap{flex-direction:column; align-items:center}
+  .donut-svg{height:clamp(200px, 56vw, 280px); max-width:100%}
+  .donut-legend{width:100%}
+  .donut-wrap{min-height:0}
+  .charts-duo .card{min-height:0}
   .row{flex-wrap:wrap}
   /* a real flex base size, or the zero-basis body never overflows the line
      and the nowrap stamp squeezes it to 0 — titles vanish */

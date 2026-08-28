@@ -225,13 +225,13 @@ export function Donut({ items }) {
         <text x="60" y="57" textAnchor="middle" fontFamily="Fraunces" fontSize={items.length >= 10000 ? 19 : 24} fontWeight="650" fill="var(--ink)">{fmtK(items.length)}</text>
         <text x="60" y="73" textAnchor="middle" fontFamily="IBM Plex Mono" fontSize="8.5" letterSpacing="1.5" fill="var(--ink-soft)">ITEMS</text>
       </svg>
-      <div style={{ fontSize: 13, lineHeight: 2, flex: 1 }}>
+      <div className="donut-legend">
         {totals.map(({ k, n }) => (
-          <div key={k} style={{ display: "flex", alignItems: "center", gap: 8 }}
+          <div key={k} style={{ display: "flex", alignItems: "center", gap: 9 }}
             data-tip={`${SECTIONS[k].label}: ${fmtK(n)} of ${fmtK(items.length)} items (${Math.round((n / total) * 100)}%)`}>
-            <span style={{ width: 10, height: 10, borderRadius: 3, background: SECTIONS[k].color }} />
+            <span style={{ width: 12, height: 12, borderRadius: 3, background: SECTIONS[k].color, flexShrink: 0 }} />
             <span style={{ color: "var(--ink-soft)" }}>{SECTIONS[k].label}</span>
-            <span className="mono" style={{ marginLeft: "auto", fontSize: 12 }}>{fmtK(n)}</span>
+            <span className="mono" style={{ marginLeft: "auto" }}>{fmtK(n)}</span>
           </div>
         ))}
       </div>
