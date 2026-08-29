@@ -1626,7 +1626,7 @@ button:disabled{opacity:.5; cursor:not-allowed}
 /* ---------- new insight charts (burn / growth / rhythm / merchants) */
 .burn-svg,.growth-svg{width:100%; height:clamp(200px, 26vh, 320px); flex:1}
 .rhythm-svg{width:100%; height:clamp(160px, 20vh, 240px); flex:1}
-.charts-row2{display:grid; grid-template-columns:1.3fr 1fr 1fr; gap:12px; margin-top:12px}
+.charts-row2{display:grid; grid-template-columns:1.3fr 1fr 1fr; gap:12px; margin-top:12px; margin-bottom:14px}
 @media (max-width:1180px){.charts-row2{grid-template-columns:1fr 1fr}}
 @media (max-width:760px){.charts-row2{grid-template-columns:1fr}}
 .charts-row2 .card{margin-bottom:0; display:flex; flex-direction:column; min-height:clamp(280px, 34vh, 420px)}
