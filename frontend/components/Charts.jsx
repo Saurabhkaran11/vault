@@ -492,6 +492,17 @@ export function TaskRhythm({ doneDates }) {
  * as a Sankey. Ribbon width is dollars — one picture of the whole month. */
 export function MoneyFlow({ incomes, expenses, fmt }) {
   const { ref, tip, show, hide } = useChartTip();
+  /* render at the card's REAL width — a stretched viewBox distorts text and
+     pushes the right-column labels out of the card */
+  const [w, setW] = React.useState(0);
+  React.useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof ResizeObserver === "undefined") { setW(el?.clientWidth || 560); return; }
+    const ro = new ResizeObserver((es) => setW(Math.round(es[0].contentRect.width)));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [ref]);
+
   const model = useMemo(() => {
     const ym = new Date().toISOString().slice(0, 7);
     const exp = expenses.filter((e) => e.date?.startsWith(ym));
@@ -525,32 +536,38 @@ export function MoneyFlow({ incomes, expenses, fmt }) {
   }, [incomes, expenses]);
 
   if (!model) return <div className="m" style={{ color: "var(--ink-soft)" }}>No expenses this month yet — the flow draws itself as you spend.</div>;
-  const { sources, cats, merchants, spendTotal } = model;
+  const { sources, cats, merchants } = model;
 
-  const W = 560, H = 260, w = 13, x0 = 8, x1 = 235, x2 = 470;
+  const W = Math.max(320, w || 560);
+  const narrow = W < 560;
+  const H = narrow ? 300 : 320;
+  const nodeW = 13;
+  const rightLabelW = narrow ? 84 : 130;             // room reserved for merchant names
+  const x0 = 4, x1 = Math.round(W * 0.44), x2 = W - rightLabelW - nodeW - 8;
   const CAT_COLORS = ["var(--moss)", "var(--gold)", "var(--violet)", "var(--azure)", "var(--blue)"];
   const srcTotal = sources.reduce((a, [, v]) => a + v, 0);
-  const scaleH = (H - 70) / Math.max(srcTotal, spendTotal, 1);
+  const scaleH = (H - 78) / Math.max(srcTotal, model.spendTotal, 1);
   const ribbon = (xa, ya, ha, xb, yb, hb) => {
     const mx = (xa + xb) / 2;
     return `M${xa},${ya} C${mx},${ya} ${mx},${yb} ${xb},${yb} L${xb},${yb + hb} C${mx},${yb + hb} ${mx},${ya + ha} ${xa},${ya + ha} Z`;
   };
+  const clip = (s, n) => (s.length > n ? s.slice(0, n - 1) + "…" : s);
 
-  let y = 28;
-  const S = sources.map(([n, v]) => { const o = { n, v, h: v * scaleH, y }; y += v * scaleH + 26; return o; });
+  let y = 30;
+  const S = sources.map(([n, v]) => { const o = { n, v, h: v * scaleH, y }; y += v * scaleH + 28; return o; });
   y = 20;
-  const M = cats.map(([n, v], i) => { const o = { n, v, h: v * scaleH, y, c: n === "Saved" ? "#1F7A4D" : CAT_COLORS[i % CAT_COLORS.length] }; y += v * scaleH + 16; return o; });
+  const M = cats.map(([n, v], i) => { const o = { n, v, h: v * scaleH, y, c: n === "Saved" ? "#1F7A4D" : CAT_COLORS[i % CAT_COLORS.length] }; y += v * scaleH + 18; return o; });
   y = 26;
-  const R = merchants.map(([n, m]) => { const o = { n, v: m.v, cat: m.cat, h: m.v * scaleH, y }; y += m.v * scaleH + 22; return o; });
+  const R = merchants.map(([n, m]) => { const o = { n, v: m.v, cat: m.cat, h: m.v * scaleH, y }; y += m.v * scaleH + 24; return o; });
 
   const paths = [];
   const catOff = M.map(() => 0);
   S.forEach((s) => {
     let sy = s.y;
     M.forEach((m, mi) => {
-      const share = (s.v / srcTotal) * m.h;   // this source's slice of the category
+      const share = (s.v / srcTotal) * m.h;
       if (share < 0.8) return;
-      paths.push({ d: ribbon(x0 + w, sy, share, x1, m.y + catOff[mi], share), fill: m.c, op: 0.28,
+      paths.push({ d: ribbon(x0 + nodeW, sy, share, x1, m.y + catOff[mi], share), fill: m.c, op: 0.28,
         tip: `${s.n} → ${m.n} · ${fmt(Math.round((share / scaleH)))}` });
       sy += share; catOff[mi] += share;
     });
@@ -559,37 +576,45 @@ export function MoneyFlow({ incomes, expenses, fmt }) {
   R.forEach((r) => {
     const mi = M.findIndex((m) => m.n === r.cat);
     if (mi < 0) return;
-    paths.push({ d: ribbon(x1 + w, M[mi].y + merchOff[mi], r.h, x2, r.y, r.h), fill: M[mi].c, op: 0.20,
+    paths.push({ d: ribbon(x1 + nodeW, M[mi].y + merchOff[mi], r.h, x2, r.y, r.h), fill: M[mi].c, op: 0.20,
       tip: `${M[mi].n} → ${r.n} · ${fmt(Math.round(r.v))}` });
     merchOff[mi] += r.h;
   });
 
   return (
-    <div className="chart-wrap" ref={ref} onMouseLeave={hide}>
-      <svg className="flow-svg" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img" aria-label="Money flow from income to categories to merchants">
+    <div className="chart-wrap flow-wrap" ref={ref} onMouseLeave={hide}>
+      {w > 0 && (
+      <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Money flow from income to categories to merchants" style={{ display: "block" }}>
         {paths.map((p, i) => (
           <path key={i} d={p.d} fill={p.fill} opacity={p.op}
             onMouseMove={(e) => show(e, p.tip)} />
         ))}
         {S.map((s) => (
           <g key={s.n}>
-            <rect x={x0} y={s.y} width={w} height={Math.max(s.h, 3)} rx="3.5" fill="var(--moss)" />
-            <text x={x0} y={s.y - 6} fontFamily="IBM Plex Mono" fontSize="10.5" fontWeight="600" fill="var(--ink)">{s.n.slice(0, 18)} · {fmt(Math.round(s.v))}</text>
+            <rect x={x0} y={s.y} width={nodeW} height={Math.max(s.h, 3)} rx="3.5" fill="var(--moss)" />
+            <text x={x0} y={s.y - 7} fontFamily="IBM Plex Mono" fontSize="11" fontWeight="600" fill="var(--ink)">
+              {clip(s.n, narrow ? 12 : 20)} · {fmt(Math.round(s.v))}
+            </text>
           </g>
         ))}
         {M.map((m) => (
           <g key={m.n}>
-            <rect x={x1} y={m.y} width={w} height={Math.max(m.h, 3)} rx="3.5" fill={m.c} />
-            <text x={x1 + 19} y={m.y + m.h / 2 + 3.5} fontFamily="IBM Plex Mono" fontSize="10.5" fill="var(--ink)">{m.n}</text>
+            <rect x={x1} y={m.y} width={nodeW} height={Math.max(m.h, 3)} rx="3.5" fill={m.c} />
+            <text x={x1 + 19} y={m.y + Math.max(m.h, 3) / 2 + 4} fontFamily="IBM Plex Mono" fontSize="11" fill="var(--ink)">
+              {clip(m.n, narrow ? 8 : 14)}
+            </text>
           </g>
         ))}
         {R.map((r) => (
           <g key={r.n}>
-            <rect x={x2} y={r.y} width={w} height={Math.max(r.h, 3)} rx="3.5" fill="var(--ink-soft)" opacity="0.55" />
-            <text x={x2 + 18} y={r.y + r.h / 2 + 3.5} fontFamily="IBM Plex Mono" fontSize="9.5" fill="var(--ink-soft)">{r.n.slice(0, 12)}</text>
+            <rect x={x2} y={r.y} width={nodeW} height={Math.max(r.h, 3)} rx="3.5" fill="var(--ink-soft)" opacity="0.55" />
+            <text x={x2 + 18} y={r.y + Math.max(r.h, 3) / 2 + 3.5} fontFamily="IBM Plex Mono" fontSize="10" fill="var(--ink-soft)">
+              {clip(r.n, narrow ? 9 : 15)}
+            </text>
           </g>
         ))}
       </svg>
+      )}
       <ChartTip tip={tip} />
     </div>
   );
