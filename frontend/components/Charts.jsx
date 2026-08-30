@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useMemo } from "react";
+import { createPortal } from "react-dom";
 import { SECTIONS, daysAgo, fmtK } from "@/lib/seed";
 
 export function WeeklyBars({ items }) {
@@ -539,77 +540,101 @@ export function MoneyFlow({ incomes, expenses, fmt }) {
   const { sources, cats, merchants } = model;
 
   const W = Math.max(320, w || 560);
-  const narrow = W < 560;
-  const H = narrow ? 300 : 320;
-  const nodeW = 13;
-  const rightLabelW = narrow ? 84 : 130;             // room reserved for merchant names
-  const x0 = 4, x1 = Math.round(W * 0.44), x2 = W - rightLabelW - nodeW - 8;
+  const narrow = W < 640;
+  const H = narrow ? 330 : 380;
+  const nodeW = 16;
+  const MIN_H = 12;                                   // every node stays visibly thick
+  const rightLabelW = narrow ? 118 : 190;
+  const midLabelW = narrow ? 96 : 150;
+  const x0 = 4, x1 = Math.round((W - rightLabelW) * 0.46), x2 = W - rightLabelW - nodeW - 6;
   const CAT_COLORS = ["var(--moss)", "var(--gold)", "var(--violet)", "var(--azure)", "var(--blue)"];
   const srcTotal = sources.reduce((a, [, v]) => a + v, 0);
-  const scaleH = (H - 78) / Math.max(srcTotal, model.spendTotal, 1);
+  const scaleH = (H - 96) / Math.max(srcTotal, model.spendTotal, 1);
   const ribbon = (xa, ya, ha, xb, yb, hb) => {
     const mx = (xa + xb) / 2;
     return `M${xa},${ya} C${mx},${ya} ${mx},${yb} ${xb},${yb} L${xb},${yb + hb} C${mx},${yb + hb} ${mx},${ya + ha} ${xa},${ya + ha} Z`;
   };
   const clip = (s, n) => (s.length > n ? s.slice(0, n - 1) + "…" : s);
 
-  let y = 30;
-  const S = sources.map(([n, v]) => { const o = { n, v, h: v * scaleH, y }; y += v * scaleH + 28; return o; });
-  y = 20;
-  const M = cats.map(([n, v], i) => { const o = { n, v, h: v * scaleH, y, c: n === "Saved" ? "#1F7A4D" : CAT_COLORS[i % CAT_COLORS.length] }; y += v * scaleH + 18; return o; });
-  y = 26;
-  const R = merchants.map(([n, m]) => { const o = { n, v: m.v, cat: m.cat, h: m.v * scaleH, y }; y += m.v * scaleH + 24; return o; });
+  /* columns: proportional height with a floor, stacked then vertically centered.
+     If floors + gaps blow the budget, the proportional part shrinks to fit so
+     nothing ever draws past the svg. */
+  const layoutCol = (entries, gap, topPad) => {
+    const avail = H - 20 - topPad;
+    const nodes = entries.map((e) => ({ ...e, h: Math.max(e.v * scaleH, MIN_H) }));
+    const gaps = gap * Math.max(nodes.length - 1, 0);
+    let total = nodes.reduce((a, n) => a + n.h, 0) + gaps;
+    if (total > avail) {
+      const flex = nodes.reduce((a, n) => a + Math.max(n.h - MIN_H, 0), 0);
+      if (flex > 0) {
+        const k = Math.max(1 - (total - avail) / flex, 0);
+        nodes.forEach((n) => { n.h = MIN_H + Math.max(n.h - MIN_H, 0) * k; });
+        total = nodes.reduce((a, n) => a + n.h, 0) + gaps;
+      }
+    }
+    let y = topPad + Math.max((avail - total) / 2, 0);
+    nodes.forEach((n) => { n.y = y; y += n.h + gap; });
+    return nodes;
+  };
+  const S = layoutCol(sources.map(([n, v]) => ({ n, v })), 34, 48);
+  const M = layoutCol(cats.map(([n, v], i) => ({ n, v, c: n === "Saved" ? "#1F7A4D" : CAT_COLORS[i % CAT_COLORS.length] })), 14, 34);
+  const R = layoutCol(merchants.map(([n, m]) => ({ n, v: m.v, cat: m.cat })), 20, 34);
 
+  /* ribbons: thickness proportional WITHIN each node's drawn height, so a
+     floored node still shows its flows without overlap */
   const paths = [];
-  const catOff = M.map(() => 0);
-  S.forEach((s) => {
-    let sy = s.y;
+  const srcOff = S.map(() => 0), catInOff = M.map(() => 0), catOutOff = M.map(() => 0), merOff = R.map(() => 0);
+  S.forEach((s, si) => {
     M.forEach((m, mi) => {
-      const share = (s.v / srcTotal) * m.h;
-      if (share < 0.8) return;
-      paths.push({ d: ribbon(x0 + nodeW, sy, share, x1, m.y + catOff[mi], share), fill: m.c, op: 0.28,
-        tip: `${s.n} → ${m.n} · ${fmt(Math.round((share / scaleH)))}` });
-      sy += share; catOff[mi] += share;
+      const share = (s.v / srcTotal) * m.v;           // dollars of m funded by s
+      if (share < 0.5) return;
+      const ha = (share / s.v) * s.h, hb = (share / m.v) * m.h;
+      paths.push({ d: ribbon(x0 + nodeW, s.y + srcOff[si], ha, x1, m.y + catInOff[mi], hb), fill: m.c, op: 0.30,
+        tip: `${s.n} → ${m.n} · ${fmt(Math.round(share))}` });
+      srcOff[si] += ha; catInOff[mi] += hb;
     });
   });
-  const merchOff = M.map(() => 0);
-  R.forEach((r) => {
+  R.forEach((r, ri) => {
     const mi = M.findIndex((m) => m.n === r.cat);
     if (mi < 0) return;
-    paths.push({ d: ribbon(x1 + nodeW, M[mi].y + merchOff[mi], r.h, x2, r.y, r.h), fill: M[mi].c, op: 0.20,
+    const ha = (r.v / M[mi].v) * M[mi].h, hb = r.h;
+    paths.push({ d: ribbon(x1 + nodeW, M[mi].y + catOutOff[mi], ha, x2, r.y + merOff[ri], hb), fill: M[mi].c, op: 0.22,
       tip: `${M[mi].n} → ${r.n} · ${fmt(Math.round(r.v))}` });
-    merchOff[mi] += r.h;
+    catOutOff[mi] += ha; merOff[ri] += hb;
   });
 
   return (
     <div className="chart-wrap flow-wrap" ref={ref} onMouseLeave={hide}>
       {w > 0 && (
       <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Money flow from income to categories to merchants" style={{ display: "block" }}>
+        <text x={x0} y={16} fontFamily="IBM Plex Mono" fontSize="9.5" letterSpacing="1.5" fill="var(--ink-soft)">INCOME</text>
+        <text x={x1} y={16} fontFamily="IBM Plex Mono" fontSize="9.5" letterSpacing="1.5" fill="var(--ink-soft)">CATEGORIES</text>
+        <text x={x2} y={16} fontFamily="IBM Plex Mono" fontSize="9.5" letterSpacing="1.5" fill="var(--ink-soft)">WHERE IT LANDS</text>
         {paths.map((p, i) => (
           <path key={i} d={p.d} fill={p.fill} opacity={p.op}
             onMouseMove={(e) => show(e, p.tip)} />
         ))}
         {S.map((s) => (
           <g key={s.n}>
-            <rect x={x0} y={s.y} width={nodeW} height={Math.max(s.h, 3)} rx="3.5" fill="var(--chart)" />
-            <text x={x0} y={s.y - 7} fontFamily="IBM Plex Mono" fontSize="11" fontWeight="600" fill="var(--ink)">
-              {clip(s.n, narrow ? 12 : 20)} · {fmt(Math.round(s.v))}
+            <rect x={x0} y={s.y} width={nodeW} height={s.h} rx="4" fill="var(--chart)" />
+            <text x={x0} y={s.y - 7} fontFamily="IBM Plex Mono" fontSize="11.5" fontWeight="600" fill="var(--ink)">
+              {clip(s.n, narrow ? 12 : 22)} · {fmt(Math.round(s.v))}
             </text>
           </g>
         ))}
         {M.map((m) => (
           <g key={m.n}>
-            <rect x={x1} y={m.y} width={nodeW} height={Math.max(m.h, 3)} rx="3.5" fill={m.c} />
-            <text x={x1 + 19} y={m.y + Math.max(m.h, 3) / 2 + 4} fontFamily="IBM Plex Mono" fontSize="11" fill="var(--ink)">
-              {clip(m.n, narrow ? 8 : 14)}
+            <rect x={x1} y={m.y} width={nodeW} height={m.h} rx="4" fill={m.c} />
+            <text x={x1 + nodeW + 8} y={m.y + m.h / 2 + 4} fontFamily="IBM Plex Mono" fontSize="11" fontWeight="600" fill="var(--ink)">
+              {clip(m.n, narrow ? 7 : 10)} <tspan fill="var(--ink-soft)" fontWeight="400">· {fmt(Math.round(m.v))}</tspan>
             </text>
           </g>
         ))}
         {R.map((r) => (
           <g key={r.n}>
-            <rect x={x2} y={r.y} width={nodeW} height={Math.max(r.h, 3)} rx="3.5" fill="var(--ink-soft)" opacity="0.55" />
-            <text x={x2 + 18} y={r.y + Math.max(r.h, 3) / 2 + 3.5} fontFamily="IBM Plex Mono" fontSize="10" fill="var(--ink-soft)">
-              {clip(r.n, narrow ? 9 : 15)}
+            <rect x={x2} y={r.y} width={nodeW} height={r.h} rx="4" fill="var(--ink-soft)" opacity="0.6" />
+            <text x={x2 + nodeW + 7} y={r.y + r.h / 2 + 4} fontFamily="IBM Plex Mono" fontSize="10.5" fill="var(--ink)">
+              {clip(r.n, narrow ? 10 : 16)}
             </text>
           </g>
         ))}
@@ -870,3 +895,46 @@ export function BudgetBullets({ byCat, spentByCat, fmt }) {
   );
 }
 
+
+/* ---------- Zoom: click ANY chart to maximize it.
+ * Wrap a chart once and it gains an expand affordance + a full-screen
+ * popup that re-renders the same chart at reading size (the zoom dialog's
+ * CSS raises every chart class's height; width-responsive charts and the
+ * measured ones fill it naturally). */
+export function Zoom({ title, sub, children }) {
+  const [open, setOpen] = React.useState(false);
+  React.useEffect(() => {
+    if (!open) return;
+    const onKey = (e) => { if (e.key === "Escape") { e.stopPropagation(); setOpen(false); } };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [open]);
+  return (
+    <>
+      <div className="zoomable">
+        <button type="button" className="zoom-btn" aria-label={`Maximize ${title}`}
+          title="Maximize — see this chart in depth"
+          onClick={(e) => { e.stopPropagation(); setOpen(true); }}>⤢</button>
+        {children}
+      </div>
+      {open && createPortal(
+        /* portal to <body>: a glass card's backdrop-filter makes it the
+           containing block for position:fixed, which would trap the overlay
+           inside the card instead of covering the screen */
+        <div className="pal-overlay" onClick={() => setOpen(false)} role="dialog" aria-label={`${title} — maximized`}>
+          <div className="pal zoomdlg" onClick={(e) => e.stopPropagation()}>
+            <div className="zoom-head">
+              <div>
+                <h3 style={{ margin: 0 }}>{title}</h3>
+                {sub && <div className="m" style={{ color: "var(--ink-soft)", marginTop: 2 }}>{sub}</div>}
+              </div>
+              <button className="kbtn" onClick={() => setOpen(false)} aria-label="Close">✕</button>
+            </div>
+            <div className="zoom-body">{children}</div>
+          </div>
+        </div>,
+        document.body
+      )}
+    </>
+  );
+}

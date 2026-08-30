@@ -3,7 +3,7 @@
 import React, { useMemo, useState } from "react";
 import { today } from "@/lib/seed";
 import { askText } from "@/lib/ai";
-import { TopMerchants, MoneyFlow, CategoryShifts, IncomeVsSpend, SavingsWaterfall, WeekendPremium } from "./Charts";
+import { TopMerchants, MoneyFlow, CategoryShifts, IncomeVsSpend, SavingsWaterfall, WeekendPremium, Zoom } from "./Charts";
 import { useAiReady } from "@/hooks/useAiReady";
 
 /* Finance analytics: spending reports over daily / weekly / monthly / yearly
@@ -341,32 +341,32 @@ export default function FinanceAnalytics({ fin, fmt, spentByCat = {}, savingsRat
         <div className="card fanal-card">
           <h3>Category shifts</h3>
           <div className="m fanal-sub">This month vs last — red grows, green shrinks.</div>
-          <CategoryShifts expenses={fin.expenses} fmt={fmt} />
+          <Zoom title="Category shifts" sub="This month vs last — red grows, green shrinks."><CategoryShifts expenses={fin.expenses} fmt={fmt} /></Zoom>
         </div>
         <div className="card fanal-card">
           <h3>Income vs spend</h3>
           <div className="m fanal-sub">Last 5 months — the green haze is what you kept.</div>
-          <IncomeVsSpend incomes={fin.incomes} expenses={fin.expenses} fmt={fmt} />
+          <Zoom title="Income vs spend" sub="Last 5 months — the green haze is what you kept."><IncomeVsSpend incomes={fin.incomes} expenses={fin.expenses} fmt={fmt} /></Zoom>
         </div>
         <div className="card fanal-card">
           <h3>Savings waterfall</h3>
           <div className="m fanal-sub">This month: income stepping down to what you kept.</div>
-          <SavingsWaterfall incomes={fin.incomes} expenses={fin.expenses} fmt={fmt} />
+          <Zoom title="Savings waterfall" sub="This month: income stepping down to what you kept."><SavingsWaterfall incomes={fin.incomes} expenses={fin.expenses} fmt={fmt} /></Zoom>
         </div>
         <div className="card fanal-card">
           <h3>Weekend premium</h3>
           <div className="m fanal-sub">Average daily spend, weekday vs weekend · last 8 weeks.</div>
-          <WeekendPremium expenses={fin.expenses} fmt={fmt} />
+          <Zoom title="Weekend premium" sub="Average daily spend, weekday vs weekend · last 8 weeks."><WeekendPremium expenses={fin.expenses} fmt={fmt} /></Zoom>
         </div>
         <div className="card fanal-card fanal-wide">
           <h3>Money flow</h3>
           <div className="m fanal-sub">This month: income → categories → where it lands. Hover any ribbon.</div>
-          <MoneyFlow incomes={fin.incomes} expenses={fin.expenses} fmt={fmt} />
+          <Zoom title="Money flow" sub="This month: income → categories → where it lands."><MoneyFlow incomes={fin.incomes} expenses={fin.expenses} fmt={fmt} /></Zoom>
         </div>
         <div className="card fanal-card fanal-wide">
           <h3>Top merchants</h3>
           <div className="m fanal-sub">Last 90 days — click a merchant for its habit math.</div>
-          <TopMerchants expenses={expenses} fmt={fmt} />
+          <Zoom title="Top merchants" sub="Last 90 days — click a merchant for its habit math."><TopMerchants expenses={expenses} fmt={fmt} /></Zoom>
         </div>
       </div>
     )}

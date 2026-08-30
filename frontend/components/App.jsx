@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { SECTIONS, fmtStamp, daysAgo, today, fmtK } from "@/lib/seed";
 import { useStore } from "@/hooks/useStore";
-import { Donut, rangeSeries, TinyBars, SparkArea, VaultGrowth, TaskRhythm, CaptureSources } from "./Charts";
+import { Donut, rangeSeries, TinyBars, SparkArea, VaultGrowth, TaskRhythm, CaptureSources, Zoom } from "./Charts";
 import { YourCharts, ChartExplorer, newChartCfg, upsertChart, deleteChart } from "./ChartLab";
 import GraphView from "./GraphView";
 import ItemRow, { TagAdder } from "./ItemRow";
@@ -546,9 +546,15 @@ export default function App() {
   const [profileLoaded, setProfileLoaded] = useState(false);
   const importRef = useRef(null);
 
-  /* SSR-safe sidebar default: render open, then collapse on narrow screens. */
+  /* SSR-safe sidebar default: render open, then collapse on narrow screens.
+     Also follows live resizes (window dragged to a phone-sized width, monitor
+     switch) — but only on breakpoint crossings, so a manual toggle sticks. */
   useEffect(() => {
-    setOpen(window.innerWidth > 860);
+    const mq = window.matchMedia("(max-width: 860px)");
+    setOpen(!mq.matches);
+    const onChange = (e) => setOpen(!e.matches);
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
   }, []);
 
   /* production safety: report async errors, watch the storage quota */
@@ -1774,7 +1780,7 @@ export default function App() {
                   </div>
 
                   <div className="charts-duo">
-                    <div className="card"><h3>Where things live</h3><Donut items={items} /></div>
+                    <div className="card"><h3>Where things live</h3><Zoom title="Where things live" sub="Share of items by section."><Donut items={items} /></Zoom></div>
                     <div className="card">
                       {/* no amount up here — the TOTAL block below is the one number */}
                       <div className="wstrip-head">
@@ -1813,17 +1819,17 @@ export default function App() {
                     <div className="card">
                       <h3>Your vault, compounding</h3>
                       <div className="m" style={{ color: "var(--ink-soft)", marginBottom: 8 }}>Everything you&rsquo;ve saved, accumulating by type.</div>
-                      <VaultGrowth items={items} />
+                      <Zoom title="Your vault, compounding" sub="Everything saved, accumulating by type."><VaultGrowth items={items} /></Zoom>
                     </div>
                     <div className="card">
                       <h3>Task rhythm</h3>
                       <div className="m" style={{ color: "var(--ink-soft)", marginBottom: 8 }}>Tasks finished per day — streaks glow.</div>
-                      <TaskRhythm doneDates={pulse?.doneDates || []} />
+                      <Zoom title="Task rhythm" sub="Tasks finished per day — streaks glow."><TaskRhythm doneDates={pulse?.doneDates || []} /></Zoom>
                     </div>
                     <div className="card">
                       <h3>How things arrive</h3>
                       <div className="m" style={{ color: "var(--ink-soft)", marginBottom: 8 }}>Your capture mix — typed, pasted, dropped, imported.</div>
-                      <CaptureSources items={items} importedCount={pulse?.importedCount || 0} />
+                      <Zoom title="How things arrive" sub="Your capture mix — typed, pasted, dropped, imported."><CaptureSources items={items} importedCount={pulse?.importedCount || 0} /></Zoom>
                     </div>
                   </div>
 

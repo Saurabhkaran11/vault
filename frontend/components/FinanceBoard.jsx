@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { fmtStamp, today, daysAgo } from "@/lib/seed";
-import { BudgetBurn, BudgetBullets } from "./Charts";
+import { BudgetBurn, BudgetBullets, Zoom } from "./Charts";
 import FinanceAnalytics from "./FinanceAnalytics";
 import FinanceBudgets from "./FinanceBudgets";
 import StatementImport from "./StatementImport";
@@ -934,7 +934,7 @@ export default function FinanceBoard() {
           <div className="m" style={{ color: "var(--ink-soft)", marginBottom: 6 }}>
             Spend against each cap — the black tick is the cap, red past it is the overrun.
           </div>
-          <BudgetBullets byCat={fin.budgets?.byCat} spentByCat={spentByCatPeriod} fmt={fmt} />
+          <Zoom title="Category bullets" sub="Spend against each cap — the black tick is the cap."><BudgetBullets byCat={fin.budgets?.byCat} spentByCat={spentByCatPeriod} fmt={fmt} /></Zoom>
         </div>
       )}
       {(() => {
@@ -948,7 +948,7 @@ export default function FinanceBoard() {
             <div className="m" style={{ color: "var(--ink-soft)", marginBottom: 6 }}>
               Cumulative spend vs the even-pace line to {fmt(+monthly)} — above the dashes means you&rsquo;re ahead of pace.
             </div>
-            <BudgetBurn expenses={fin.expenses} budget={+monthly} fmt={fmt} />
+            <Zoom title="Budget burn" sub="Cumulative spend vs the even-pace line — above the dashes is ahead of pace."><BudgetBurn expenses={fin.expenses} budget={+monthly} fmt={fmt} /></Zoom>
           </div>
         ) : null;
       })()}
