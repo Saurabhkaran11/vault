@@ -1875,6 +1875,11 @@ button:disabled{opacity:.5; cursor:not-allowed}
 .zoomable:hover .zoom-btn{opacity:1}
 .zoom-btn:hover{color:var(--moss); border-color:var(--moss)}
 .pal.zoomdlg{max-width:1100px; width:min(94vw, 1100px); max-height:84vh; align-self:flex-start; overflow-y:auto; padding:22px 26px}
+/* how-to-read caption under every chart: fixed 11.5px, wraps inside the
+   card (min-width:0 + break-word — it can never widen or escape the box) */
+.chart-note{margin-top:10px; padding-top:8px; border-top:1px dashed var(--line); font-size:11.5px; line-height:1.55; color:var(--ink-soft); min-width:0; max-width:100%; overflow-wrap:break-word}
+.chart-note b{color:var(--ink); font-weight:600}
+.zoom-body .chart-note{font-size:13px; margin-top:14px}
 .zoom-head{display:flex; align-items:flex-start; gap:14px; margin-bottom:16px}
 .zoom-head h3{font-family:'Fraunces',Georgia,serif; font-size:22px; font-weight:650}
 .zoom-head .kbtn{margin-left:auto}

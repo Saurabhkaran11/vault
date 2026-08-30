@@ -1777,7 +1777,8 @@ export default function App() {
                   </div>
 
                   <div className="charts-duo">
-                    <div className="card"><h3>Where things live</h3><Zoom title="Where things live" sub="Share of items by section."><Donut items={items} /></Zoom></div>
+                    <div className="card"><h3>Where things live</h3><Zoom title="Where things live" sub="Share of items by section."
+                      note={<><b>How to read:</b> each slice is one section of your vault; the number in the middle is everything you&rsquo;ve saved. A slice growing fast shows where your attention is going.</>}><Donut items={items} /></Zoom></div>
                     <div className="card">
                       {/* no amount up here — the TOTAL block below is the one number */}
                       <div className="wstrip-head">
@@ -1804,6 +1805,7 @@ export default function App() {
                             <span className="etc-label mono">TOTAL</span>
                             <span className="wtotal-amt">{sym}{Math.round(spentNow).toLocaleString()}</span>
                           </div>
+                          <div className="chart-note"><b>How to read:</b> your biggest spending categories for this range, largest first — the % is each one&rsquo;s share of the total below.</div>
                         </>
                       ) : (
                         <div className="m" style={{ color: "var(--ink-soft)" }}>No expenses logged {RANGE_WORD[range]} — add one in Finance.</div>
@@ -1816,17 +1818,20 @@ export default function App() {
                     <div className="card">
                       <h3>Your vault, compounding</h3>
                       <div className="m" style={{ color: "var(--ink-soft)", marginBottom: 8 }}>Everything you&rsquo;ve saved, accumulating by type.</div>
-                      <Zoom title="Your vault, compounding" sub="Everything saved, accumulating by type."><VaultGrowth items={items} /></Zoom>
+                      <Zoom title="Your vault, compounding" sub="Everything saved, accumulating by type."
+                        note={<><b>How to read:</b> the line climbs by one each time you save something — a steeper slope means a faster capture pace. Flat stretches are quiet weeks.</>}><VaultGrowth items={items} /></Zoom>
                     </div>
                     <div className="card">
                       <h3>Task rhythm</h3>
                       <div className="m" style={{ color: "var(--ink-soft)", marginBottom: 8 }}>Tasks finished per day — streaks glow.</div>
-                      <Zoom title="Task rhythm" sub="Tasks finished per day — streaks glow."><TaskRhythm doneDates={pulse?.doneDates || []} /></Zoom>
+                      <Zoom title="Task rhythm" sub="Tasks finished per day — streaks glow."
+                        note={<><b>How to read:</b> one bar per day, taller = more tasks finished. Consecutive active days glow as a streak — protect it.</>}><TaskRhythm doneDates={pulse?.doneDates || []} /></Zoom>
                     </div>
                     <div className="card">
                       <h3>How things arrive</h3>
                       <div className="m" style={{ color: "var(--ink-soft)", marginBottom: 8 }}>Your capture mix — typed, pasted, dropped, imported.</div>
-                      <Zoom title="How things arrive" sub="Your capture mix — typed, pasted, dropped, imported."><CaptureSources items={items} importedCount={pulse?.importedCount || 0} /></Zoom>
+                      <Zoom title="How things arrive" sub="Your capture mix — typed, pasted, dropped, imported."
+                        note={<><b>How to read:</b> each bar counts how items entered Vault. Lots of &ldquo;pasted&rdquo; means you collect from elsewhere; &ldquo;typed&rdquo; means original notes.</>}><CaptureSources items={items} importedCount={pulse?.importedCount || 0} /></Zoom>
                     </div>
                   </div>
 

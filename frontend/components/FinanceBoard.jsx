@@ -934,7 +934,8 @@ export default function FinanceBoard() {
           <div className="m" style={{ color: "var(--ink-soft)", marginBottom: 6 }}>
             Spend against each cap — the black tick is the cap, red past it is the overrun.
           </div>
-          <Zoom title="Category bullets" sub="Spend against each cap — the black tick is the cap."><BudgetBullets byCat={fin.budgets?.byCat} spentByCat={spentByCatPeriod} fmt={fmt} /></Zoom>
+          <Zoom title="Category bullets" sub="Spend against each cap — the black tick is the cap."
+            note={<><b>How to read:</b> each bar is a category&rsquo;s spending this period; the black tick marks its cap. A bar stopping short of the tick is under budget — anything painted red past it is the overrun.</>}><BudgetBullets byCat={fin.budgets?.byCat} spentByCat={spentByCatPeriod} fmt={fmt} /></Zoom>
         </div>
       )}
       {(() => {
@@ -948,7 +949,8 @@ export default function FinanceBoard() {
             <div className="m" style={{ color: "var(--ink-soft)", marginBottom: 6 }}>
               Cumulative spend vs the even-pace line to {fmt(+monthly)} — above the dashes means you&rsquo;re ahead of pace.
             </div>
-            <Zoom title="Budget burn" sub="Cumulative spend vs the even-pace line — above the dashes is ahead of pace."><BudgetBurn expenses={fin.expenses} budget={+monthly} fmt={fmt} /></Zoom>
+            <Zoom title="Budget burn" sub="Cumulative spend vs the even-pace line — above the dashes is ahead of pace."
+              note={<><b>How to read:</b> the solid line is everything spent so far this month; the dashed line is the pace that would land exactly on your budget. Riding above the dashes = burning too fast, below = money in hand at month end.</>}><BudgetBurn expenses={fin.expenses} budget={+monthly} fmt={fmt} /></Zoom>
           </div>
         ) : null;
       })()}

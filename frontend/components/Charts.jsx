@@ -901,7 +901,7 @@ export function BudgetBullets({ byCat, spentByCat, fmt }) {
  * popup that re-renders the same chart at reading size (the zoom dialog's
  * CSS raises every chart class's height; width-responsive charts and the
  * measured ones fill it naturally). */
-export function Zoom({ title, sub, children, large }) {
+export function Zoom({ title, sub, children, large, note }) {
   const [open, setOpen] = React.useState(false);
   React.useEffect(() => {
     if (!open) return;
@@ -916,6 +916,7 @@ export function Zoom({ title, sub, children, large }) {
           title="Maximize — see this chart in depth"
           onClick={(e) => { e.stopPropagation(); setOpen(true); }}>⤢</button>
         {children}
+        {note && <div className="chart-note">{note}</div>}
       </div>
       {open && createPortal(
         /* portal to <body>: a glass card's backdrop-filter makes it the
@@ -930,7 +931,10 @@ export function Zoom({ title, sub, children, large }) {
               </div>
               <button className="kbtn" onClick={() => setOpen(false)} aria-label="Close">✕</button>
             </div>
-            <div className="zoom-body">{large || children}</div>
+            <div className="zoom-body">
+              {large || children}
+              {note && <div className="chart-note">{note}</div>}
+            </div>
           </div>
         </div>,
         document.body

@@ -309,6 +309,7 @@ export function ChartExplorer({ cfg: initial, isNew, onSave, onDelete, onClose, 
 
         <Zoom title={cfg.title || src.label}
           sub={`${src.label} · maximized view`}
+          note={<><b>How to read:</b> {src.label.toLowerCase()} bucketed over your chosen range — hover any {cfg.type === "donut" ? "slice" : "bar or point"} for the exact value. Every control above redraws it live, and the table underneath lists each bucket&rsquo;s number.</>}
           large={<LabPlot cfg={cfg} data={data} height={440} big sym={sym} />}>
           <LabPlot cfg={cfg} data={data} height={300} big sym={sym} />
         </Zoom>
