@@ -15,13 +15,15 @@ const MAX_NODES = 500;
 
 export default function Graph3D({ items, query, onOpenTag, onOpenSection }) {
   const wrapRef = useRef(null);
+  const boxRef = useRef(null);         // the bordered canvas box itself
   const fgRef = useRef();
   const [size, setSize] = useState({ w: 0, h: 0 });
   const [showTags, setShowTags] = useState(true);
   const [spin, setSpin] = useState(true);
 
+  /* measure the canvas box directly so WebGL fills it edge to edge */
   useEffect(() => {
-    const el = wrapRef.current;
+    const el = boxRef.current;
     if (!el || typeof ResizeObserver === "undefined") return;
     const ro = new ResizeObserver((es) => {
       const r = es[0].contentRect;
@@ -94,14 +96,14 @@ export default function Graph3D({ items, query, onOpenTag, onOpenSection }) {
         <label className="cp-check g3d-check"><input type="checkbox" checked={spin} onChange={(e) => setSpin(e.target.checked)} /> Slow spin</label>
         <button className="kbtn" onClick={() => fgRef.current?.zoomToFit(700, 50)} title="Frame the whole graph">⤢ Fit</button>
       </div>
-      <div className="g3dcanvas">
+      <div className="g3dcanvas" ref={boxRef}>
         {size.w > 0 && (
           <ForceGraph3D
             ref={fgRef}
             width={size.w}
-            height={Math.max(320, size.h - 74)}
+            height={Math.max(320, size.h)}
             graphData={data}
-            backgroundColor="#F4F7FB"
+            backgroundColor="rgba(0,0,0,0)"
             nodeColor={(n) => n.color}
             nodeOpacity={0.92}
             nodeLabel={(n) => `<div style="font-family:'Public Sans',sans-serif;font-size:12.5px;color:#26313E;background:#fff;border:1px solid #E1E6EE;border-radius:8px;padding:6px 10px;box-shadow:0 6px 16px rgba(30,50,80,.12)">${n.kind === "tag" ? `<b>${n.name}</b> · ${n.count} item${n.count === 1 ? "" : "s"}` : `<b>${n.name}</b> · ${SECTIONS[n.type]?.label || "Item"}`}<br/><span style="color:#7C8698">click: fly close · right-click: open</span></div>`}

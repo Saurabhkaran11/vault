@@ -23,8 +23,27 @@ const Graph3D = dynamic(() => import("./Graph3D"), {
  * ring sizes ("+N" nodes open the rest), labels appear on zoom. The sim
  * throttles once settled and pauses when the tab is hidden. */
 
-const W = 1200, H = 680;
+const W = 1200, BASE_H = 680;
 const TOP_TAGS = 60;
+
+/* Every graph mode fills its card exactly: the viewBox keeps a fixed width
+ * of W but its HEIGHT follows the card's real aspect ratio, so "meet"
+ * scaling never letterboxes — the drawing uses the whole page. */
+function useAspectH(svgRef, deps = []) {
+  const [vbH, setVbH] = useState(BASE_H);
+  useEffect(() => {
+    const el = svgRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver((es) => {
+      const r = es[0].contentRect;
+      if (r.width > 80 && r.height > 80) setVbH(Math.max(430, Math.min(1500, Math.round((W * r.height) / r.width))));
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, deps);
+  return vbH;
+}
 const MAX_PER_HUB = 20;
 const MAX_ITEMS_TOTAL = 360;
 const K_MIN = 0.4, K_MAX = 6;
@@ -38,7 +57,7 @@ const REPULSE = 2200;
 const SPRING = 0.055;
 const HOME_PULL = 0.02;        // hubs drift back toward their layout homes
 
-function layout(items, query) {
+function layout(items, query, H = BASE_H) {
   const q = query.trim().toLowerCase();
   const counts = {};
   items.forEach((i) => i.tags.forEach((t) => { counts[t] = (counts[t] || 0) + 1; }));
@@ -109,11 +128,12 @@ function layout(items, query) {
 export default function GraphView({ items, onOpenTag, onOpenSection }) {
   const [query, setQuery] = useState("");
   const [mode, setMode] = useState("web");   // "web" | "cosmos" | "explorer" | "3d"
-  const g = useMemo(() => layout(items, query), [items, query]);
   const [hover, setHover] = useState(null);
   const [view, setView] = useState({ k: 1, x: 0, y: 0 });
   const [, tick] = useState(0);               // re-render pulse from the sim
   const svgRef = useRef(null);
+  const H = useAspectH(svgRef, [mode]);
+  const g = useMemo(() => layout(items, query, H), [items, query, H]);
   const panRef = useRef(null);
   const suppressClickRef = useRef(null);
   const simRef = useRef({ pos: {}, alpha: 1, drag: null });
@@ -535,6 +555,8 @@ function CosmosGraph({ items, query, onOpenTag, onOpenSection }) {
   const [view, setView] = useState({ k: 1, x: 0, y: 0 });
   const [, tick] = useState(0);
   const svgRef = useRef(null);
+  const H = useAspectH(svgRef);
+  const hRef = useRef(H); hRef.current = H;
   const panRef = useRef(null);
   const suppressClickRef = useRef(null);
   const simRef = useRef({ pos: {}, alpha: 1, drag: null });
@@ -554,7 +576,7 @@ function CosmosGraph({ items, query, onOpenTag, onOpenSection }) {
     });
     Object.keys(pos).forEach((k) => { if (!want.has(k)) delete pos[k]; });
     simRef.current.alpha = 1;
-  }, [g]);
+  }, [g, H]);
 
   /* the flat simulation: repulsion + link springs + gentle centering */
   useEffect(() => {
@@ -591,15 +613,16 @@ function CosmosGraph({ items, query, onOpenTag, onOpenSection }) {
         p.vx += dx * fs; p.vy += dy * fs;
         q2.vx -= dx * fs; q2.vy -= dy * fs;
       });
+      const HH = hRef.current;
       keys.forEach((k) => {
         const p = pos[k];
         if (sim.drag && sim.drag.key === k) { p.vx = 0; p.vy = 0; return; }
         p.vx += (W / 2 - p.x) * f.center * a;
-        p.vy += (H / 2 - p.y) * f.center * a;
+        p.vy += (HH / 2 - p.y) * f.center * a;
         p.x += (p.vx *= C_DAMP);
         p.y += (p.vy *= C_DAMP);
         p.x = Math.max(-W * 0.3, Math.min(W * 1.3, p.x));
-        p.y = Math.max(-H * 0.3, Math.min(H * 1.3, p.y));
+        p.y = Math.max(-HH * 0.3, Math.min(HH * 1.3, p.y));
       });
       sim.alpha = Math.max(C_AFLOOR, sim.alpha * C_ADECAY);
       tick((t) => t + 1);

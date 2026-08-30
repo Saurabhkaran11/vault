@@ -11,7 +11,24 @@ import { SECTIONS } from "@/lib/seed";
  * selected node's properties with actions. A "+N" badge counts the
  * connections a node hasn't revealed yet. */
 
-const W = 1200, H = 680;
+const W = 1200, BASE_H = 680;
+
+/* viewBox height follows the card's real aspect so the canvas fills the page */
+function useAspectH(svgRef) {
+  const [vbH, setVbH] = useState(BASE_H);
+  useEffect(() => {
+    const el = svgRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver((es) => {
+      const r = es[0].contentRect;
+      if (r.width > 80 && r.height > 80) setVbH(Math.max(430, Math.min(1500, Math.round((W * r.height) / r.width))));
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  return vbH;
+}
 const K_MIN = 0.4, K_MAX = 5;
 const DAMP = 0.85, AFLOOR = 0.02, ADECAY = 0.994;
 
@@ -59,6 +76,8 @@ export default function GraphExplorer({ items, onOpenTag, onOpenSection }) {
   const [view, setView] = useState({ k: 1, x: 0, y: 0 });
   const [, tick] = useState(0);
   const svgRef = useRef(null);
+  const H = useAspectH(svgRef);
+  const hRef = useRef(H); hRef.current = H;
   const panRef = useRef(null);
   const suppressClickRef = useRef(null);
   const simRef = useRef({ pos: {}, alpha: 1, drag: null });
@@ -127,15 +146,16 @@ export default function GraphExplorer({ items, onOpenTag, onOpenSection }) {
         p.vx += dx * f; p.vy += dy * f;
         q.vx -= dx * f; q.vy -= dy * f;
       });
+      const HH = hRef.current;
       keys.forEach((k) => {
         const p = pos[k];
         if (sim.drag && sim.drag.key === k) { p.vx = 0; p.vy = 0; return; }
         p.vx += (W / 2 - p.x) * 0.008 * a;
-        p.vy += (H / 2 - p.y) * 0.008 * a;
+        p.vy += (HH / 2 - p.y) * 0.008 * a;
         p.x += (p.vx *= DAMP);
         p.y += (p.vy *= DAMP);
         p.x = Math.max(-W * 0.25, Math.min(W * 1.25, p.x));
-        p.y = Math.max(-H * 0.25, Math.min(H * 1.25, p.y));
+        p.y = Math.max(-HH * 0.25, Math.min(HH * 1.25, p.y));
       });
       sim.alpha = Math.max(AFLOOR, sim.alpha * ADECAY);
       tick((t) => t + 1);
