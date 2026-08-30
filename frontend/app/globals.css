@@ -1002,7 +1002,8 @@ img.fpreview{height:auto}
 
 /* long lists scroll inside their card instead of stretching the page;
    totals and headers sit OUTSIDE the scroll area so they never move */
-.scrolllist{max-height:440px; overflow-y:auto; padding-right:4px; overscroll-behavior:contain}
+.scrolllist{max-height:440px; overflow-y:auto; padding-right:4px; overscroll-behavior:contain;
+  mask-image:linear-gradient(#000 calc(100% - 22px), transparent); -webkit-mask-image:linear-gradient(#000 calc(100% - 22px), transparent)}
 .scrolllist-tall{max-height:62vh}
 .scrolllist-short{max-height:240px}
 .kanban .kcol{max-height:480px; overflow-y:auto; overscroll-behavior:contain}
@@ -2061,3 +2062,11 @@ button:disabled{opacity:.5; cursor:not-allowed}
   /* tags: the create input lives inside the pill */
   .bar.featbar input{flex:1 1 100%; min-width:0}
 }
+
+/* graph labels get a page-coloured halo so colliding labels stay readable */
+.gtext{paint-order:stroke; stroke:var(--bg); stroke-width:3px; stroke-linejoin:round}
+/* budget hero heading and its stat never collide */
+.bhero-top{display:flex; align-items:baseline; justify-content:space-between; flex-wrap:wrap; gap:4px 14px}
+/* truncated placeholders end in an ellipsis, never mid-letter */
+input::placeholder{text-overflow:ellipsis}
+input{text-overflow:ellipsis}

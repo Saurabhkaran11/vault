@@ -661,9 +661,18 @@ export function MoneyFlow({ incomes, expenses, fmt }) {
         {S.map((s) => (
           <g key={s.n}>
             <rect x={x0} y={s.y} width={nodeW} height={s.h} rx="4" fill="var(--chart)" />
-            <text x={x0} y={s.y - 7} fontFamily="IBM Plex Mono" fontSize="11.5" fontWeight="600" fill="var(--ink)">
-              {clip(s.n, narrow ? 12 : 22)} · {fmt(Math.round(s.v))}
-            </text>
+            {narrow ? (
+              /* phones: stack name over amount in a short column so the
+                 label can never run under the category nodes */
+              <>
+                <text className="gtext" x={x0} y={s.y - 19} fontFamily="IBM Plex Mono" fontSize="10" fontWeight="600" fill="var(--ink)">{clip(s.n, 10)}</text>
+                <text className="gtext" x={x0} y={s.y - 7} fontFamily="IBM Plex Mono" fontSize="10" fill="var(--ink-soft)">{fmt(Math.round(s.v))}</text>
+              </>
+            ) : (
+              <text className="gtext" x={x0} y={s.y - 7} fontFamily="IBM Plex Mono" fontSize="11.5" fontWeight="600" fill="var(--ink)">
+                {clip(s.n, 22)} · {fmt(Math.round(s.v))}
+              </text>
+            )}
           </g>
         ))}
         {M.map((m) => (

@@ -420,7 +420,7 @@ export default function GraphView({ items, onOpenTag, onOpenSection }) {
                 onClick={onNodeClick(key, () => onOpenTag(t))}>
                 <circle cx={h.x} cy={h.y} r={24} fill="var(--violet)" stroke="var(--panel)" strokeWidth="3" />
                 <text x={h.x} y={h.y + 4} textAnchor="middle" fontSize="12" fontFamily="IBM Plex Mono" fontWeight="600" fill="#fff" style={{ pointerEvents: "none" }}>{g.counts[t]}</text>
-                <text x={h.x} y={h.y - 33} textAnchor="middle" fontSize="16" fontFamily="Fraunces" fontWeight="650" fill="var(--ink)" style={{ pointerEvents: "none" }}>#{t}</text>
+                <text className="gtext" x={h.x} y={h.y - 33} textAnchor="middle" fontSize="16" fontFamily="Fraunces" fontWeight="650" fill="var(--ink)" style={{ pointerEvents: "none" }}>#{t}</text>
               </g>
             );
           })}
@@ -441,7 +441,7 @@ export default function GraphView({ items, onOpenTag, onOpenSection }) {
                 <title>{`${g.untagged} untagged item${g.untagged === 1 ? "" : "s"} — add a #tag to file them`}</title>
                 <circle cx={h.x} cy={h.y} r={24} fill="var(--ink-soft)" stroke="var(--panel)" strokeWidth="3" strokeDasharray="4 4" />
                 <text x={h.x} y={h.y + 4} textAnchor="middle" fontSize="12" fontFamily="IBM Plex Mono" fontWeight="600" fill="#fff" style={{ pointerEvents: "none" }}>{g.untagged}</text>
-                <text x={h.x} y={h.y - 33} textAnchor="middle" fontSize="16" fontFamily="Fraunces" fontWeight="650" fill="var(--ink-soft)" style={{ pointerEvents: "none" }}>Untagged</text>
+                <text className="gtext" x={h.x} y={h.y - 33} textAnchor="middle" fontSize="16" fontFamily="Fraunces" fontWeight="650" fill="var(--ink-soft)" style={{ pointerEvents: "none" }}>Untagged</text>
               </g>
             );
           })()}
@@ -470,7 +470,7 @@ export default function GraphView({ items, onOpenTag, onOpenSection }) {
                 <circle cx={p.x} cy={p.y} r={10} fill={s.color} stroke="var(--panel)" strokeWidth="2.5" />
                 <text x={p.x} y={p.y + 3.5} textAnchor="middle" fontSize="9" fill="#fff" style={{ pointerEvents: "none" }}>{s.icon}</text>
                 {(showItemLabels || hover === n.key) && (
-                  <text x={p.x} y={p.y + 24} textAnchor="middle" fontSize={13 / Math.max(1, view.k * 0.8)} fontFamily="Public Sans"
+                  <text className="gtext" x={p.x} y={p.y + 24} textAnchor="middle" fontSize={13 / Math.max(1, view.k * 0.8)} fontFamily="Public Sans"
                     fill={hover === n.key ? "var(--ink)" : "var(--ink-soft)"} fontWeight={hover === n.key ? 600 : 400}
                     style={{ pointerEvents: "none" }}>
                     {label.length > 22 ? label.slice(0, 20) + "…" : label}
@@ -840,7 +840,7 @@ function CosmosGraph({ items, query, onOpenTag, onOpenSection }) {
                   opacity={isTag ? 0.85 : 1}
                   stroke={focus === n.key ? "var(--ink)" : "var(--panel)"} strokeWidth={(focus === n.key ? 2.5 : 1.8) / Math.max(1, view.k * 0.7)} />
                 {lop > 0.02 && (
-                  <text x={p.x} y={p.y + r + 13 / Math.max(1, view.k * 0.8)} textAnchor="middle"
+                  <text className="gtext" x={p.x} y={p.y + r + 13 / Math.max(1, view.k * 0.8)} textAnchor="middle"
                     fontSize={(isTag ? 12.5 : 11.5) / Math.max(1, view.k * 0.8)}
                     fontFamily={isTag ? "IBM Plex Mono" : "Public Sans"}
                     fontWeight={hover === n.key ? 600 : isTag ? 600 : 400}
