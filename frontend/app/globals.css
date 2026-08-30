@@ -1689,6 +1689,27 @@ button:disabled{opacity:.5; cursor:not-allowed}
 .merchant-row.on{background:var(--moss-soft)}
 .gmode button.on{background:var(--moss); color:#fff; border-color:var(--moss)}
 
+/* ---------- Cosmos view (Obsidian-style constellation) */
+.cosmoswrap{flex:1; min-height:0; display:flex; flex-direction:column; position:relative}
+.cosmoswrap svg{flex:1; min-height:0}
+.cosmosbar{display:flex; align-items:center; gap:10px; padding:4px 8px 8px; flex-wrap:wrap}
+.cosmosfocus{display:inline-flex; align-items:center; gap:7px; font-size:10.5px; color:var(--ink); background:var(--field); border:1px solid var(--line); border-radius:20px; padding:3px 6px 3px 12px}
+.cf-depth{display:inline-flex; gap:2px}
+.cf-depth button{border:1px solid var(--line); background:var(--panel); color:var(--ink-soft); width:20px; height:20px; border-radius:6px; cursor:pointer; font-size:10.5px; line-height:1; padding:0}
+.cf-depth button.on{background:var(--violet); border-color:var(--violet); color:#fff}
+.cf-clear{border:none; background:none; color:var(--ink-soft); cursor:pointer; font-size:12px; padding:2px 4px}
+.cf-clear:hover{color:var(--red)}
+.cosmos-gear.on{background:var(--moss-soft); border-color:var(--moss); color:var(--moss)}
+.cosmos-panel{position:absolute; right:12px; top:46px; z-index:6; width:212px; background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:12px 14px; box-shadow:0 12px 32px rgba(0,0,0,0.12); display:flex; flex-direction:column; gap:8px}
+.vault.glass .cosmos-panel{background:rgba(255,255,255,0.78); backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px)}
+.cp-sec{font-size:9px; letter-spacing:1.5px; color:var(--ink-soft); margin-top:4px}
+.cp-sec:first-child{margin-top:0}
+.cp-check{display:flex; align-items:center; gap:8px; font-size:12.5px; color:var(--ink); cursor:pointer}
+.cp-check input{accent-color:var(--moss)}
+.cp-slide{display:flex; flex-direction:column; gap:3px; font-size:11.5px; color:var(--ink)}
+.cp-slide input[type=range]{width:100%; accent-color:var(--moss); cursor:pointer; margin:0}
+@media (max-width:700px){.cosmos-panel{right:6px; width:186px}}
+
 /* ================================================================
    GLASS UI — frosted surfaces over a soft ambient wash. A Settings
    toggle (on by default); the flat look remains underneath it. */

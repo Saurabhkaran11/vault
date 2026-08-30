@@ -317,17 +317,24 @@ export default function GraphView({ items, onOpenTag, onOpenSection }) {
         <span className="gzoom gmode" role="group" aria-label="Graph view mode">
           <button className={mode === "web" ? "on" : ""} onClick={() => setMode("web")}
             title="The living force-directed web">Web</button>
+          <button className={mode === "cosmos" ? "on" : ""} onClick={() => setMode("cosmos")}
+            title="Obsidian-style constellation — every item is a star, sized by its connections">Cosmos</button>
           <button className={mode === "orbit" ? "on" : ""} onClick={() => setMode("orbit")}
             title="Items orbit their tags — neglected ones drift to the outer rings">Orbit</button>
         </span>
+        {mode !== "cosmos" && (
         <span className="gzoom" role="group" aria-label="Zoom">
           <button onClick={() => zoomCenter(1 / 1.3)} title="Zoom out" aria-label="Zoom out">−</button>
           <span className="mono">{Math.round(view.k * 100)}%</span>
           <button onClick={() => zoomCenter(1.3)} title="Zoom in" aria-label="Zoom in">+</button>
           <button onClick={() => { setView({ k: 1, x: 0, y: 0 }); seedPositions(true); tick((t) => t + 1); }} title="Reset view & re-settle" aria-label="Reset view">⤢</button>
         </span>
-        <span className="graphhint mono">LIVE · SCROLL TO ZOOM · DRAG NODES OR BACKGROUND</span>
+        )}
+        {mode !== "cosmos" && <span className="graphhint mono">LIVE · SCROLL TO ZOOM · DRAG NODES OR BACKGROUND</span>}
       </div>
+      {mode === "cosmos" ? (
+        <CosmosGraph items={items} query={query} onOpenTag={onOpenTag} onOpenSection={onOpenSection} />
+      ) : (
       <svg ref={svgRef} viewBox={`0 0 ${W} ${H}`} role="img"
         aria-label="Live force-directed map of your items grouped by project tag"
         preserveAspectRatio="xMidYMid meet"
@@ -419,6 +426,7 @@ export default function GraphView({ items, onOpenTag, onOpenSection }) {
           })}
         </g>
       </svg>
+      )}
     </div>
   );
 }
@@ -505,5 +513,377 @@ function OrbitLayer({ items, onOpenTag, onOpenSection, k }) {
         inner ring = touched this fortnight · outer ring = drifting
       </text>
     </g>
+  );
+}
+
+/* ---------- Cosmos view: the Obsidian-style constellation.
+ *  - FLAT graph: every item is a node (no hub-and-spoke); item↔item links
+ *    are the structure, tags are optional satellite nodes
+ *  - node size = connection count, labels fade in with zoom (tunable)
+ *  - hover spotlights a node and its neighborhood, the rest recedes
+ *  - double-click focuses a LOCAL graph (neighbors within a depth you pick)
+ *  - a tune panel exposes the forces & filters, like Obsidian's settings */
+
+const CK_MIN = 0.35, CK_MAX = 6;
+const C_DAMP = 0.85, C_AFLOOR = 0.02, C_ADECAY = 0.994;
+const C_MAX_ITEMS = 400;
+
+function cosmosModel(items, query, { showTags, showOrphans, focus, depth }) {
+  const q = query.trim().toLowerCase();
+  let pool = items.filter((i) => !i.deleted);
+  if (q) pool = pool.filter((i) => (i.alias || i.title || "").toLowerCase().includes(q) || i.tags?.some((t) => t.includes(q)));
+  const capped = pool.length > C_MAX_ITEMS;
+  if (capped) pool = pool.slice(0, C_MAX_ITEMS);
+  const ids = new Set(pool.map((i) => i.id));
+
+  const nodes = [];                       // {key, kind:'item'|'tag', it?, tag?, count?}
+  const edges = [];                       // {a, b, kind:'link'|'tag'}
+  const adj = {};                         // key -> Set(keys)
+  const touch = (a, b) => { (adj[a] = adj[a] || new Set()).add(b); (adj[b] = adj[b] || new Set()).add(a); };
+
+  pool.forEach((it) => nodes.push({ key: `i${it.id}`, kind: "item", it }));
+  const seen = new Set();
+  pool.forEach((it) => (it.links || []).forEach((id) => {
+    if (!ids.has(id)) return;
+    const k = it.id < id ? `${it.id}|${id}` : `${id}|${it.id}`;
+    if (seen.has(k)) return;
+    seen.add(k);
+    edges.push({ a: `i${it.id}`, b: `i${id}`, kind: "link" });
+    touch(`i${it.id}`, `i${id}`);
+  }));
+  if (showTags) {
+    const counts = {};
+    pool.forEach((it) => it.tags?.forEach((t) => { counts[t] = (counts[t] || 0) + 1; }));
+    Object.entries(counts).forEach(([t, count]) => nodes.push({ key: `t${t}`, kind: "tag", tag: t, count }));
+    pool.forEach((it) => it.tags?.forEach((t) => { edges.push({ a: `i${it.id}`, b: `t${t}`, kind: "tag" }); touch(`i${it.id}`, `t${t}`); }));
+  }
+
+  let keep = null;
+  if (focus) {
+    /* local graph: BFS out to `depth` hops from the focused node */
+    keep = new Set([focus]);
+    let frontier = [focus];
+    for (let d = 0; d < depth; d++) {
+      const next = [];
+      frontier.forEach((k) => (adj[k] || []).forEach((nb) => { if (!keep.has(nb)) { keep.add(nb); next.push(nb); } }));
+      frontier = next;
+    }
+  }
+
+  const deg = {};
+  edges.forEach((e) => { deg[e.a] = (deg[e.a] || 0) + 1; deg[e.b] = (deg[e.b] || 0) + 1; });
+
+  let shown = nodes;
+  if (keep) shown = nodes.filter((n) => keep.has(n.key));
+  else if (!showOrphans) shown = nodes.filter((n) => deg[n.key]);
+  const shownKeys = new Set(shown.map((n) => n.key));
+  const shownEdges = edges.filter((e) => shownKeys.has(e.a) && shownKeys.has(e.b));
+
+  return { nodes: shown, edges: shownEdges, deg, capped, totalItems: pool.length, hidden: nodes.length - shown.length };
+}
+
+function CosmosGraph({ items, query, onOpenTag, onOpenSection }) {
+  const [showTags, setShowTags] = useState(true);
+  const [showOrphans, setShowOrphans] = useState(true);
+  const [panel, setPanel] = useState(false);
+  const [focus, setFocus] = useState(null);         // node key for local graph
+  const [depth, setDepth] = useState(1);
+  const [forces, setForces] = useState({ repel: 2400, dist: 1.35, center: 0.01, labelK: 0.9 });
+  const forcesRef = useRef(forces); forcesRef.current = forces;
+
+  const g = useMemo(() => cosmosModel(items, query, { showTags, showOrphans, focus, depth }),
+    [items, query, showTags, showOrphans, focus, depth]);
+
+  /* if a filter change removed the focused node, drop the focus */
+  useEffect(() => {
+    if (focus && !g.nodes.some((n) => n.key === focus)) setFocus(null);
+  }, [g, focus]);
+
+  const [hover, setHover] = useState(null);
+  const [view, setView] = useState({ k: 1, x: 0, y: 0 });
+  const [, tick] = useState(0);
+  const svgRef = useRef(null);
+  const panRef = useRef(null);
+  const suppressClickRef = useRef(null);
+  const simRef = useRef({ pos: {}, alpha: 1, drag: null });
+  const viewRef = useRef(view); viewRef.current = view;
+  const gRef = useRef(g); gRef.current = g;
+
+  /* seed new nodes on a golden-angle spiral so the sim untangles fast */
+  useEffect(() => {
+    const pos = simRef.current.pos;
+    const want = new Set();
+    g.nodes.forEach((n, i) => {
+      want.add(n.key);
+      if (!pos[n.key]) {
+        const ang = i * 2.399963, r = 26 * Math.sqrt(i + 1);
+        pos[n.key] = { x: W / 2 + Math.cos(ang) * r, y: H / 2 + Math.sin(ang) * r * 0.7, vx: 0, vy: 0 };
+      }
+    });
+    Object.keys(pos).forEach((k) => { if (!want.has(k)) delete pos[k]; });
+    simRef.current.alpha = 1;
+  }, [g]);
+
+  /* the flat simulation: repulsion + link springs + gentle centering */
+  useEffect(() => {
+    let raf, frame = 0;
+    const step = () => {
+      raf = requestAnimationFrame(step);
+      if (document.hidden) return;
+      const sim = simRef.current, pos = sim.pos, f = forcesRef.current, gg = gRef.current;
+      frame++;
+      if (sim.alpha <= C_AFLOOR * 1.5 && frame % 2) return;
+      const a = sim.alpha;
+      const keys = Object.keys(pos);
+      for (let i = 0; i < keys.length; i++) {
+        for (let j = i + 1; j < keys.length; j++) {
+          const p = pos[keys[i]], q2 = pos[keys[j]];
+          let dx = p.x - q2.x, dy = p.y - q2.y;
+          let d2 = dx * dx + dy * dy || 1;
+          if (d2 > 96100) continue;                  // cutoff: > 310px apart
+          const d = Math.sqrt(d2);
+          const fr = Math.min(7, f.repel / d2) * a;
+          dx /= d; dy /= d;
+          p.vx += dx * fr; p.vy += dy * fr;
+          q2.vx -= dx * fr; q2.vy -= dy * fr;
+        }
+      }
+      gg.edges.forEach((e) => {
+        const p = pos[e.a], q2 = pos[e.b];
+        if (!p || !q2) return;
+        const rest = (e.kind === "link" ? 82 : 112) * f.dist;
+        let dx = q2.x - p.x, dy = q2.y - p.y;
+        const d = Math.sqrt(dx * dx + dy * dy) || 1;
+        const fs = (d - rest) * 0.055 * a;
+        dx /= d; dy /= d;
+        p.vx += dx * fs; p.vy += dy * fs;
+        q2.vx -= dx * fs; q2.vy -= dy * fs;
+      });
+      keys.forEach((k) => {
+        const p = pos[k];
+        if (sim.drag && sim.drag.key === k) { p.vx = 0; p.vy = 0; return; }
+        p.vx += (W / 2 - p.x) * f.center * a;
+        p.vy += (H / 2 - p.y) * f.center * a;
+        p.x += (p.vx *= C_DAMP);
+        p.y += (p.vy *= C_DAMP);
+        p.x = Math.max(-W * 0.3, Math.min(W * 1.3, p.x));
+        p.y = Math.max(-H * 0.3, Math.min(H * 1.3, p.y));
+      });
+      sim.alpha = Math.max(C_AFLOOR, sim.alpha * C_ADECAY);
+      tick((t) => t + 1);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
+  /* pan / zoom / drag — same feel as the web view, self-contained */
+  const toSvg = (cx, cy) => {
+    const rect = svgRef.current.getBoundingClientRect();
+    const scale = Math.min(rect.width / W, rect.height / H);
+    const offX = (rect.width - W * scale) / 2, offY = (rect.height - H * scale) / 2;
+    return { x: (cx - rect.left - offX) / scale, y: (cy - rect.top - offY) / scale };
+  };
+  const toContent = (cx, cy) => {
+    const v = viewRef.current, p = toSvg(cx, cy);
+    return { x: (p.x - v.x) / v.k, y: (p.y - v.y) / v.k };
+  };
+  const zoomAt = (cx, cy, factor) => {
+    setView((v) => {
+      const k = Math.min(CK_MAX, Math.max(CK_MIN, v.k * factor));
+      if (k === v.k) return v;
+      const p = toSvg(cx, cy);
+      return { k, x: p.x - k * ((p.x - v.x) / v.k), y: p.y - k * ((p.y - v.y) / v.k) };
+    });
+  };
+  const zoomCenter = (factor) => {
+    const rect = svgRef.current.getBoundingClientRect();
+    zoomAt(rect.left + rect.width / 2, rect.top + rect.height / 2, factor);
+  };
+  useEffect(() => {
+    const el = svgRef.current;
+    if (!el) return;
+    const onWheel = (e) => { e.preventDefault(); zoomAt(e.clientX, e.clientY, e.deltaY < 0 ? 1.15 : 1 / 1.15); };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const onNodeDown = (key) => (e) => {
+    e.stopPropagation(); e.preventDefault();
+    const p = toContent(e.clientX, e.clientY);
+    simRef.current.drag = { key, moved: false, sx: p.x, sy: p.y };
+    simRef.current.alpha = Math.max(simRef.current.alpha, 0.6);
+  };
+  /* single-click opens, double-click focuses — so the single click waits a
+     beat and a double-click cancels it (otherwise dblclick navigates away
+     mid-gesture: browsers fire click,click,dblclick) */
+  const clickTimer = useRef(null);
+  useEffect(() => () => clearTimeout(clickTimer.current), []);
+  const onNodeClick = (key, fn) => () => {
+    if (suppressClickRef.current === key) { suppressClickRef.current = null; return; }
+    clearTimeout(clickTimer.current);
+    clickTimer.current = setTimeout(fn, 260);
+  };
+  const onNodeFocus = (key) => (e) => {
+    e.stopPropagation();
+    clearTimeout(clickTimer.current);
+    setFocus(key); setDepth(1);
+  };
+  const onPanStart = (e) => {
+    e.preventDefault();
+    try { e.target.setPointerCapture?.(e.pointerId); } catch { /* synthetic pointer */ }
+    const start = toSvg(e.clientX, e.clientY);
+    panRef.current = { sx: start.x, sy: start.y, vx: view.x, vy: view.y };
+  };
+  const onMove = (e) => {
+    const sim = simRef.current;
+    if (sim.drag) {
+      const p = toContent(e.clientX, e.clientY);
+      if (Math.abs(p.x - sim.drag.sx) + Math.abs(p.y - sim.drag.sy) > 3 / viewRef.current.k) sim.drag.moved = true;
+      const node = sim.pos[sim.drag.key];
+      if (node) { node.x = p.x; node.y = p.y; node.vx = 0; node.vy = 0; }
+      sim.alpha = Math.max(sim.alpha, 0.7);
+      return;
+    }
+    const pan = panRef.current;
+    if (!pan) return;
+    const p = toSvg(e.clientX, e.clientY);
+    setView((v) => ({ ...v, x: pan.vx + (p.x - pan.sx), y: pan.vy + (p.y - pan.sy) }));
+  };
+  const onUp = () => {
+    const sim = simRef.current;
+    if (sim.drag) {
+      if (sim.drag.moved) {
+        const key = sim.drag.key;
+        suppressClickRef.current = key;
+        setTimeout(() => { if (suppressClickRef.current === key) suppressClickRef.current = null; }, 150);
+      }
+      sim.drag = null;
+      sim.alpha = Math.max(sim.alpha, 0.35);
+    }
+    panRef.current = null;
+  };
+
+  const connected = useMemo(() => {
+    if (!hover) return null;
+    const set = new Set([hover]);
+    g.edges.forEach((e) => { if (e.a === hover) set.add(e.b); if (e.b === hover) set.add(e.a); });
+    return set;
+  }, [hover, g.edges]);
+  const dim = (key) => connected && !connected.has(key);
+
+  const pos = simRef.current.pos;
+  /* Obsidian-style label fade: fully in a bit past the threshold */
+  const labelOp = Math.max(0, Math.min(1, (view.k - forces.labelK + 0.3) / 0.45));
+  const focusNode = focus && g.nodes.find((n) => n.key === focus);
+  const linkCount = g.edges.filter((e) => e.kind === "link").length;
+
+  return (
+    <div className="cosmoswrap">
+      <div className="cosmosbar">
+        <span className="graphstats mono">
+          {g.totalItems} ITEMS · {linkCount} LINKS{g.capped ? " · CAPPED" : ""}
+          {!focus && g.hidden > 0 ? ` · ${g.hidden} ORPHANS HIDDEN` : ""}
+        </span>
+        {focusNode && (
+          <span className="cosmosfocus mono">
+            ◎ {(focusNode.kind === "tag" ? `#${focusNode.tag}` : (focusNode.it.alias || focusNode.it.title)).slice(0, 24)}
+            <span className="cf-depth" role="group" aria-label="Focus depth">
+              {[1, 2, 3].map((d) => (
+                <button key={d} className={depth === d ? "on" : ""} onClick={() => setDepth(d)} title={`${d} hop${d > 1 ? "s" : ""} out`}>{d}</button>
+              ))}
+            </span>
+            <button className="cf-clear" onClick={() => setFocus(null)} aria-label="Clear focus">✕</button>
+          </span>
+        )}
+        <span style={{ flex: 1 }} />
+        <span className="gzoom" role="group" aria-label="Zoom">
+          <button onClick={() => zoomCenter(1 / 1.3)} aria-label="Zoom out">−</button>
+          <span className="mono">{Math.round(view.k * 100)}%</span>
+          <button onClick={() => zoomCenter(1.3)} aria-label="Zoom in">+</button>
+        </span>
+        <button className={`kbtn cosmos-gear ${panel ? "on" : ""}`} onClick={() => setPanel((p) => !p)}
+          aria-expanded={panel} title="Filters and forces — tune how the cosmos behaves">⚙ Tune</button>
+      </div>
+
+      {panel && (
+        <div className="cosmos-panel">
+          <div className="cp-sec mono">FILTERS</div>
+          <label className="cp-check"><input type="checkbox" checked={showTags} onChange={(e) => setShowTags(e.target.checked)} /> Tag nodes</label>
+          <label className="cp-check"><input type="checkbox" checked={showOrphans} onChange={(e) => setShowOrphans(e.target.checked)} /> Orphans (no links)</label>
+          <div className="cp-sec mono">FORCES</div>
+          <label className="cp-slide">Repel<input type="range" min="400" max="3200" step="50" value={forces.repel}
+            onChange={(e) => { setForces((f) => ({ ...f, repel: +e.target.value })); simRef.current.alpha = Math.max(simRef.current.alpha, 0.5); }} /></label>
+          <label className="cp-slide">Link distance<input type="range" min="0.5" max="1.9" step="0.05" value={forces.dist}
+            onChange={(e) => { setForces((f) => ({ ...f, dist: +e.target.value })); simRef.current.alpha = Math.max(simRef.current.alpha, 0.5); }} /></label>
+          <label className="cp-slide">Centre pull<input type="range" min="0" max="0.05" step="0.002" value={forces.center}
+            onChange={(e) => { setForces((f) => ({ ...f, center: +e.target.value })); simRef.current.alpha = Math.max(simRef.current.alpha, 0.5); }} /></label>
+          <div className="cp-sec mono">DISPLAY</div>
+          <label className="cp-slide">Label fade<input type="range" min="0.3" max="2.2" step="0.05" value={forces.labelK}
+            onChange={(e) => setForces((f) => ({ ...f, labelK: +e.target.value }))} /></label>
+        </div>
+      )}
+
+      <svg ref={svgRef} viewBox={`0 0 ${W} ${H}`} role="img"
+        aria-label="Constellation of every item, linked items drawn together"
+        preserveAspectRatio="xMidYMid meet"
+        style={{ touchAction: "none", cursor: panRef.current ? "grabbing" : "grab" }}
+        onPointerDown={onPanStart} onPointerMove={onMove}
+        onPointerUp={onUp} onPointerLeave={onUp}>
+        <g transform={`translate(${view.x} ${view.y}) scale(${view.k})`}>
+          {g.edges.map((e, i) => {
+            const a = pos[e.a], b = pos[e.b];
+            if (!a || !b) return null;
+            const lit = connected && connected.has(e.a) && connected.has(e.b) && (e.a === hover || e.b === hover);
+            return (
+              <line key={i} x1={a.x} y1={a.y} x2={b.x} y2={b.y}
+                stroke={lit ? "var(--ink-soft)" : e.kind === "link" ? "var(--gold)" : "var(--line)"}
+                strokeDasharray={e.kind === "link" ? "none" : "3 5"}
+                strokeWidth={(lit ? 2.4 : e.kind === "link" ? 1.8 : 1.2) / view.k}
+                opacity={connected && !lit ? 0.07 : e.kind === "link" ? 0.9 : 0.7} />
+            );
+          })}
+          {g.nodes.map((n) => {
+            const p = pos[n.key];
+            if (!p) return null;
+            const d = g.deg[n.key] || 0;
+            const isTag = n.kind === "tag";
+            const r = isTag ? 6 + Math.min(11, Math.sqrt(n.count) * 2.4) : 4.5 + Math.min(13, Math.sqrt(d) * 3);
+            const color = isTag ? "var(--violet)" : (SECTIONS[n.it.type]?.color || "var(--ink-soft)");
+            const label = isTag ? `#${n.tag}` : (n.it.alias || n.it.title);
+            const lop = hover === n.key || (connected && connected.has(n.key)) ? 1 : labelOp;
+            return (
+              <g key={n.key} className="gnode gdraggable" opacity={dim(n.key) ? 0.1 : 1}
+                onMouseEnter={() => setHover(n.key)} onMouseLeave={() => setHover(null)}
+                onPointerDown={onNodeDown(n.key)}
+                onDoubleClick={onNodeFocus(n.key)}
+                onClick={onNodeClick(n.key, () => (isTag ? onOpenTag(n.tag) : onOpenSection(n.it.type)))}>
+                <title>{isTag
+                  ? `#${n.tag} — ${n.count} item${n.count === 1 ? "" : "s"} · click to open, double-click to focus`
+                  : `${SECTIONS[n.it.type]?.label || "Item"}: ${n.it.title} · ${d} connection${d === 1 ? "" : "s"} · double-click to focus`}</title>
+                {(hover === n.key || focus === n.key) && (
+                  <circle cx={p.x} cy={p.y} r={r + 7} fill={color} opacity="0.18" style={{ pointerEvents: "none" }} />
+                )}
+                <circle cx={p.x} cy={p.y} r={r} fill={color}
+                  opacity={isTag ? 0.85 : 1}
+                  stroke={focus === n.key ? "var(--ink)" : "var(--panel)"} strokeWidth={(focus === n.key ? 2.5 : 1.8) / Math.max(1, view.k * 0.7)} />
+                {lop > 0.02 && (
+                  <text x={p.x} y={p.y + r + 13 / Math.max(1, view.k * 0.8)} textAnchor="middle"
+                    fontSize={(isTag ? 12.5 : 11.5) / Math.max(1, view.k * 0.8)}
+                    fontFamily={isTag ? "IBM Plex Mono" : "Public Sans"}
+                    fontWeight={hover === n.key ? 600 : isTag ? 600 : 400}
+                    fill={hover === n.key ? "var(--ink)" : "var(--ink-soft)"}
+                    opacity={lop} style={{ pointerEvents: "none" }}>
+                    {label.length > 24 ? label.slice(0, 22) + "…" : label}
+                  </text>
+                )}
+              </g>
+            );
+          })}
+        </g>
+        <text x={W - 8} y={H - 10} textAnchor="end" fontSize="11" fontFamily="IBM Plex Mono" fill="var(--ink-soft)">
+          size = connections · solid = direct link · dashed = shared tag · double-click any star to focus its neighborhood
+        </text>
+      </svg>
+    </div>
   );
 }
