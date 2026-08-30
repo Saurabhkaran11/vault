@@ -660,7 +660,12 @@ img.fpreview{height:auto}
 .doctabs button.on .tabbadge{background:#fff; color:var(--stamp)}
 
 /* ---------- To-dos, simplified: quick add + smart sections */
-.todosimple{max-width:720px; display:flex; flex-direction:column; gap:14px}
+/* Tasks own the whole page: no width cap, and the open sections lay out
+   as a responsive grid of equal-height cards (Overdue · Today · Upcoming ·
+   Someday side by side on wide screens). */
+.todosimple{display:flex; flex-direction:column; gap:14px}
+.tsecgrid{display:grid; grid-template-columns:repeat(auto-fit, minmax(380px, 1fr)); gap:14px}
+@media (max-width:860px){.tsecgrid{grid-template-columns:minmax(0,1fr)}}
 .tquick{display:flex; align-items:center; gap:8px; background:var(--panel); border:1.5px solid var(--moss); border-radius:12px; padding:10px 12px}
 .tquick-input{flex:1; min-width:0; border:none; background:transparent; font-family:'Public Sans',sans-serif; font-size:15px; color:var(--ink)}
 .tquick-input:focus{outline:none}

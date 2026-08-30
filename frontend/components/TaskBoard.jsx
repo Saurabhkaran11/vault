@@ -507,7 +507,7 @@ export default function TaskBoard() {
         <YearView tasks={tasks} anchor={anchor} onPickMonth={(m) => { setAnchor(m); setMode("month"); }} />
       ) : (
         <>
-      <div className="scrolllist scrolllist-tall">
+      <div className="scrolllist scrolllist-tall tsecgrid">
       {sections.map((s) => s.tasks.length > 0 && (
         <div key={s.key} className="tsec">
           <div className="tsec-head">
