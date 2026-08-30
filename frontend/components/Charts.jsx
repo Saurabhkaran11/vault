@@ -945,15 +945,41 @@ export function BudgetBullets({ byCat, spentByCat, fmt }) {
  * popup that re-renders the same chart at reading size (the zoom dialog's
  * CSS raises every chart class's height; width-responsive charts and the
  * measured ones fill it naturally). */
+/* The "Open <feature>? / Stay here" confirmation. Reusable anywhere a
+ * chart-like element would otherwise navigate on click: pass
+ * ask = { label, title, fn } (or null) and an onClose that clears it. */
+export function AskGoDialog({ ask, onClose }) {
+  React.useEffect(() => {
+    if (!ask) return;
+    const onKey = (e) => { if (e.key === "Escape") { e.stopPropagation(); onClose(); } };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [ask, onClose]);
+  if (!ask) return null;
+  return createPortal(
+    <div className="pal-overlay centered" onClick={onClose} role="dialog" aria-label={`Open ${ask.label}?`}>
+      <div className="pal askgo" onClick={(e) => e.stopPropagation()}>
+        <h3 className="askgo-title">Open {ask.label}?</h3>
+        <p className="m askgo-sub">&ldquo;{ask.title}&rdquo; is powered by the {ask.label} feature — you can jump there for the full picture, or stay right here.</p>
+        <div className="askgo-foot">
+          <button className="btn ghost sm" onClick={onClose}>Stay here</button>
+          <button className="btn sm" onClick={() => { const fn = ask.fn; onClose(); fn(); }}>Open {ask.label} →</button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
 export function Zoom({ title, sub, children, large, note, go }) {
   const [open, setOpen] = React.useState(false);
   const [ask, setAsk] = React.useState(false);
   React.useEffect(() => {
-    if (!open && !ask) return;
-    const onKey = (e) => { if (e.key === "Escape") { e.stopPropagation(); setOpen(false); setAsk(false); } };
+    if (!open) return;
+    const onKey = (e) => { if (e.key === "Escape") { e.stopPropagation(); setOpen(false); } };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [open, ask]);
+  }, [open]);
   return (
     <>
       <div className={go ? "zoomable zoom-linked" : "zoomable"}
@@ -967,19 +993,7 @@ export function Zoom({ title, sub, children, large, note, go }) {
         {children}
         {note && <div className="chart-note">{note}</div>}
       </div>
-      {ask && go && createPortal(
-        <div className="pal-overlay centered" onClick={() => setAsk(false)} role="dialog" aria-label={`Open ${go.label}?`}>
-          <div className="pal askgo" onClick={(e) => e.stopPropagation()}>
-            <h3 className="askgo-title">Open {go.label}?</h3>
-            <p className="m askgo-sub">&ldquo;{title}&rdquo; is powered by the {go.label} feature — you can jump there for the full picture, or stay right here.</p>
-            <div className="askgo-foot">
-              <button className="btn ghost sm" onClick={() => setAsk(false)}>Stay here</button>
-              <button className="btn sm" onClick={() => { setAsk(false); go.fn(); }}>Open {go.label} →</button>
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
+      {go && <AskGoDialog ask={ask ? { label: go.label, title, fn: go.fn } : null} onClose={() => setAsk(false)} />}
       {open && createPortal(
         /* portal to <body>: a glass card's backdrop-filter makes it the
            containing block for position:fixed, which would trap the overlay

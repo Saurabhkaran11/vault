@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { SECTIONS, fmtStamp, daysAgo, today, fmtK } from "@/lib/seed";
 import { useStore } from "@/hooks/useStore";
-import { Donut, rangeSeries, TinyBars, SparkArea, VaultGrowth, TaskRhythm, CaptureSources, Zoom } from "./Charts";
+import { Donut, rangeSeries, TinyBars, SparkArea, VaultGrowth, TaskRhythm, CaptureSources, Zoom, AskGoDialog } from "./Charts";
 import { YourCharts, ChartExplorer, newChartCfg, upsertChart, deleteChart } from "./ChartLab";
 import GraphView from "./GraphView";
 import ItemRow, { TagAdder } from "./ItemRow";
@@ -606,6 +606,8 @@ export default function App() {
   const [armFresh, setArmFresh] = useState(false);    // "Start fresh" needs a second click
   /* Chart Lab: {cfg, isNew} while the explorer is open; rev re-reads saved charts */
   const [explore, setExplore] = useState(null);
+  /* ask-before-navigating for chart-like dashboard cards (rings, sparks) */
+  const [askNav, setAskNav] = useState(null);   // null | {label, title, fn}
   const [chartsRev, setChartsRev] = useState(0);
   useEffect(() => {
     if (!keyListen) return;
@@ -1078,6 +1080,8 @@ export default function App() {
           </div>
         </div>
       )}
+
+      <AskGoDialog ask={askNav} onClose={() => setAskNav(null)} />
 
       {explore && (
         <ChartExplorer cfg={explore.cfg} isNew={explore.isNew} sym={pulse?.ins?.money?.sym || "$"}
@@ -1683,16 +1687,16 @@ export default function App() {
               const doneInRange = pulse.doneDates.filter(inRange).length;
               const taskPct = doneInRange + ins.todos.open > 0 ? Math.round((doneInRange / (doneInRange + ins.todos.open)) * 100) : 0;
               const rings = [
-                { k: "todo", label: `Tasks ${RANGE_WORD[range]}`, val: `${fmtK(doneInRange)} done · ${fmtK(ins.todos.open)} open`, pct: taskPct, color: "var(--moss)", go: () => goView("todos") },
-                ins.boards.total > 0 && { k: "sprint", label: "Sprint", val: `${fmtK(ins.boards.done)}/${fmtK(ins.boards.total)} done`, pct: ins.boards.pct, color: "var(--azure)", go: () => goView("board") },
+                { k: "todo", feat: "Tasks", label: `Tasks ${RANGE_WORD[range]}`, val: `${fmtK(doneInRange)} done · ${fmtK(ins.todos.open)} open`, pct: taskPct, color: "var(--moss)", go: () => goView("todos") },
+                ins.boards.total > 0 && { k: "sprint", feat: "Boards", label: "Sprint", val: `${fmtK(ins.boards.done)}/${fmtK(ins.boards.total)} done`, pct: ins.boards.pct, color: "var(--azure)", go: () => goView("board") },
                 readingBooks.length > 0 && {
-                  k: "read",
+                  k: "read", feat: "Content",
                   label: readingBooks.length === 1 ? `Reading · ${readingBooks[0].alias || readingBooks[0].title}` : `Reading · ${fmtK(readingBooks.length)} books`,
                   val: readingBooks.length === 1 ? `${readingBooks[0].progress || 0}%` : `${readAvg}% avg`,
                   pct: readAvg, color: "var(--gold)",
                   go: () => (readingBooks.length === 1 ? goto(readingBooks[0]) : openSection("book")),
                 },
-                ins.money.budget > 0 && { k: "budget", label: `Budget · ${ins.money.budgetWord}`, val: `${sym}${Math.round(ins.money.budgetSpent).toLocaleString()} / ${sym}${Math.round(ins.money.budget).toLocaleString()}`, pct: Math.min(100, ins.money.pct), color: ins.money.pct > 100 ? "var(--stamp)" : "var(--gold)", go: () => goView("finance") },
+                ins.money.budget > 0 && { k: "budget", feat: "Finance", label: `Budget · ${ins.money.budgetWord}`, val: `${sym}${Math.round(ins.money.budgetSpent).toLocaleString()} / ${sym}${Math.round(ins.money.budget).toLocaleString()}`, pct: Math.min(100, ins.money.pct), color: ins.money.pct > 100 ? "var(--stamp)" : "var(--gold)", go: () => goView("finance") },
               ].filter(Boolean);
               /* momentum sparkline + small range-aware charts; every card is a
                  door into its section, and the flex grid packs with no gaps */
@@ -1737,7 +1741,8 @@ export default function App() {
                     {rings.map((r) => {
                       const pct = Math.max(0, Math.min(100, Math.round(r.pct)));
                       return (
-                        <button key={r.k} className="ringcard" onClick={r.go} title={`Open — ${r.label}`}>
+                        <button key={r.k} className="ringcard" title={`Powered by ${r.feat} — click to open`}
+                          onClick={() => setAskNav({ label: r.feat, title: r.label, fn: r.go })}>
                           <div className="progring" style={{ background: `conic-gradient(${r.color} ${pct}%, var(--line) 0)` }}>
                             <span className="progring-hole mono">{pct}%</span>
                           </div>
@@ -1749,7 +1754,8 @@ export default function App() {
                       );
                     })}
                     {hasSpark && (
-                      <button className="ringcard spark-card" onClick={() => goView("todos")} title="Open Tasks">
+                      <button className="ringcard spark-card" title="Powered by Tasks — click to open"
+                        onClick={() => setAskNav({ label: "Tasks", title: "Tasks finished", fn: () => goView("todos") })}>
                         <div className="spark-body">
                           <div className="spark-head">
                             <span className="progring-label">Tasks finished</span>
@@ -1762,7 +1768,8 @@ export default function App() {
                       </button>
                     )}
                     {spend.values.some((v) => v > 0) && (
-                      <button className="ringcard spark-card" onClick={() => goView("finance")} title="Open Finance">
+                      <button className="ringcard spark-card" title="Powered by Finance — click to open"
+                        onClick={() => setAskNav({ label: "Finance", title: "Spending", fn: () => goView("finance") })}>
                         <div className="spark-body">
                           <div className="spark-head">
                             <span className="progring-label">Spending</span>
