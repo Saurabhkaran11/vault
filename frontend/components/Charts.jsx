@@ -973,7 +973,6 @@ export function AskGoDialog({ ask, onClose }) {
 
 export function Zoom({ title, sub, children, large, note, go }) {
   const [open, setOpen] = React.useState(false);
-  const [ask, setAsk] = React.useState(false);
   React.useEffect(() => {
     if (!open) return;
     const onKey = (e) => { if (e.key === "Escape") { e.stopPropagation(); setOpen(false); } };
@@ -982,18 +981,18 @@ export function Zoom({ title, sub, children, large, note, go }) {
   }, [open]);
   return (
     <>
-      <div className={go ? "zoomable zoom-linked" : "zoomable"}
-        onClick={go ? () => setAsk(true) : undefined}
-        role={go ? "button" : undefined} tabIndex={go ? 0 : undefined}
-        onKeyDown={go ? (e) => { if (e.key === "Enter") setAsk(true); } : undefined}
-        title={go ? `Powered by ${go.label} — click to open that section` : undefined}>
+      {/* clicking ANYWHERE on the chart maximizes it — the ⤢ icon stays as
+          a visual affordance, not a requirement */}
+      <div className="zoomable zoom-click" role="button" tabIndex={0}
+        onClick={() => setOpen(true)}
+        onKeyDown={(e) => { if (e.key === "Enter") setOpen(true); }}
+        title={`${title} — click to maximize`}>
         <button type="button" className="zoom-btn" aria-label={`Maximize ${title}`}
           title="Maximize — see this chart in depth"
           onClick={(e) => { e.stopPropagation(); setOpen(true); }}>⤢</button>
         {children}
         {note && <div className="chart-note">{note}</div>}
       </div>
-      {go && <AskGoDialog ask={ask ? { label: go.label, title, fn: go.fn } : null} onClose={() => setAsk(false)} />}
       {open && createPortal(
         /* portal to <body>: a glass card's backdrop-filter makes it the
            containing block for position:fixed, which would trap the overlay
@@ -1005,6 +1004,10 @@ export function Zoom({ title, sub, children, large, note, go }) {
                 <h3 style={{ margin: 0 }}>{title}</h3>
                 {sub && <div className="m" style={{ color: "var(--ink-soft)", marginTop: 2 }}>{sub}</div>}
               </div>
+              {go && (
+                <button className="kbtn" onClick={() => { setOpen(false); go.fn(); }}
+                  title={`This chart is powered by ${go.label}`}>↗ Open {go.label}</button>
+              )}
               <button className="kbtn" onClick={() => setOpen(false)} aria-label="Close">✕</button>
             </div>
             <div className="zoom-body">

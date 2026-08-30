@@ -326,16 +326,16 @@ export default function FinanceAnalytics({ fin, fmt, spentByCat = {}, savingsRat
         <div className="empty">No expenses logged yet — add some on the Board tab and your reports light up here.</div>
       ) : chart === "donut" ? (
         slices.length
-          ? <>
+          ? <Zoom title="Spending breakdown" sub="Share of spending by category in the chosen range."
+              note={<><b>How to read:</b> each slice is one category&rsquo;s share of spending in the chosen range; the centre shows the total. Bigger slice = bigger share of your money.</>}>
               <CategoryDonut slices={slices} total={total} fmt={fmt} />
-              <div className="chart-note"><b>How to read:</b> each slice is one category&rsquo;s share of spending in the chosen range; the centre shows the total. Bigger slice = bigger share of your money.</div>
-            </>
+            </Zoom>
           : <div className="empty">Nothing in this range yet — switch to a longer period.</div>
       ) : (
-        <>
+        <Zoom title="Spending over time" sub="Spending bucketed across the chosen range."
+          note={<><b>How to read:</b> spending over time in the chosen range — hover any point for the exact amount. Switch Bar, Line or Area above; the shape is the same story drawn differently.</>}>
           <TimeChart buckets={buckets} type={chart} fmt={fmt} />
-          <div className="chart-note"><b>How to read:</b> spending over time in the chosen range — hover any point for the exact amount. Switch Bar, Line or Area above; the shape is the same story drawn differently.</div>
-        </>
+        </Zoom>
       )}
 
 

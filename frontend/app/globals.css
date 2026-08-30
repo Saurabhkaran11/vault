@@ -1928,6 +1928,7 @@ button:disabled{opacity:.5; cursor:not-allowed}
 .askgo-sub{color:var(--ink-soft); margin:0; line-height:1.55}
 .askgo-foot{display:flex; gap:10px; justify-content:flex-end; margin-top:16px}
 .zoomable.zoom-linked{cursor:pointer}
+.zoomable.zoom-click{cursor:zoom-in}
 
 /* how-to-read caption under every chart: fixed 11.5px, wraps inside the
    card (min-width:0 + break-word — it can never widen or escape the box) */
