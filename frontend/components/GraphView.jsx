@@ -128,6 +128,13 @@ function layout(items, query, H = BASE_H) {
 export default function GraphView({ items, onOpenTag, onOpenSection }) {
   const [query, setQuery] = useState("");
   const [mode, setMode] = useState("web");   // "web" | "cosmos" | "explorer" | "3d"
+  const [full, setFull] = useState(false);   // full-page takeover
+  useEffect(() => {
+    if (!full) return;
+    const onKey = (e) => { if (e.key === "Escape") setFull(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [full]);
   const [hover, setHover] = useState(null);
   const [view, setView] = useState({ k: 1, x: 0, y: 0 });
   const [, tick] = useState(0);               // re-render pulse from the sim
@@ -334,7 +341,7 @@ export default function GraphView({ items, onOpenTag, onOpenSection }) {
   if (!items.length) return <div className="empty">Nothing to map yet — add a few items with #tags and the graph draws itself.</div>;
 
   return (
-    <div className="graphwrap graphfull">
+    <div className={`graphwrap graphfull${full ? " gfull" : ""}`}>
       <div className="graphkey">
         {mode !== "explorer" && (
           <input className="gsearch" value={query} onChange={(e) => setQuery(e.target.value)}
@@ -364,7 +371,11 @@ export default function GraphView({ items, onOpenTag, onOpenSection }) {
           <button onClick={() => { setView({ k: 1, x: 0, y: 0 }); seedPositions(true); tick((t) => t + 1); }} title="Reset view & re-settle" aria-label="Reset view">⤢</button>
         </span>
         )}
-        {mode === "web" && <span className="graphhint mono">LIVE · SCROLL TO ZOOM · DRAG NODES OR BACKGROUND</span>}
+        {mode === "web" && !full && <span className="graphhint mono">LIVE · SCROLL TO ZOOM · DRAG NODES OR BACKGROUND</span>}
+        <button className={`kbtn gfull-btn ${full ? "on" : ""}`} onClick={() => setFull((f) => !f)}
+          title={full ? "Back to the page (Esc works too)" : "Take over the whole page"}>
+          {full ? "🗕 Exit full page" : "⛶ Full page"}
+        </button>
       </div>
       {mode === "cosmos" ? (
         <CosmosGraph items={items} query={query} onOpenTag={onOpenTag} onOpenSection={onOpenSection} />
