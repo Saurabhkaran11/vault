@@ -980,6 +980,22 @@ export function AskGoDialog({ ask, onClose }) {
   );
 }
 
+/* "How to read" hides behind an ⓘ toggle — guidance on demand, zero noise */
+export function HowTo({ note }) {
+  const [open, setOpen] = React.useState(false);
+  if (!note) return null;
+  return (
+    <div className="chart-note-wrap">
+      <button type="button" className={`note-i mono ${open ? "on" : ""}`} aria-expanded={open}
+        title={open ? "Hide the reading guide" : "How to read this chart"}
+        onClick={(e) => { e.stopPropagation(); setOpen((v) => !v); }}>
+        ⓘ{open ? "" : " how to read"}
+      </button>
+      {open && <div className="chart-note">{note}</div>}
+    </div>
+  );
+}
+
 export function Zoom({ title, sub, children, large, note, go }) {
   const [open, setOpen] = React.useState(false);
   React.useEffect(() => {
@@ -1000,7 +1016,7 @@ export function Zoom({ title, sub, children, large, note, go }) {
           title="Maximize — see this chart in depth"
           onClick={(e) => { e.stopPropagation(); setOpen(true); }}>⤢</button>
         {children}
-        {note && <div className="chart-note">{note}</div>}
+        <HowTo note={note} />
       </div>
       {open && createPortal(
         /* portal to <body>: a glass card's backdrop-filter makes it the
@@ -1021,7 +1037,7 @@ export function Zoom({ title, sub, children, large, note, go }) {
             </div>
             <div className="zoom-body">
               {large || children}
-              {note && <div className="chart-note">{note}</div>}
+              <HowTo note={note} />
             </div>
           </div>
         </div>,

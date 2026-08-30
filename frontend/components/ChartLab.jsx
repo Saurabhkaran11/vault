@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { SECTIONS, daysAgo, fmtK } from "@/lib/seed";
-import { rangeSeries } from "./Charts";
+import { rangeSeries, HowTo } from "./Charts";
 import { safeSet } from "@/lib/safeStorage";
 import { uid } from "@/lib/id";
 
@@ -482,9 +482,9 @@ export function ChartExplorer({ cfg: initial, isNew, onSave, onDelete, onClose, 
         <LabPlot cfg={cfg} data={data} height={editing ? 280 : 420} big sym={sym} />
 
         {!editing && (
-          <div className="chart-note"><b>How to read:</b> {src.dateless
+          <HowTo note={<><b>How to read:</b> {src.dateless
             ? `${src.label.toLowerCase()} broken down by ${data.catLabel?.toLowerCase() || "group"} — hover any slice for the exact count.`
-            : `${src.label.toLowerCase()} bucketed over your chosen range — hover any ${cfg.type === "donut" ? "slice" : "bar or point"} for the exact value${cfg.nest ? "; colours split each bucket by " + (dims[cfg.nest]?.label || "").toLowerCase() : ""}.`} Hit ✎ Edit to change the source, shape, range, filter or nesting.</div>
+            : `${src.label.toLowerCase()} bucketed over your chosen range — hover any ${cfg.type === "donut" ? "slice" : "bar or point"} for the exact value${cfg.nest ? "; colours split each bucket by " + (dims[cfg.nest]?.label || "").toLowerCase() : ""}.`} Hit ✎ Edit to change the source, shape, range, filter or nesting.</>} />
         )}
 
         {editing && cfg.type !== "donut" && (
