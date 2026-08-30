@@ -128,7 +128,7 @@ const ChartTip = ({ tip }) => tip ? (
 
 /* Compact interactive bars for small dashboard cards: instant hover tooltip
  * per bar, no axis chrome — the card supplies the caption. */
-export function TinyBars({ values, labels, color = "var(--moss)", fmt = (v) => v, label = "Chart" }) {
+export function TinyBars({ values, labels, color = "var(--chart)", fmt = (v) => v, label = "Chart" }) {
   const { ref, tip, show, hide } = useChartTip();
   const max = Math.max(1, ...values);
   const n = values.length || 1;
@@ -155,7 +155,7 @@ export function TinyBars({ values, labels, color = "var(--moss)", fmt = (v) => v
 
 /* Area sparkline with the same instant tooltip — bucket-wide hover strips,
  * and the hovered point lights up. */
-export function SparkArea({ values, labels, color = "var(--moss)", soft = "var(--moss-soft)", fmt = (v) => v, label = "Trend" }) {
+export function SparkArea({ values, labels, color = "var(--chart)", soft = "var(--moss-soft)", fmt = (v) => v, label = "Trend" }) {
   const { ref, tip, show, hide } = useChartTip();
   const [hot, setHot] = React.useState(null);
   const max = Math.max(...values, 1);
@@ -318,10 +318,10 @@ export function BudgetBurn({ expenses, budget, fmt }) {
         <line x1={X(0)} y1={Y(0)} x2={X(daysInMonth - 1)} y2={Y(budget)}
           stroke="var(--stamp)" strokeWidth="2.5" strokeDasharray="7 6" opacity="0.85" />
         {pts.length > 1 && (
-          <polygon points={`${X(0)},${Y(0)} ${line} ${X(todayIdx)},${Y(0)}`} fill="var(--moss)" opacity="0.12" />
+          <polygon points={`${X(0)},${Y(0)} ${line} ${X(todayIdx)},${Y(0)}`} fill="var(--chart)" opacity="0.12" />
         )}
-        <polyline points={line} fill="none" stroke="var(--moss)" strokeWidth="3.5" strokeLinejoin="round" />
-        <circle cx={X(todayIdx)} cy={Y(spentNow)} r="5.5" fill="var(--moss)" />
+        <polyline points={line} fill="none" stroke="var(--chart)" strokeWidth="3.5" strokeLinejoin="round" />
+        <circle cx={X(todayIdx)} cy={Y(spentNow)} r="5.5" fill="var(--chart)" />
         {pts.map((v, i) => (
           <rect key={i} x={X(i) - (W - pad) / pts.length / 2} y="0" width={(W - pad) / Math.max(pts.length, 1)} height={H}
             fill="transparent"
@@ -473,7 +473,7 @@ export function TaskRhythm({ doneDates }) {
           const inStreak = streak > 0 && i >= counts.length - streak;
           return (
             <rect key={c.iso} x={pad + i * bw + 0.8} y={H - 24 - Math.max(h, 2.5)} width={bw - 1.6} height={Math.max(h, 2.5)} rx="1.5"
-              fill={inStreak ? "var(--stamp)" : "var(--moss)"} opacity={c.n ? 1 : 0.16}
+              fill={inStreak ? "var(--stamp)" : "var(--chart)"} opacity={c.n ? 1 : 0.16}
               onMouseMove={(e) => show(e, `${c.label} · ${c.n} done`)} />
           );
         })}
@@ -591,7 +591,7 @@ export function MoneyFlow({ incomes, expenses, fmt }) {
         ))}
         {S.map((s) => (
           <g key={s.n}>
-            <rect x={x0} y={s.y} width={nodeW} height={Math.max(s.h, 3)} rx="3.5" fill="var(--moss)" />
+            <rect x={x0} y={s.y} width={nodeW} height={Math.max(s.h, 3)} rx="3.5" fill="var(--chart)" />
             <text x={x0} y={s.y - 7} fontFamily="IBM Plex Mono" fontSize="11" fontWeight="600" fill="var(--ink)">
               {clip(s.n, narrow ? 12 : 20)} · {fmt(Math.round(s.v))}
             </text>

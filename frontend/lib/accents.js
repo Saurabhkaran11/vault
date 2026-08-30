@@ -26,3 +26,36 @@ export function applyAccent(id, theme) {
   root.setProperty("--moss", pair.a);
   root.setProperty("--moss-soft", pair.s);
 }
+
+/* ---- background tint + chart colour (Settings → Preferences) ----
+ * Backgrounds are near-white so ink contrast never suffers; chart colours
+ * are all ≥4.5:1 on white panels, so every chart stays clearly readable. */
+export const BG_TINTS = [
+  { id: "mist",     name: "Mist",     bg: "#EFF3F8" },   // default
+  { id: "paper",    name: "Paper",    bg: "#F7F3EB" },
+  { id: "sage",     name: "Sage",     bg: "#EEF4EF" },
+  { id: "lavender", name: "Lavender", bg: "#F2F1F9" },
+  { id: "cloud",    name: "Cloud",    bg: "#F4F5F7" },
+];
+export const DEFAULT_BG = "mist";
+
+export const CHART_COLORS = [
+  { id: "accent",  name: "Match accent", hex: null },    // follows the accent pair
+  { id: "blue",    name: "Blue",    hex: "#1F5FA8" },
+  { id: "teal",    name: "Teal",    hex: "#0C6E8C" },
+  { id: "violet",  name: "Violet",  hex: "#5B4BC4" },
+  { id: "green",   name: "Green",   hex: "#1F7A4D" },
+  { id: "crimson", name: "Crimson", hex: "#B23A2E" },
+];
+export const DEFAULT_CHART = "accent";
+
+export function applyThemeExtras(bgId, chartId, accentId, theme) {
+  if (typeof document === "undefined") return;
+  const root = document.documentElement.style;
+  const tint = BG_TINTS.find((t) => t.id === bgId) || BG_TINTS[0];
+  if (theme !== "dark") root.setProperty("--bg", tint.bg);
+  else root.removeProperty("--bg");
+  const cc = CHART_COLORS.find((c) => c.id === chartId) || CHART_COLORS[0];
+  const acc = ACCENTS.find((x) => x.id === accentId) || ACCENTS[0];
+  root.setProperty("--chart", cc.hex || (theme === "dark" ? acc.dark.a : acc.light.a));
+}

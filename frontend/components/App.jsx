@@ -4,13 +4,14 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { SECTIONS, fmtStamp, daysAgo, today, fmtK } from "@/lib/seed";
 import { useStore } from "@/hooks/useStore";
 import { Donut, rangeSeries, TinyBars, SparkArea, VaultGrowth, TaskRhythm, CaptureSources } from "./Charts";
+import { YourCharts, ChartExplorer, newChartCfg, upsertChart, deleteChart } from "./ChartLab";
 import GraphView from "./GraphView";
 import ItemRow, { TagAdder } from "./ItemRow";
 import { Ic } from "./Icons";
 import QuickCapture from "./QuickCapture";
 import { initOnboarding, setOB, startClean, removeSampleData, WelcomeModal, ChecklistCard } from "./Onboarding";
 import { KEY_ACTIONS, NAV_ACTIONS, DEFAULT_KEYS, getKeymap, setKeymap, resetKeymap, validateKey } from "@/lib/keymap";
-import { ACCENTS, DEFAULT_ACCENT, applyAccent } from "@/lib/accents";
+import { ACCENTS, DEFAULT_ACCENT, applyAccent, BG_TINTS, DEFAULT_BG, CHART_COLORS, DEFAULT_CHART, applyThemeExtras } from "@/lib/accents";
 import Intro from "./Intro";
 import { installGlobalHandlers } from "@/lib/monitor";
 import { getCustomTags, addCustomTag, removeCustomTag, normalizeTag } from "@/lib/tags";
@@ -597,6 +598,9 @@ export default function App() {
   const [keyListen, setKeyListen] = useState(null);   // action id waiting for a keypress
   const [keyErr, setKeyErr] = useState(null);
   const [armFresh, setArmFresh] = useState(false);    // "Start fresh" needs a second click
+  /* Chart Lab: {cfg, isNew} while the explorer is open; rev re-reads saved charts */
+  const [explore, setExplore] = useState(null);
+  const [chartsRev, setChartsRev] = useState(0);
   useEffect(() => {
     if (!keyListen) return;
     const onKey = (e) => {
@@ -693,7 +697,8 @@ export default function App() {
     const theme = profile.theme === "dark" ? "dark" : "light";
     document.documentElement.setAttribute("data-theme", theme);
     applyAccent(profile.accent || DEFAULT_ACCENT, theme);
-  }, [profile.theme, profile.accent]);
+    applyThemeExtras(profile.bgTint || DEFAULT_BG, profile.chartColor || DEFAULT_CHART, profile.accent || DEFAULT_ACCENT, theme);
+  }, [profile.theme, profile.accent, profile.bgTint, profile.chartColor]);
 
   /* autosave indicator */
   const [saveState, setSaveState] = useState("Saved ✓");
@@ -1070,6 +1075,13 @@ export default function App() {
         </div>
       )}
 
+      {explore && (
+        <ChartExplorer cfg={explore.cfg} isNew={explore.isNew} sym={pulse?.ins?.money?.sym || "$"}
+          onClose={() => setExplore(null)}
+          onSave={(cfg) => { upsertChart(cfg); setChartsRev((r) => r + 1); setExplore(null); }}
+          onDelete={(id) => { deleteChart(id); setChartsRev((r) => r + 1); setExplore(null); }} />
+      )}
+
       {hydrated && ob === null && (
         <WelcomeModal onChoose={(c) => {
           /* a real user gesture — the best moment to ask the browser to
@@ -1160,6 +1172,41 @@ export default function App() {
                     ❄ Glass surfaces
                     <span className="menukey">{profile.glass === false ? "off" : "on"}</span>
                   </button>
+
+                  <div className="conn-row" style={{ marginTop: 10 }}>
+                    <span>Background</span>
+                    <span className="cardsub mono">{(BG_TINTS.find((t) => t.id === (profile.bgTint || DEFAULT_BG)) || BG_TINTS[0]).name}</span>
+                  </div>
+                  <div className="accent-swatches" role="group" aria-label="Background tint">
+                    {BG_TINTS.map((t) => {
+                      const on = (profile.bgTint || DEFAULT_BG) === t.id;
+                      return (
+                        <button key={t.id} type="button" className={"accent-sw" + (on ? " on" : "")}
+                          style={{ background: t.bg, border: "1px solid var(--line)" }}
+                          aria-pressed={on} aria-label={t.name} title={t.name}
+                          onClick={() => setProfile({ ...profile, bgTint: t.id })} />
+                      );
+                    })}
+                  </div>
+
+                  <div className="conn-row" style={{ marginTop: 10 }}>
+                    <span>Chart colour</span>
+                    <span className="cardsub mono">{(CHART_COLORS.find((c) => c.id === (profile.chartColor || DEFAULT_CHART)) || CHART_COLORS[0]).name}</span>
+                  </div>
+                  <div className="accent-swatches" role="group" aria-label="Chart colour">
+                    {CHART_COLORS.map((c) => {
+                      const on = (profile.chartColor || DEFAULT_CHART) === c.id;
+                      const acc = ACCENTS.find((a) => a.id === (profile.accent || DEFAULT_ACCENT)) || ACCENTS[0];
+                      return (
+                        <button key={c.id} type="button" className={"accent-sw" + (on ? " on" : "")}
+                          style={{ background: c.hex || acc.light.a }}
+                          aria-pressed={on} aria-label={c.name} title={c.name}
+                          onClick={() => setProfile({ ...profile, chartColor: c.id })}>
+                          {c.id === "accent" ? <span style={{ color: "#fff", fontSize: 10, fontWeight: 700 }}>A</span> : null}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
 
                 <button className="menu-item" onClick={() => { setHelpOpen(true); setSettingsOpen(false); }}>
@@ -1774,6 +1821,10 @@ export default function App() {
                       <CaptureSources items={items} importedCount={pulse?.importedCount || 0} />
                     </div>
                   </div>
+
+                  <YourCharts rev={chartsRev} sym={sym}
+                    onExplore={(cfg) => setExplore({ cfg, isNew: false })}
+                    onNew={() => setExplore({ cfg: newChartCfg(), isNew: true })} />
                 </>
               );
             })()}
