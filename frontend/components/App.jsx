@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { SECTIONS, fmtStamp, daysAgo, today, fmtK } from "@/lib/seed";
 import { useStore } from "@/hooks/useStore";
-import { Donut, rangeSeries, TinyBars, SparkArea, VaultGrowth, TaskRhythm, CaptureSources } from "./Charts";
+import { Donut, rangeSeries, TinyBars, SparkArea, VaultGrowth, TaskRhythm, CaptureSources, Zoom, AskGoDialog } from "./Charts";
 import { YourCharts, ChartExplorer, newChartCfg, upsertChart, deleteChart } from "./ChartLab";
 import GraphView from "./GraphView";
 import ItemRow, { TagAdder } from "./ItemRow";
@@ -546,9 +546,15 @@ export default function App() {
   const [profileLoaded, setProfileLoaded] = useState(false);
   const importRef = useRef(null);
 
-  /* SSR-safe sidebar default: render open, then collapse on narrow screens. */
+  /* SSR-safe sidebar default: render open, then collapse on narrow screens.
+     Also follows live resizes (window dragged to a phone-sized width, monitor
+     switch) — but only on breakpoint crossings, so a manual toggle sticks. */
   useEffect(() => {
-    setOpen(window.innerWidth > 860);
+    const mq = window.matchMedia("(max-width: 860px)");
+    setOpen(!mq.matches);
+    const onChange = (e) => setOpen(!e.matches);
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
   }, []);
 
   /* production safety: report async errors, watch the storage quota */
@@ -600,6 +606,8 @@ export default function App() {
   const [armFresh, setArmFresh] = useState(false);    // "Start fresh" needs a second click
   /* Chart Lab: {cfg, isNew} while the explorer is open; rev re-reads saved charts */
   const [explore, setExplore] = useState(null);
+  /* ask-before-navigating for chart-like dashboard cards (rings, sparks) */
+  const [askNav, setAskNav] = useState(null);   // null | {label, title, fn}
   const [chartsRev, setChartsRev] = useState(0);
   useEffect(() => {
     if (!keyListen) return;
@@ -740,23 +748,25 @@ export default function App() {
   useEffect(() => { setAiCfg(getAIConfig()); }, []);
   const updateAI = (patch) => setAiCfg(setAIConfig(patch));
 
-  /* ✦ weekly digest (dashboard) */
+  /* ✦ digest (dashboard) — scoped to the Daily/Weekly/Monthly/Yearly tab */
   const [digest, setDigest] = useState(null);
   const [digestBusy, setDigestBusy] = useState(false);
   const genDigest = async () => {
     if (digestBusy) return;
     setDigestBusy(true); setDigest(null);
-    const week = items.filter((i) => daysAgo(i.date) <= 7);
-    const stale = items.filter((i) => i.status === "Inbox").sort((a, b) => a.date.localeCompare(b.date)).slice(0, 6);
+    const dWord = { day: "day", week: "week", month: "month", year: "year" }[range] || "week";
+    const dAdj = { day: "daily", week: "weekly", month: "monthly", year: "yearly" }[range] || "weekly";
+    const dDays = { day: 1, week: 7, month: 31, year: 365 }[range] || 7;
+    const recent = items.filter((i) => daysAgo(i.date) <= dDays);
+    const stale = items.filter((i) => !i.deleted).sort((a, b) => a.date.localeCompare(b.date)).slice(0, 6);
     const stats =
-      `Saved this week (${week.length}): ${week.map((i) => `${SECTIONS[i.type].label} — ${i.title}`).join("; ") || "nothing"}.\n` +
-      `In progress: ${items.filter((i) => i.status === "In progress").map((i) => i.title).join("; ") || "nothing"}.\n` +
-      `Oldest untouched Inbox items: ${stale.map((i) => `${i.title} (${daysAgo(i.date)} days)`).join("; ") || "none"}.\n` +
+      `Saved this ${dWord} (${recent.length}): ${recent.slice(0, 40).map((i) => `${SECTIONS[i.type].label} — ${i.title}`).join("; ") || "nothing"}.\n` +
+      `Oldest saved items: ${stale.map((i) => `${i.title} (${daysAgo(i.date)} days)`).join("; ") || "none"}.\n` +
       `Projects: ${[...new Set(items.flatMap((i) => i.tags))].join(", ") || "none"}.`;
     try {
       setDigest(await askText(
-        `Here is the current state of my personal knowledge vault:\n\n${stats}\n\nWrite my weekly digest.`,
-        { system: "You write a short weekly digest for a personal knowledge hub. At most 3 short paragraphs: what happened this week; what's rotting in the inbox and what to finish; one concrete suggestion for next week. Plain text, direct and encouraging, no headings or bullet lists." }
+        `Here is the current state of my personal knowledge vault:\n\n${stats}\n\nWrite my ${dAdj} digest.`,
+        { system: `You write a short ${dAdj} digest for a personal knowledge hub. At most 3 short paragraphs: what happened this ${dWord}; what's gathering dust and what to finish; one concrete suggestion for the next ${dWord}. Plain text, direct and encouraging, no headings or bullet lists.` }
       ));
     } catch (e) {
       setDigest(`⚠ ${e.message}`);
@@ -792,7 +802,6 @@ export default function App() {
         pendingBills: (fin.bills || []).filter((b) => !b.paid).length,
         overdueBills: (fin.bills || []).filter((b) => !b.paid && daysAgo(b.due) > 0).length,
         pendingBillsTotal: (fin.bills || []).filter((b) => !b.paid).reduce((a, b) => a + (+b.amount || 0), 0),
-        inbox: items.filter((i) => i.status === "Inbox").length,
         doneDates: tasks.filter((t) => t.done && t.doneAt).map((t) => t.doneAt),
         expensesRaw: (fin.expenses || []).map((e) => ({ date: e.date, amt: +e.amount || 0, cat: e.cat || "Other" })),
         importedCount: (fin.expenses || []).filter((e) => e.pay).length,
@@ -929,7 +938,7 @@ export default function App() {
     { group: "GO TO", label: "Tags", hint: `G ${navKeyFor("tags")}`, keywords: "projects tags labels", run: () => { setView("tags"); setTag(null); setAdding(false); setPageId(null); } },
     { group: "GO TO", label: "Recently deleted", keywords: "trash bin restore deleted", run: () => { setView("trash"); setTag(null); setAdding(false); setPageId(null); } },
     { group: "ACTION", label: "✦ Ask your Vault (AI)", keywords: "ai ask question claude rag search answers", run: () => setAskOpen(true) },
-    { group: "ACTION", label: "✦ Generate weekly digest (AI)", keywords: "ai digest review week summary", run: () => { setView("dash"); setTag(null); setAdding(false); setPageId(null); genDigest(); } },
+    { group: "ACTION", label: "✦ Generate digest (AI)", keywords: "ai digest review day week month year summary", run: () => { setView("dash"); setTag(null); setAdding(false); setPageId(null); genDigest(); } },
     { group: "ACTION", label: "New item", hint: "N", keywords: "add create capture", run: () => { if (!(view in SECTIONS) && view !== "tag" && view !== "all") openSection("note"); setPageId(null); setAdding(true); } },
     { group: "ACTION", label: "Toggle dark / light theme", hint: "T", keywords: "mode appearance", run: () => setProfile((p) => ({ ...p, theme: p.theme === "dark" ? "light" : "dark" })) },
     { group: "ACTION", label: "Toggle sidebar", hint: "B", keywords: "collapse expand menu", run: () => setOpen((o) => !o) },
@@ -1034,7 +1043,7 @@ export default function App() {
   };
 
   return (
-    <div className={`vault ${profile?.glass === false ? "" : "glass"}`}>
+    <div className={`vault ${profile?.glass === false ? "" : profile?.glass === "vivid" ? "glass vivid" : "glass"}`}>
       {storageWarn && (
         <div className={`storage-warn ${storageWarn}`} role="alert">
           {storageWarn === "full"
@@ -1075,10 +1084,12 @@ export default function App() {
         </div>
       )}
 
+      <AskGoDialog ask={askNav} onClose={() => setAskNav(null)} />
+
       {explore && (
         <ChartExplorer cfg={explore.cfg} isNew={explore.isNew} sym={pulse?.ins?.money?.sym || "$"}
           onClose={() => setExplore(null)}
-          onSave={(cfg) => { upsertChart(cfg); setChartsRev((r) => r + 1); setExplore(null); }}
+          onSave={(cfg) => { upsertChart(cfg); setChartsRev((r) => r + 1); }}
           onDelete={(id) => { deleteChart(id); setChartsRev((r) => r + 1); setExplore(null); }} />
       )}
 
@@ -1167,10 +1178,10 @@ export default function App() {
                     })}
                   </div>
                   <button className="menu-item" aria-pressed={profile.glass !== false}
-                    title="Frosted card surfaces over a soft ambient wash"
-                    onClick={() => setProfile({ ...profile, glass: profile.glass === false ? true : false })}>
+                    title="Frosted card surfaces over a soft ambient wash — subtle, vivid, or off"
+                    onClick={() => setProfile({ ...profile, glass: profile.glass === false ? true : profile.glass === "vivid" ? false : "vivid" })}>
                     ❄ Glass surfaces
-                    <span className="menukey">{profile.glass === false ? "off" : "on"}</span>
+                    <span className="menukey">{profile.glass === false ? "off" : profile.glass === "vivid" ? "vivid" : "subtle"}</span>
                   </button>
 
                   <div className="conn-row" style={{ marginTop: 10 }}>
@@ -1405,7 +1416,12 @@ export default function App() {
       <GoogleDrivePicker open={driveOpen} onClose={() => setDriveOpen(false)} onImport={(it) => add(it)} />
       {chord && <div className="chordhint mono" role="status">G — then {NAV_ACTIONS.map((a) => (keymap[a.id] || a.def).toUpperCase()).join(" ")}</div>}
 
-      <nav className={`side ${open ? "open" : "rail"}`}>
+      <nav className={`side ${open ? "open" : "rail"}`}
+        onClick={(e) => {
+          /* on phones the open drawer squeezes the page — picking a
+             destination should tuck it away again */
+          if (e.target.closest?.(".navbtn") && window.matchMedia("(max-width: 860px)").matches) setOpen(false);
+        }}>
         <div className="top">
           <button className="burger" onClick={() => setOpen((o) => !o)}
             title={open ? "Collapse sidebar" : "Expand sidebar"}
@@ -1600,41 +1616,46 @@ export default function App() {
 
         {view === "dash" && (
           <>
-            <div className="crumb">Overview · {fmtStamp(today())}</div>
-            <h2 className="display">
-              {profile.name && profile.name.trim() && profile.name.trim() !== "You"
-                ? `Good ${new Date().getHours() < 12 ? "morning" : new Date().getHours() < 18 ? "afternoon" : "evening"}, ${profile.name.trim().split(/\s+/)[0]}`
-                : "Your collection, at a glance"}
-            </h2>
-            <Intro id="dash">Search everything with <span className="kbd">Ctrl</span>+<span className="kbd">K</span> — here&rsquo;s just what matters today.</Intro>
+            {/* the landing moment: greeting in a glass hero slab, then a
+                sticky glass toolbar carrying search + ranges + the numbers */}
+            <div className="hero-band">
+              <div className="crumb">Overview · {fmtStamp(today())}</div>
+              <h2 className="display">
+                {profile.name && profile.name.trim() && profile.name.trim() !== "You"
+                  ? `Good ${new Date().getHours() < 12 ? "morning" : new Date().getHours() < 18 ? "afternoon" : "evening"}, ${profile.name.trim().split(/\s+/)[0]}`
+                  : "Your collection, at a glance"}
+              </h2>
+              <Intro id="dash">Search everything with <span className="kbd">Ctrl</span>+<span className="kbd">K</span> — here&rsquo;s just what matters today.</Intro>
+            </div>
 
-            <button className="dash-search" onClick={() => setPalette(true)}>
-              <span className="ds-ic" aria-hidden="true"><Ic name="search" size={16} /></span>
-              <span className="ds-ph">Search or ask your vault…</span>
-              <span className="ds-kbd kbd">Ctrl K</span>
-            </button>
-
-            {pulse?.ins && (
-              <div className="rangebar">
-                <div className="doctabs" role="tablist" aria-label="Time range">
-                  {RANGES.map(([k, label]) => (
-                    <button key={k} className={range === k ? "on" : ""} role="tab" aria-selected={range === k}
-                      onClick={() => setProfile((p) => ({ ...p, range: k }))}>{label}</button>
-                  ))}
-                </div>
-                {(() => {
-                  const done = pulse.doneDates.filter(inRange).length;
-                  const saved = items.filter((i) => inRange(i.date)).length;
-                  const spent = pulse.expensesRaw.filter((e) => inRange(e.date)).reduce((a, e) => a + e.amt, 0);
-                  const sym = pulse.ins.money.sym;
-                  return (
-                    <span className="rangeroll mono">
-                      {RANGE_WORD[range]}: <b>{fmtK(done)}</b> finished · <b>{fmtK(saved)}</b> saved · <b>{sym}{Math.round(spent).toLocaleString()}</b> spent
-                    </span>
-                  );
-                })()}
-              </div>
-            )}
+            <div className="glass-bar">
+              <button className="dash-search" onClick={() => setPalette(true)}>
+                <span className="ds-ic" aria-hidden="true"><Ic name="search" size={16} /></span>
+                <span className="ds-ph">Search or ask your vault…</span>
+                <span className="ds-kbd kbd">Ctrl K</span>
+              </button>
+              {pulse?.ins && (
+                <>
+                  <div className="doctabs" role="tablist" aria-label="Time range">
+                    {RANGES.map(([k, label]) => (
+                      <button key={k} className={range === k ? "on" : ""} role="tab" aria-selected={range === k}
+                        onClick={() => setProfile((p) => ({ ...p, range: k }))}>{label}</button>
+                    ))}
+                  </div>
+                  {(() => {
+                    const done = pulse.doneDates.filter(inRange).length;
+                    const saved = items.filter((i) => inRange(i.date)).length;
+                    const spent = pulse.expensesRaw.filter((e) => inRange(e.date)).reduce((a, e) => a + e.amt, 0);
+                    const sym = pulse.ins.money.sym;
+                    return (
+                      <span className="rangeroll mono">
+                        {RANGE_WORD[range]}: <b>{fmtK(done)}</b> finished · <b>{fmtK(saved)}</b> saved · <b>{sym}{Math.round(spent).toLocaleString()}</b> spent
+                      </span>
+                    );
+                  })()}
+                </>
+              )}
+            </div>
 
             {ob && !ob.dismissed && ob.choice && (() => {
               let boardsOwn = false;
@@ -1664,7 +1685,6 @@ export default function App() {
                 pulse.dueToday && { k: "dt", label: "Due today", n: pulse.dueToday, sub: "Open tasks →", tone: "amber", go: () => goView("todos") },
                 pulse.pendingBills && { k: "bill", label: "Unpaid bills", sub: pulse.overdueBills ? `${pulse.overdueBills} overdue · Finance →` : "Open Finance →", n: `${sym}${Math.round(pulse.pendingBillsTotal).toLocaleString()}`, tone: pulse.overdueBills ? "red" : "amber", go: () => goView("finance") },
                 cardsOpen && { k: "cards", label: "Cards in progress", n: cardsOpen, sub: "Open Boards →", tone: "neutral", go: () => goView("board") },
-                pulse.inbox && { k: "inbox", label: "Inbox to sort", n: pulse.inbox, sub: "Open Content →", tone: "neutral", go: () => goView("all") },
               ].filter(Boolean);
               /* one aggregate Reading ring, not one per book — a vault with
                  200 in-progress books still gets a single calm card */
@@ -1675,16 +1695,16 @@ export default function App() {
               const doneInRange = pulse.doneDates.filter(inRange).length;
               const taskPct = doneInRange + ins.todos.open > 0 ? Math.round((doneInRange / (doneInRange + ins.todos.open)) * 100) : 0;
               const rings = [
-                { k: "todo", label: `Tasks ${RANGE_WORD[range]}`, val: `${fmtK(doneInRange)} done · ${fmtK(ins.todos.open)} open`, pct: taskPct, color: "var(--moss)", go: () => goView("todos") },
-                ins.boards.total > 0 && { k: "sprint", label: "Sprint", val: `${fmtK(ins.boards.done)}/${fmtK(ins.boards.total)} done`, pct: ins.boards.pct, color: "var(--azure)", go: () => goView("board") },
+                { k: "todo", feat: "Tasks", label: `Tasks ${RANGE_WORD[range]}`, val: `${fmtK(doneInRange)} done · ${fmtK(ins.todos.open)} open`, pct: taskPct, color: "var(--moss)", go: () => goView("todos") },
+                ins.boards.total > 0 && { k: "sprint", feat: "Boards", label: "Sprint", val: `${fmtK(ins.boards.done)}/${fmtK(ins.boards.total)} done`, pct: ins.boards.pct, color: "var(--azure)", go: () => goView("board") },
                 readingBooks.length > 0 && {
-                  k: "read",
+                  k: "read", feat: "Content",
                   label: readingBooks.length === 1 ? `Reading · ${readingBooks[0].alias || readingBooks[0].title}` : `Reading · ${fmtK(readingBooks.length)} books`,
                   val: readingBooks.length === 1 ? `${readingBooks[0].progress || 0}%` : `${readAvg}% avg`,
                   pct: readAvg, color: "var(--gold)",
                   go: () => (readingBooks.length === 1 ? goto(readingBooks[0]) : openSection("book")),
                 },
-                ins.money.budget > 0 && { k: "budget", label: `Budget · ${ins.money.budgetWord}`, val: `${sym}${Math.round(ins.money.budgetSpent).toLocaleString()} / ${sym}${Math.round(ins.money.budget).toLocaleString()}`, pct: Math.min(100, ins.money.pct), color: ins.money.pct > 100 ? "var(--stamp)" : "var(--gold)", go: () => goView("finance") },
+                ins.money.budget > 0 && { k: "budget", feat: "Finance", label: `Budget · ${ins.money.budgetWord}`, val: `${sym}${Math.round(ins.money.budgetSpent).toLocaleString()} / ${sym}${Math.round(ins.money.budget).toLocaleString()}`, pct: Math.min(100, ins.money.pct), color: ins.money.pct > 100 ? "var(--stamp)" : "var(--gold)", go: () => goView("finance") },
               ].filter(Boolean);
               /* momentum sparkline + small range-aware charts; every card is a
                  door into its section, and the flex grid packs with no gaps */
@@ -1709,6 +1729,22 @@ export default function App() {
               const topCats = Object.entries(catMap).map(([cat, amt]) => ({ cat, amt })).sort((x, y) => y.amt - x.amt).slice(0, 5);
               return (
                 <>
+                  {/* digest lives at the TOP and follows the range tab */}
+                  <div className="card digestcard" style={{ borderColor: "var(--violet)" }}>
+                    <h3>✦ {({ day: "Daily", week: "Weekly", month: "Monthly", year: "Yearly" })[range] || "Weekly"} digest
+                      <button className="aibtn" style={{ marginLeft: 10 }} disabled={digestBusy || !aiReady}
+                        title={aiReady ? `Your AI reviews your ${RANGE_WORD[range]}: what you saved, what's rotting, what to do next` : "Set up an AI model in Settings to enable"}
+                        onClick={genDigest}>{digestBusy ? "Writing…" : digest ? "Regenerate" : "Generate"}</button>
+                    </h3>
+                    {digest
+                      ? <div className="digest">{digest}</div>
+                      : <div className="m" style={{ color: "var(--ink-soft)" }}>
+                          {aiReady
+                            ? `One click and your AI reviews ${RANGE_WORD[range]} — what you saved, what's going stale, and what to finish next. Switch the Daily/Weekly/Monthly/Yearly tab to change the window.`
+                            : "AI is off — connect Claude or an open-source model in Settings to unlock the digest, Ask AI, summaries and more."}
+                        </div>}
+                  </div>
+
                   <div className="sec-label mono"><span className="sl-dot" aria-hidden="true" /> Needs you now</div>
                   {needs.length ? (
                     <div className="needs-grid">
@@ -1729,7 +1765,8 @@ export default function App() {
                     {rings.map((r) => {
                       const pct = Math.max(0, Math.min(100, Math.round(r.pct)));
                       return (
-                        <button key={r.k} className="ringcard" onClick={r.go} title={`Open — ${r.label}`}>
+                        <button key={r.k} className="ringcard" title={`Powered by ${r.feat} — click to open`}
+                          onClick={() => setAskNav({ label: r.feat, title: r.label, fn: r.go })}>
                           <div className="progring" style={{ background: `conic-gradient(${r.color} ${pct}%, var(--line) 0)` }}>
                             <span className="progring-hole mono">{pct}%</span>
                           </div>
@@ -1741,7 +1778,8 @@ export default function App() {
                       );
                     })}
                     {hasSpark && (
-                      <button className="ringcard spark-card" onClick={() => goView("todos")} title="Open Tasks">
+                      <button className="ringcard spark-card" title="Powered by Tasks — click to open"
+                        onClick={() => setAskNav({ label: "Tasks", title: "Tasks finished", fn: () => goView("todos") })}>
                         <div className="spark-body">
                           <div className="spark-head">
                             <span className="progring-label">Tasks finished</span>
@@ -1754,7 +1792,8 @@ export default function App() {
                       </button>
                     )}
                     {spend.values.some((v) => v > 0) && (
-                      <button className="ringcard spark-card" onClick={() => goView("finance")} title="Open Finance">
+                      <button className="ringcard spark-card" title="Powered by Finance — click to open"
+                        onClick={() => setAskNav({ label: "Finance", title: "Spending", fn: () => goView("finance") })}>
                         <div className="spark-body">
                           <div className="spark-head">
                             <span className="progring-label">Spending</span>
@@ -1768,8 +1807,16 @@ export default function App() {
                     )}
                   </div>
 
+                  {/* the chart area begins here — Add chart sits top-right above it */}
+                  <div className="sec-label mono charts-head">
+                    Insights · {RANGE_WORD[range]}
+                    <button className="kbtn yc-add" onClick={() => setExplore({ cfg: newChartCfg(), isNew: true })}
+                      title="Build your own chart from any feature's data — it lands at the bottom of the charts">＋ Add chart</button>
+                  </div>
                   <div className="charts-duo">
-                    <div className="card"><h3>Where things live</h3><Donut items={items} /></div>
+                    <div className="card"><h3>Where things live</h3><Zoom title="Where things live" sub={`Share of items saved ${RANGE_WORD[range]}.`}
+                      go={{ label: "Content", fn: () => goView("all") }}
+                      note={<><b>How to read:</b> each slice is one section; the number in the middle is everything saved {RANGE_WORD[range]}. It follows the Daily/Weekly/Monthly/Yearly tab above.</>}><Donut items={items.filter((i) => inRange(i.date))} /></Zoom></div>
                     <div className="card">
                       {/* no amount up here — the TOTAL block below is the one number */}
                       <div className="wstrip-head">
@@ -1777,7 +1824,9 @@ export default function App() {
                         <span className="cardsub mono">{RANGE_WORD[range]}</span>
                       </div>
                       {topCats.length ? (
-                        <>
+                        <Zoom title="Where money goes" sub={`Biggest spending categories · ${RANGE_WORD[range]}.`}
+                          go={{ label: "Finance", fn: () => goView("finance") }}
+                          note={<><b>How to read:</b> your biggest spending categories for this range, largest first — the % is each one&rsquo;s share of the total below.</>}>
                           <div className="catbars catbars-fill">
                             {topCats.map((c) => {
                               const catMax = topCats[0].amt || 1;
@@ -1796,7 +1845,7 @@ export default function App() {
                             <span className="etc-label mono">TOTAL</span>
                             <span className="wtotal-amt">{sym}{Math.round(spentNow).toLocaleString()}</span>
                           </div>
-                        </>
+                        </Zoom>
                       ) : (
                         <div className="m" style={{ color: "var(--ink-soft)" }}>No expenses logged {RANGE_WORD[range]} — add one in Finance.</div>
                       )}
@@ -1807,24 +1856,27 @@ export default function App() {
                   <div className="charts-row2">
                     <div className="card">
                       <h3>Your vault, compounding</h3>
-                      <div className="m" style={{ color: "var(--ink-soft)", marginBottom: 8 }}>Everything you&rsquo;ve saved, accumulating by type.</div>
-                      <VaultGrowth items={items} />
+                      <div className="m" style={{ color: "var(--ink-soft)", marginBottom: 8 }}>Everything you&rsquo;ve saved, accumulating by type · {({ day: "last 14 days", week: "last 10 weeks", month: "last 6 months", year: "last 12 months" })[range]}.</div>
+                      <Zoom title="Your vault, compounding" sub={`Everything saved, accumulating by type · ${{ day: "last 14 days", week: "last 10 weeks", month: "last 6 months", year: "last 12 months" }[range]}.`}
+                        go={{ label: "Content", fn: () => goView("all") }}
+                        note={<><b>How to read:</b> each coloured band is one type — notes, videos, library, documents — stacked so the top edge is your whole vault. Hover a band for its count in any bucket; the window follows the Daily/Weekly/Monthly/Yearly tab.</>}><VaultGrowth items={items} range={range} /></Zoom>
                     </div>
                     <div className="card">
                       <h3>Task rhythm</h3>
-                      <div className="m" style={{ color: "var(--ink-soft)", marginBottom: 8 }}>Tasks finished per day — streaks glow.</div>
-                      <TaskRhythm doneDates={pulse?.doneDates || []} />
+                      <div className="m" style={{ color: "var(--ink-soft)", marginBottom: 8 }}>Tasks finished · {({ day: "last 14 days", week: "last 10 weeks", month: "last 6 months, by week", year: "last 12 months, by week" })[range]} — streaks glow.</div>
+                      <Zoom title="Task rhythm" sub={`Tasks finished per day · ${{ day: "last 14 days", week: "last 10 weeks", month: "last 6 months", year: "last 12 months" }[range]} — streaks glow.`}
+                        go={{ label: "Tasks", fn: () => goView("todos") }}
+                        note={<><b>How to read:</b> one bar per day (per week on the Monthly and Yearly tabs), taller = more tasks finished; the window follows the range tab above. Consecutive active days glow as a streak — protect it.</>}><TaskRhythm doneDates={pulse?.doneDates || []} range={range} /></Zoom>
                     </div>
                     <div className="card">
                       <h3>How things arrive</h3>
-                      <div className="m" style={{ color: "var(--ink-soft)", marginBottom: 8 }}>Your capture mix — typed, pasted, dropped, imported.</div>
-                      <CaptureSources items={items} importedCount={pulse?.importedCount || 0} />
+                      <div className="m" style={{ color: "var(--ink-soft)", marginBottom: 8 }}>Your capture mix {RANGE_WORD[range]} — typed, pasted, dropped, imported.</div>
+                      <Zoom title="How things arrive" sub={`Your capture mix ${RANGE_WORD[range]} — typed, pasted, dropped, imported.`}
+                        go={{ label: "Content", fn: () => goView("all") }}
+                        note={<><b>How to read:</b> each bar counts how items entered Vault {RANGE_WORD[range]} — it follows the range tab above. Lots of &ldquo;pasted&rdquo; means you collect from elsewhere; &ldquo;typed&rdquo; means original notes.</>}><CaptureSources items={items.filter((i) => inRange(i.date))} importedCount={pulse?.importedCount || 0} /></Zoom>
                     </div>
                   </div>
 
-                  <YourCharts rev={chartsRev} sym={sym}
-                    onExplore={(cfg) => setExplore({ cfg, isNew: false })}
-                    onNew={() => setExplore({ cfg: newChartCfg(), isNew: true })} />
                 </>
               );
             })()}
@@ -1845,20 +1897,10 @@ export default function App() {
               })}
             </div>
 
-            <div className="card" style={{ borderColor: "var(--violet)" }}>
-              <h3>✦ Weekly digest
-                <button className="aibtn" style={{ marginLeft: 10 }} disabled={digestBusy || !aiReady}
-                  title={aiReady ? "Your AI reviews your week: what you saved, what's rotting, what to do next" : "Set up an AI model in Settings to enable"}
-                  onClick={genDigest}>{digestBusy ? "Writing…" : digest ? "Regenerate" : "Generate"}</button>
-              </h3>
-              {digest
-                ? <div className="digest">{digest}</div>
-                : <div className="m" style={{ color: "var(--ink-soft)" }}>
-                    {aiReady
-                      ? "One click and your AI reviews your week — what you saved, what's going stale, and what to finish next."
-                      : "AI is off — connect Claude or an open-source model in Settings to unlock the digest, Ask AI, summaries and more."}
-                  </div>}
-            </div>
+            {/* the user's own charts close out the dashboard — below the
+                Notes / YouTube / Library / Documents cards */}
+            <YourCharts rev={chartsRev} sym={pulse?.ins?.money?.sym || "$"}
+              onExplore={(cfg) => setExplore({ cfg, isNew: false })} />
 
           </>
         )}
@@ -1891,12 +1933,9 @@ export default function App() {
         )}
 
         {view === "graph" && (
-          <>
-            <div className="crumb">Connections</div>
-            <h2 className="display">Graph</h2>
-            <Intro id="graph">Each project tag is a hub with its items gathered around it. Hover anything to spotlight its connections; click to open.</Intro>
-            <GraphView items={items} onOpenTag={openTag} onOpenSection={openSection} />
-          </>
+          /* no page header here — the graph owns the whole page, with its
+             controls floating over the canvas like the dashboard glass bar */
+          <GraphView items={items} onOpenTag={openTag} onOpenSection={openSection} />
         )}
 
         {view === "tags" && (
@@ -1905,7 +1944,7 @@ export default function App() {
             <h2 className="display">Tags</h2>
             <Intro id="tags">Every project tag in your vault, with what it links together — click one to open the project.</Intro>
 
-            <div className="bar">
+            <div className="bar featbar">
               <input placeholder="＋ Create a tag — e.g. “side-project” (Enter)" aria-label="Create a tag"
                 onKeyDown={(e) => {
                   if (e.key !== "Enter") return;
@@ -2028,7 +2067,7 @@ export default function App() {
             {/* Type switcher — the four saved-item kinds, unified. "All" shows
                 everything mixed; each type shows its own view and extras. */}
             {isContentView(view) && (
-              <div className="doctabs ctype-tabs" role="tablist" aria-label="Content type">
+              <div className="doctabs ctype-tabs featbar" role="tablist" aria-label="Content type">
                 <button className={view === "all" ? "on" : ""} role="tab" aria-selected={view === "all"}
                   onClick={() => { setView("all"); setTag(null); setAdding(false); setPageId(null); setQ(""); }}>
                   All · {items.filter((i) => CONTENT_TYPES.includes(i.type)).length}
@@ -2286,6 +2325,7 @@ export default function App() {
               : <div className="empty">{dateFilter || q || (view === "doc" && docFilter !== "All")
                   ? <>{dateFilter ? <>Nothing added on <b>{fmtStamp(dateFilter)}</b></> : (view === "doc" && docFilter !== "All") ? <>No <b>{docFilter}</b> documents yet</> : "Nothing matching your filter"} — <button className="av-link" onClick={() => { setDateFilter(""); setQ(""); setDocFilter("All"); }}>clear filters</button>.</>
                   : <>Nothing here yet. Tap <b>+ Add item</b>, paste a link for instant capture, or drop a file straight into the form.</>}</div>}
+
           </>
         )}
       </main>

@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { fmtStamp, today, daysAgo } from "@/lib/seed";
-import { BudgetBurn, BudgetBullets } from "./Charts";
+import { BudgetBurn, BudgetBullets, Zoom } from "./Charts";
 import FinanceAnalytics from "./FinanceAnalytics";
 import FinanceBudgets from "./FinanceBudgets";
 import StatementImport from "./StatementImport";
@@ -706,7 +706,7 @@ export default function FinanceBoard() {
       {smartMsg && <div className={`smartmsg ${smartMsg.ok ? "ok" : "err"}`}>{smartMsg.ok ? "✓" : "⚠"} {smartMsg.text}</div>}
 
       {/* Board | Analytics tabs + export */}
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14, flexWrap: "wrap" }}>
+      <div className="featbar">
         <div className="doctabs" role="tablist" aria-label="Finance view" style={{ display: "inline-flex" }}>
           <button className={tab === "board" ? "on" : ""} role="tab" aria-selected={tab === "board"}
             onClick={() => setTab("board")}>▥ Board</button>
@@ -934,7 +934,8 @@ export default function FinanceBoard() {
           <div className="m" style={{ color: "var(--ink-soft)", marginBottom: 6 }}>
             Spend against each cap — the black tick is the cap, red past it is the overrun.
           </div>
-          <BudgetBullets byCat={fin.budgets?.byCat} spentByCat={spentByCatPeriod} fmt={fmt} />
+          <Zoom title="Category bullets" sub="Spend against each cap — the black tick is the cap."
+            note={<><b>How to read:</b> each bar is a category&rsquo;s spending this period; the black tick marks its cap. A bar stopping short of the tick is under budget — anything painted red past it is the overrun.</>}><BudgetBullets byCat={fin.budgets?.byCat} spentByCat={spentByCatPeriod} fmt={fmt} /></Zoom>
         </div>
       )}
       {(() => {
@@ -948,7 +949,8 @@ export default function FinanceBoard() {
             <div className="m" style={{ color: "var(--ink-soft)", marginBottom: 6 }}>
               Cumulative spend vs the even-pace line to {fmt(+monthly)} — above the dashes means you&rsquo;re ahead of pace.
             </div>
-            <BudgetBurn expenses={fin.expenses} budget={+monthly} fmt={fmt} />
+            <Zoom title="Budget burn" sub="Cumulative spend vs the even-pace line — above the dashes is ahead of pace."
+              note={<><b>How to read:</b> the solid line is everything spent so far this month; the dashed line is the pace that would land exactly on your budget. Riding above the dashes = burning too fast, below = money in hand at month end.</>}><BudgetBurn expenses={fin.expenses} budget={+monthly} fmt={fmt} /></Zoom>
           </div>
         ) : null;
       })()}

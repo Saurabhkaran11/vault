@@ -3,7 +3,7 @@
 import React, { useMemo, useState } from "react";
 import { today } from "@/lib/seed";
 import { askText } from "@/lib/ai";
-import { TopMerchants, MoneyFlow, CategoryShifts, IncomeVsSpend, SavingsWaterfall, WeekendPremium } from "./Charts";
+import { TopMerchants, MoneyFlow, CategoryShifts, IncomeVsSpend, SavingsWaterfall, WeekendPremium, Zoom } from "./Charts";
 import { useAiReady } from "@/hooks/useAiReady";
 
 /* Finance analytics: spending reports over daily / weekly / monthly / yearly
@@ -326,10 +326,16 @@ export default function FinanceAnalytics({ fin, fmt, spentByCat = {}, savingsRat
         <div className="empty">No expenses logged yet — add some on the Board tab and your reports light up here.</div>
       ) : chart === "donut" ? (
         slices.length
-          ? <CategoryDonut slices={slices} total={total} fmt={fmt} />
+          ? <Zoom title="Spending breakdown" sub="Share of spending by category in the chosen range."
+              note={<><b>How to read:</b> each slice is one category&rsquo;s share of spending in the chosen range; the centre shows the total. Bigger slice = bigger share of your money.</>}>
+              <CategoryDonut slices={slices} total={total} fmt={fmt} />
+            </Zoom>
           : <div className="empty">Nothing in this range yet — switch to a longer period.</div>
       ) : (
-        <TimeChart buckets={buckets} type={chart} fmt={fmt} />
+        <Zoom title="Spending over time" sub="Spending bucketed across the chosen range."
+          note={<><b>How to read:</b> spending over time in the chosen range — hover any point for the exact amount. Switch Bar, Line or Area above; the shape is the same story drawn differently.</>}>
+          <TimeChart buckets={buckets} type={chart} fmt={fmt} />
+        </Zoom>
       )}
 
 
@@ -341,32 +347,38 @@ export default function FinanceAnalytics({ fin, fmt, spentByCat = {}, savingsRat
         <div className="card fanal-card">
           <h3>Category shifts</h3>
           <div className="m fanal-sub">This month vs last — red grows, green shrinks.</div>
-          <CategoryShifts expenses={fin.expenses} fmt={fmt} />
+          <Zoom title="Category shifts" sub="This month vs last — red grows, green shrinks."
+            note={<><b>How to read:</b> each row is a spending category with its 8-week trend. The chip compares this month to last — <b>red</b> means it grew, <b>green</b> means it shrank, &ldquo;new&rdquo; had no spend last month.</>}><CategoryShifts expenses={fin.expenses} fmt={fmt} /></Zoom>
         </div>
         <div className="card fanal-card">
           <h3>Income vs spend</h3>
           <div className="m fanal-sub">Last 5 months — the green haze is what you kept.</div>
-          <IncomeVsSpend incomes={fin.incomes} expenses={fin.expenses} fmt={fmt} />
+          <Zoom title="Income vs spend" sub="Last 5 months — the green haze is what you kept."
+            note={<><b>How to read:</b> two bars per month — income beside spending. When the income bar is taller, the gap between them is money you kept that month.</>}><IncomeVsSpend incomes={fin.incomes} expenses={fin.expenses} fmt={fmt} /></Zoom>
         </div>
         <div className="card fanal-card">
           <h3>Savings waterfall</h3>
           <div className="m fanal-sub">This month: income stepping down to what you kept.</div>
-          <SavingsWaterfall incomes={fin.incomes} expenses={fin.expenses} fmt={fmt} />
+          <Zoom title="Savings waterfall" sub="This month: income stepping down to what you kept."
+            note={<><b>How to read:</b> start at the income bar on the left; every step down is one category&rsquo;s spending. The final bar is what survived the month — your savings.</>}><SavingsWaterfall incomes={fin.incomes} expenses={fin.expenses} fmt={fmt} /></Zoom>
         </div>
         <div className="card fanal-card">
           <h3>Weekend premium</h3>
           <div className="m fanal-sub">Average daily spend, weekday vs weekend · last 8 weeks.</div>
-          <WeekendPremium expenses={fin.expenses} fmt={fmt} />
+          <Zoom title="Weekend premium" sub="Average daily spend, weekday vs weekend · last 8 weeks."
+            note={<><b>How to read:</b> the two bars are your average spend on a weekday vs a weekend day. The multiplier says how much pricier your weekends run — most people&rsquo;s are 1.5–2×.</>}><WeekendPremium expenses={fin.expenses} fmt={fmt} /></Zoom>
         </div>
         <div className="card fanal-card fanal-wide">
           <h3>Money flow</h3>
           <div className="m fanal-sub">This month: income → categories → where it lands. Hover any ribbon.</div>
-          <MoneyFlow incomes={fin.incomes} expenses={fin.expenses} fmt={fmt} />
+          <Zoom title="Money flow" sub="This month: income → categories → where it lands."
+            note={<><b>How to read:</b> money flows left to right — income sources → spending categories → the merchants where it landed. Ribbon thickness is the amount; hover any ribbon for the exact figure. The green ribbon is money you kept.</>}><MoneyFlow incomes={fin.incomes} expenses={fin.expenses} fmt={fmt} /></Zoom>
         </div>
         <div className="card fanal-card fanal-wide">
           <h3>Top merchants</h3>
           <div className="m fanal-sub">Last 90 days — click a merchant for its habit math.</div>
-          <TopMerchants expenses={expenses} fmt={fmt} />
+          <Zoom title="Top merchants" sub="Last 90 days — click a merchant for its habit math."
+            note={<><b>How to read:</b> your biggest destinations for money over 90 days, largest first; the ×&nbsp;count is visits. Click a bar to see the habit math — per-visit and per-month cost.</>}><TopMerchants expenses={expenses} fmt={fmt} /></Zoom>
         </div>
       </div>
     )}

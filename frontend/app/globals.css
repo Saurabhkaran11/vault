@@ -50,7 +50,7 @@ body{background:var(--bg)}
 /* ---------- main */
 /* fill the screen: dashboards earn their width on big monitors. The cap
    only exists so ultrawides don't stretch lines absurdly. */
-.main{flex:1; padding:30px clamp(24px, 3vw, 52px); max-width:1560px; min-width:0}
+.main{--pagepad:clamp(24px, 3vw, 52px); flex:1; padding:30px var(--pagepad); max-width:1560px; min-width:0}
 .crumb{font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:2px; text-transform:uppercase; color:var(--ink-soft); margin-bottom:6px}
 .main h2{font-family:'Fraunces',serif; font-size:32px; font-weight:650; margin-bottom:4px}
 .sub{color:var(--ink-soft); font-size:14px; margin-bottom:22px}
@@ -435,7 +435,7 @@ img.fpreview{height:auto}
 /* ---------- graph (simple cluster map, full page) */
 .graphwrap{background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:10px; position:relative}
 .graphwrap svg{width:100%; height:520px; display:block}
-.graphfull{display:flex; flex-direction:column; height:calc(100vh - 210px); min-height:480px}
+.graphfull{display:flex; flex-direction:column; height:calc(100vh - 178px); min-height:520px}
 .graphfull svg{flex:1; height:auto; min-height:0}
 .graphkey{display:flex; align-items:center; flex-wrap:wrap; gap:10px; padding:6px 8px 10px; border-bottom:1px solid var(--line); margin-bottom:6px}
 .graphhint{margin-left:auto; font-size:9.5px; letter-spacing:1.5px; color:var(--ink-soft)}
@@ -660,7 +660,21 @@ img.fpreview{height:auto}
 .doctabs button.on .tabbadge{background:#fff; color:var(--stamp)}
 
 /* ---------- To-dos, simplified: quick add + smart sections */
-.todosimple{max-width:720px; display:flex; flex-direction:column; gap:14px}
+/* hours-spent logging on tasks */
+.thrschip{border:1px solid var(--line); background:var(--field); border-radius:14px; padding:2px 9px; font-size:10px; color:var(--ink-soft); cursor:pointer; white-space:nowrap; flex-shrink:0}
+.thrschip.has{color:var(--moss); border-color:var(--moss); background:var(--moss-soft)}
+.thrschip.on{outline:2px solid var(--moss); outline-offset:1px}
+.tresched.thrs{align-items:center}
+.tresched.thrs input[type=number]{width:88px; border:1px solid var(--line); border-radius:8px; padding:5px 9px; font-family:'IBM Plex Mono',monospace; font-size:12px; background:var(--field); color:var(--ink)}
+.thrs-note{font-size:9.5px; letter-spacing:0.5px; color:var(--ink-soft)}
+.tsec-hrs{font-size:10px; color:var(--moss); background:var(--moss-soft); border-radius:12px; padding:2px 9px; white-space:nowrap}
+
+/* Tasks own the whole page: no width cap, and the open sections lay out
+   as a responsive grid of equal-height cards (Overdue · Today · Upcoming ·
+   Someday side by side on wide screens). */
+.todosimple{display:flex; flex-direction:column; gap:14px}
+.tsecgrid{display:grid; grid-template-columns:repeat(auto-fit, minmax(380px, 1fr)); gap:14px}
+@media (max-width:860px){.tsecgrid{grid-template-columns:minmax(0,1fr)}}
 .tquick{display:flex; align-items:center; gap:8px; background:var(--panel); border:1.5px solid var(--moss); border-radius:12px; padding:10px 12px}
 .tquick-input{flex:1; min-width:0; border:none; background:transparent; font-family:'Public Sans',sans-serif; font-size:15px; color:var(--ink)}
 .tquick-input:focus{outline:none}
@@ -988,7 +1002,8 @@ img.fpreview{height:auto}
 
 /* long lists scroll inside their card instead of stretching the page;
    totals and headers sit OUTSIDE the scroll area so they never move */
-.scrolllist{max-height:440px; overflow-y:auto; padding-right:4px; overscroll-behavior:contain}
+.scrolllist{max-height:440px; overflow-y:auto; padding-right:4px; overscroll-behavior:contain;
+  mask-image:linear-gradient(#000 calc(100% - 22px), transparent); -webkit-mask-image:linear-gradient(#000 calc(100% - 22px), transparent)}
 .scrolllist-tall{max-height:62vh}
 .scrolllist-short{max-height:240px}
 .kanban .kcol{max-height:480px; overflow-y:auto; overscroll-behavior:contain}
@@ -1273,7 +1288,7 @@ img.fpreview{height:auto}
   .side.open{width:196px}
   .side.rail{width:56px; padding:16px 8px}
   .side .foot{display:none}
-  .main{padding:18px 14px}
+  .main{--pagepad:14px; padding:18px var(--pagepad)}
   /* 44px+ touch targets on phones (Apple HIG / Material minimum) */
   .navbtn, .qadd{padding:12px 10px}
   .side.rail .navbtn, .side.rail .qadd{padding:12px 6px}
@@ -1687,7 +1702,63 @@ button:disabled{opacity:.5; cursor:not-allowed}
 .merchant-row{background:none; border:none; font-family:inherit; color:var(--ink); cursor:pointer; padding:4px 6px; border-radius:8px; width:100%}
 .merchant-row:hover{background:var(--field)}
 .merchant-row.on{background:var(--moss-soft)}
+/* mode buttons carry words, not icons — size to their text, never clip */
+.gmode button{width:auto; min-width:0; padding:0 11px; font-size:12px; white-space:nowrap}
 .gmode button.on{background:var(--moss); color:#fff; border-color:var(--moss)}
+
+/* ---------- glass treatment for the Graph page — same frost as the
+   dashboard's glass cards; the aurora wash behind shines through */
+.vault.glass .graphwrap{background:linear-gradient(155deg, rgba(255,255,255,0.66), rgba(255,255,255,0.42)); border-color:rgba(255,255,255,0.65); backdrop-filter:blur(18px) saturate(1.12); -webkit-backdrop-filter:blur(18px) saturate(1.12); box-shadow:0 18px 44px rgba(30,50,80,0.10)}
+.vault.glass.vivid .graphwrap{background:linear-gradient(155deg, rgba(255,255,255,0.55), rgba(255,255,255,0.30))}
+.vault.glass .graphkey{border-bottom-color:rgba(122,144,176,0.22)}
+.vault.glass .gsearch{background:rgba(255,255,255,0.6)}
+.vault.glass .gzoom{background:rgba(255,255,255,0.5)}
+.vault.glass .g3dcanvas{border-color:rgba(255,255,255,0.65); background:transparent}
+.vault.glass .cosmosfocus{background:rgba(255,255,255,0.6)}
+.vault.glass .cf-depth button{background:rgba(255,255,255,0.7)}
+
+/* ---------- Cosmos view (Obsidian-style constellation) */
+.cosmoswrap{flex:1; min-height:0; display:flex; flex-direction:column; position:relative}
+.cosmoswrap svg{flex:1; min-height:0}
+.cosmosbar{display:flex; align-items:center; gap:10px; padding:4px 8px 8px; flex-wrap:wrap}
+.cosmosfocus{display:inline-flex; align-items:center; gap:7px; font-size:10.5px; color:var(--ink); background:var(--field); border:1px solid var(--line); border-radius:20px; padding:3px 6px 3px 12px}
+.cf-depth{display:inline-flex; gap:2px}
+.cf-depth button{border:1px solid var(--line); background:var(--panel); color:var(--ink-soft); width:20px; height:20px; border-radius:6px; cursor:pointer; font-size:10.5px; line-height:1; padding:0}
+.cf-depth button.on{background:var(--violet); border-color:var(--violet); color:#fff}
+.cf-clear{border:none; background:none; color:var(--ink-soft); cursor:pointer; font-size:12px; padding:2px 4px}
+.cf-clear:hover{color:var(--red)}
+.cosmos-gear.on{background:var(--moss-soft); border-color:var(--moss); color:var(--moss)}
+.cosmos-panel{position:absolute; right:12px; top:46px; z-index:6; width:212px; background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:12px 14px; box-shadow:0 12px 32px rgba(0,0,0,0.12); display:flex; flex-direction:column; gap:8px}
+.vault.glass .cosmos-panel{background:rgba(255,255,255,0.78); backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px)}
+.cp-sec{font-size:9px; letter-spacing:1.5px; color:var(--ink-soft); margin-top:4px}
+.cp-sec:first-child{margin-top:0}
+.cp-check{display:flex; align-items:center; gap:8px; font-size:12.5px; color:var(--ink); cursor:pointer}
+.cp-check input{accent-color:var(--moss)}
+.cp-slide{display:flex; flex-direction:column; gap:3px; font-size:11.5px; color:var(--ink)}
+.cp-slide input[type=range]{width:100%; accent-color:var(--moss); cursor:pointer; margin:0}
+@media (max-width:700px){.cosmos-panel{right:6px; width:186px}}
+
+/* ---------- Explorer view (Hume-style inspect & expand) */
+.hxwrap{flex:1; min-height:0; display:flex; flex-direction:column; position:relative}
+.hxwrap svg{flex:1; min-height:0}
+.hx-add, .hxadd{min-width:230px}
+.hxpanel{position:absolute; right:12px; top:52px; z-index:6; width:248px; background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:14px 16px; box-shadow:0 12px 32px rgba(0,0,0,0.12); display:flex; flex-direction:column; gap:8px}
+.vault.glass .hxpanel{background:rgba(255,255,255,0.8); backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px)}
+.hx-kind{font-size:9px; letter-spacing:1.5px; color:var(--ink-soft)}
+.hx-title{font-family:'Fraunces',Georgia,serif; font-size:16.5px; font-weight:650; color:var(--ink); line-height:1.3; overflow-wrap:break-word}
+.hx-meta{font-size:12px; color:var(--ink-soft); line-height:1.5; overflow-wrap:break-word}
+.hx-row{font-size:9.5px; letter-spacing:1px; color:var(--ink-soft)}
+.hx-tags{display:flex; flex-wrap:wrap; gap:5px}
+.hx-chip{font-size:10px; background:var(--field); border:1px solid var(--line); border-radius:14px; padding:2px 9px; color:var(--violet)}
+.hx-actions{display:flex; flex-wrap:wrap; gap:7px; margin-top:2px}
+@media (max-width:700px){.hxpanel{right:6px; width:200px}}
+
+/* ---------- 3D view (react-force-graph) */
+.g3dwrap{flex:1; min-height:0; display:flex; flex-direction:column; position:relative}
+.g3dcanvas{flex:1; min-height:0; border-radius:10px; overflow:hidden; border:1px solid var(--line)}
+.g3d-check{font-size:12px; white-space:nowrap}
+.g3d-loading{padding:60px 0; text-align:center; font-size:10px; letter-spacing:1.5px; color:var(--ink-soft)}
+.g3dhint{margin-top:6px; font-size:9px; letter-spacing:1.2px; color:var(--ink-soft); text-align:right}
 
 /* ================================================================
    GLASS UI — frosted surfaces over a soft ambient wash. A Settings
@@ -1762,6 +1833,8 @@ button:disabled{opacity:.5; cursor:not-allowed}
 
 /* ---------- Chart Lab: your own charts + the explorer */
 .yc-head{display:flex; align-items:center; gap:12px; margin-top:18px}
+.charts-head{display:flex; align-items:center; gap:12px}
+.charts-head .yc-add{margin-left:auto}
 .yc-add{margin-left:auto}
 .yc-empty{display:flex; flex-direction:column; gap:6px; align-items:flex-start; text-align:left; cursor:pointer; font-family:inherit; color:var(--ink); border-style:dashed; border-width:1.5px}
 .yc-empty b{font-size:15px}
@@ -1772,10 +1845,21 @@ button:disabled{opacity:.5; cursor:not-allowed}
 .yc-title{font-family:'Fraunces',Georgia,serif; font-size:16px; font-weight:650; display:flex; align-items:center}
 .yc-open{margin-left:auto; color:var(--ink-soft); font-size:13px}
 .yc-sub{font-size:10.5px; letter-spacing:1px; color:var(--ink-soft); text-transform:uppercase; margin-bottom:6px}
+.pal-overlay.centered{align-items:center; padding-top:0}
 .pal.explorer{max-width:900px; width:min(94vw, 900px); max-height:88vh; overflow-y:auto; padding:20px 24px}
 .exp-head{display:flex; align-items:center; gap:12px; margin-bottom:14px}
 .exp-title{flex:1; min-width:0; border:none; background:transparent; font-family:'Fraunces',Georgia,serif; font-size:22px; font-weight:650; color:var(--ink); border-bottom:1.5px dashed var(--line); padding:4px 2px}
 .exp-title:focus{outline:none; border-bottom-color:var(--moss)}
+.labplot-wrap{flex-direction:column}
+.lab-legend{display:flex; flex-wrap:wrap; gap:5px 14px; margin-top:8px; font-size:11.5px; color:var(--ink); min-width:0}
+.lab-legend .ll-chip{display:inline-flex; align-items:center; gap:6px; white-space:nowrap}
+.lab-legend i{width:10px; height:10px; border-radius:3px; flex-shrink:0}
+.zoom-body .lab-legend{font-size:13px}
+.exp-duo{display:flex; gap:6px; min-width:0}
+.exp-duo select{min-width:0}
+.exp-vhead{flex:1; min-width:0}
+.exp-vtitle{font-family:'Fraunces',Georgia,serif; font-size:22px; font-weight:650; margin:0; color:var(--ink)}
+.exp-vsub{color:var(--ink-soft); margin-top:2px}
 .exp-controls{display:flex; flex-wrap:wrap; gap:14px 22px; margin-bottom:12px; align-items:flex-end}
 .exp-ctl{display:flex; flex-direction:column; gap:5px}
 .exp-ctl > .mono{font-size:9.5px; letter-spacing:1.5px; color:var(--ink-soft)}
@@ -1790,3 +1874,199 @@ button:disabled{opacity:.5; cursor:not-allowed}
 .exp-row b{min-width:64px; text-align:right}
 .exp-foot{display:flex; gap:10px; margin-top:18px; align-items:center}
 @media (max-width:700px){.exp-row > .mono:first-child{width:86px}.pal.explorer{padding:16px}}
+
+/* ---------- combined glass direction: hero band + sticky toolbar + tints */
+.hero-band{background:var(--panel); border:1px solid var(--line); border-radius:18px; padding:22px 26px 14px; margin-bottom:14px}
+.hero-band .crumb{margin-bottom:2px}
+.hero-band .display{margin-bottom:6px}
+.vault.glass .hero-band{
+  background:linear-gradient(120deg, rgba(255,255,255,0.5), rgba(255,255,255,0.74));
+  backdrop-filter:blur(24px) saturate(1.5); -webkit-backdrop-filter:blur(24px) saturate(1.5);
+  border:1px solid rgba(255,255,255,0.85);
+  box-shadow:0 14px 40px rgba(15,34,55,0.10), inset 0 1px 0 rgba(255,255,255,0.95);
+}
+
+.glass-bar{position:sticky; top:10px; z-index:40; display:flex; align-items:center; gap:14px; flex-wrap:wrap;
+  background:var(--panel); border:1px solid var(--line); border-radius:99px; padding:8px 16px; margin-bottom:18px}
+.vault.glass .glass-bar{
+  background:rgba(255,255,255,0.55);
+  backdrop-filter:blur(20px) saturate(1.4); -webkit-backdrop-filter:blur(20px) saturate(1.4);
+  border:1px solid rgba(255,255,255,0.8);
+  box-shadow:0 10px 30px rgba(15,34,55,0.13), inset 0 1px 0 rgba(255,255,255,0.9);
+}
+.glass-bar .dash-search{flex:1 1 240px; max-width:none; margin:0; background:transparent; border:none; padding:6px 4px}
+.glass-bar .doctabs{flex-shrink:0}
+.glass-bar .rangeroll{font-size:12px}
+@media (max-width:860px){.glass-bar{border-radius:16px; top:6px}}
+
+/* feature-tinted glass on the needs-you-now cards */
+.vault.glass .needcard{border-left-width:4px}
+.vault.glass .needcard.tone-red{background:linear-gradient(135deg, rgba(178,58,46,0.10), rgba(255,255,255,0.62))}
+.vault.glass .needcard.tone-amber{background:linear-gradient(135deg, rgba(12,110,140,0.10), rgba(255,255,255,0.62))}
+.vault.glass .needcard.tone-neutral{background:linear-gradient(135deg, rgba(31,95,168,0.10), rgba(255,255,255,0.62))}
+
+/* vivid intensity: aurora wash + deeper frost */
+.vault.glass.vivid{
+  background:
+    radial-gradient(900px 520px at 12% -4%, rgba(31,95,168,0.26), transparent 60%),
+    radial-gradient(760px 460px at 88% 12%, rgba(12,110,140,0.22), transparent 62%),
+    radial-gradient(820px 560px at 55% 105%, rgba(91,75,196,0.20), transparent 60%),
+    linear-gradient(160deg, #EAF1F9, var(--bg));
+  background-attachment: fixed;
+}
+.vault.glass.vivid .card,
+.vault.glass.vivid .tile,
+.vault.glass.vivid .ringcard,
+.vault.glass.vivid .tagcard,
+.vault.glass.vivid .exp-total-card,
+.vault.glass.vivid .smartbar,
+.vault.glass.vivid .dash-search,
+.vault.glass.vivid .trow,
+.vault.glass.vivid .kcol{
+  background:rgba(255,255,255,0.46);
+  backdrop-filter:blur(26px) saturate(1.5); -webkit-backdrop-filter:blur(26px) saturate(1.5);
+}
+.vault.glass.vivid .glass-bar{background:rgba(255,255,255,0.48)}
+.vault.glass.vivid .hero-band{background:linear-gradient(120deg, rgba(255,255,255,0.42), rgba(255,255,255,0.68))}
+
+/* ---------- glass reaches EVERY feature surface (no backdrop-filter on
+   repeated rows/cards — translucency alone lets the aurora through cheaply) */
+.vault.glass .row, .vault.glass .notecard, .vault.glass .kcard, .vault.glass .tweek-col{
+  background:rgba(255,255,255,0.66); border-color:rgba(255,255,255,0.72);
+}
+.vault.glass.vivid .row, .vault.glass.vivid .notecard, .vault.glass.vivid .kcard, .vault.glass.vivid .tweek-col{
+  background:rgba(255,255,255,0.52);
+}
+/* Ask AI + Search pages re-declare .pal backgrounds later in the cascade —
+   re-frost them explicitly */
+.vault.glass .pal.askpage, .vault.glass .pal.searchpage{
+  background:linear-gradient(155deg, rgba(255,255,255,0.74), rgba(255,255,255,0.52));
+  border-color:rgba(255,255,255,0.68);
+  backdrop-filter:blur(16px) saturate(1.12); -webkit-backdrop-filter:blur(16px) saturate(1.12);
+}
+.vault.glass .av-chip{background:rgba(255,255,255,0.55)}
+
+/* ---------- featbar: every feature's EXISTING top controls float as the
+   same glass pill the dashboard and graph use — nothing new added, just
+   aligned. Sticky so it hovers while the section scrolls beneath. */
+.featbar{position:sticky; top:10px; z-index:35; display:flex; align-items:center; gap:10px; flex-wrap:wrap; background:var(--panel); border:1px solid var(--line); border-radius:99px; padding:7px 12px; margin-bottom:16px; box-shadow:0 12px 32px rgba(30,50,80,0.12)}
+.vault.glass .featbar{background:rgba(255,255,255,0.62); border-color:rgba(255,255,255,0.72); backdrop-filter:blur(16px) saturate(1.15); -webkit-backdrop-filter:blur(16px) saturate(1.15)}
+.featbar .doctabs{border:none; min-width:0}
+.vault.glass .featbar .doctabs{background:transparent; backdrop-filter:none; -webkit-backdrop-filter:none}
+.vault.glass .doctabs.featbar{background:rgba(255,255,255,0.62); backdrop-filter:blur(16px) saturate(1.15); -webkit-backdrop-filter:blur(16px) saturate(1.15)}
+.doctabs.featbar{flex-wrap:nowrap; overflow-x:auto}
+.bar.featbar input{border:none; background:transparent; padding:8px 12px}
+.bar.featbar input:focus{outline:none}
+
+/* ---------- Graph: the canvas IS the page — no box, no header. Controls
+   float above it as a stacked glass cluster (search pill, control row,
+   stats chip), exactly like the dashboard's floating bar. */
+.graphwrap.graphfull{
+  padding:0; overflow:hidden; border:none; box-shadow:none; background:transparent;
+  height:calc(100vh - 52px); min-height:520px;
+  margin:-18px calc(-1 * var(--pagepad, 24px)) -30px;
+}
+.vault.glass .graphwrap.graphfull:not(.gfull){background:transparent; backdrop-filter:none; -webkit-backdrop-filter:none; box-shadow:none; border:none}
+.graphfull .graphkey{position:absolute; top:16px; left:20px; right:20px; z-index:15; display:flex; flex-direction:column; align-items:flex-start; gap:9px; margin:0; padding:0; border:none; background:none; box-shadow:none; pointer-events:none}
+.graphfull .graphkey > *{pointer-events:auto}
+.gk-search{display:flex; align-items:center; gap:11px; width:min(560px, calc(100% - 12px)); background:var(--panel); border:1px solid var(--line); border-radius:99px; padding:11px 20px; box-shadow:0 12px 32px rgba(30,50,80,0.14)}
+.gk-icon{color:var(--ink-soft); font-size:16px; line-height:1}
+.gk-search .gsearch{flex:1; min-width:0; border:none; background:transparent; padding:0; font-size:14.5px; border-radius:0}
+.gk-search .gsearch:focus{outline:none}
+.gk-row{display:flex; align-items:center; gap:10px; flex-wrap:wrap; background:var(--panel); border:1px solid var(--line); border-radius:99px; padding:5px 8px; box-shadow:0 12px 32px rgba(30,50,80,0.12)}
+.gk-stats{font-size:9.5px; letter-spacing:1px; color:var(--ink-soft); background:var(--panel); border:1px solid var(--line); border-radius:99px; padding:5px 13px; box-shadow:0 8px 22px rgba(30,50,80,0.10)}
+.vault.glass .gk-search, .vault.glass .gk-row{background:rgba(255,255,255,0.64); border-color:rgba(255,255,255,0.72); backdrop-filter:blur(16px) saturate(1.15); -webkit-backdrop-filter:blur(16px) saturate(1.15)}
+.vault.glass .gk-stats{background:rgba(255,255,255,0.55); border-color:rgba(255,255,255,0.65)}
+.cosmoswrap, .hxwrap, .g3dwrap{padding:112px 16px 8px}
+/* full-page mode keeps a backdrop of its own (it floats above the app) */
+.graphwrap.graphfull.gfull{position:fixed; inset:10px; z-index:70; height:auto; min-height:0; margin:0; background:var(--bg); border:1px solid var(--line); border-radius:14px}
+.vault.glass .graphwrap.graphfull.gfull{background:linear-gradient(155deg, rgba(244,248,252,0.92), rgba(255,255,255,0.85)); backdrop-filter:blur(18px) saturate(1.12); -webkit-backdrop-filter:blur(18px) saturate(1.12); border-color:rgba(255,255,255,0.7)}
+.gfull-btn{white-space:nowrap}
+.gfull-btn.on{background:var(--moss-soft); border-color:var(--moss); color:var(--moss)}
+
+/* ---------- universal chart maximize */
+.zoomable{position:relative; display:flex; flex-direction:column; flex:1; min-width:0; min-height:0}
+/* inside a height-capped dialog (.pal is a column flexbox with max-height),
+   a squeezable .zoomable lets its fixed-height svg overflow onto whatever
+   sits below — never shrink there, let the dialog scroll instead */
+.pal .zoomable{flex:0 0 auto; min-height:auto}
+.zoom-btn{position:absolute; top:-2px; right:0; z-index:5; background:var(--field); border:1px solid var(--line); border-radius:7px; color:var(--ink-soft); font-size:13px; width:26px; height:24px; cursor:pointer; opacity:0; transition:opacity .12s}
+.zoomable:hover .zoom-btn{opacity:1}
+.zoom-btn:hover{color:var(--moss); border-color:var(--moss)}
+.pal.zoomdlg{max-width:1100px; width:min(94vw, 1100px); max-height:84vh; align-self:flex-start; overflow-y:auto; padding:22px 26px}
+/* growth-chart legend: one chip per stacked layer with its live count */
+.growth-legend{display:flex; flex-wrap:wrap; gap:6px 16px; margin-top:8px; font-size:11.5px; color:var(--ink); min-width:0}
+.growth-legend .gl-item{display:inline-flex; align-items:center; gap:6px; white-space:nowrap}
+.growth-legend i{width:10px; height:10px; border-radius:3px; flex-shrink:0}
+.growth-legend b{font-weight:600}
+.zoom-body .growth-legend{font-size:13px}
+
+/* ask-before-navigating card (chart → its feature section) */
+.pal.askgo{max-width:430px; width:min(92vw,430px); padding:20px 22px}
+.askgo-title{font-family:'Fraunces',Georgia,serif; font-size:19px; font-weight:650; margin:0 0 6px}
+.askgo-sub{color:var(--ink-soft); margin:0; line-height:1.55}
+.askgo-foot{display:flex; gap:10px; justify-content:flex-end; margin-top:16px}
+.zoomable.zoom-linked{cursor:pointer}
+.zoomable.zoom-click{cursor:zoom-in}
+
+/* how-to-read caption under every chart: fixed 11.5px, wraps inside the
+   card (min-width:0 + break-word — it can never widen or escape the box) */
+.chart-note{margin-top:10px; padding-top:8px; border-top:1px dashed var(--line); font-size:11.5px; line-height:1.55; color:var(--ink-soft); min-width:0; max-width:100%; overflow-wrap:break-word}
+.chart-note b{color:var(--ink); font-weight:600}
+.zoom-body .chart-note{font-size:13px; margin-top:14px}
+.zoom-head{display:flex; align-items:flex-start; gap:14px; margin-bottom:16px}
+.zoom-head h3{font-family:'Fraunces',Georgia,serif; font-size:22px; font-weight:650}
+.zoom-head .kbtn{margin-left:auto}
+.zoom-body{display:flex; flex-direction:column}
+/* raise every chart class to reading size inside the dialog */
+.zoom-body .tinybars, .zoom-body .sparkline{height:min(46vh, 380px)}
+.zoom-body .growth-svg, .zoom-body .burn-svg, .zoom-body .ivs-svg, .zoom-body .wf-svg{height:min(52vh, 440px)}
+.zoom-body .rhythm-svg{height:min(42vh, 340px)}
+.zoom-body .donut-svg{height:min(60vh, 520px); max-width:56%}
+.zoom-body .donut-legend{font-size:16px}
+.zoom-body .shifts{gap:16px}
+.zoom-body .shift-spark{height:40px}
+.zoom-body .shift-name{font-size:15px; width:120px}
+.zoom-body .merchants{gap:18px}
+.zoom-body .merchant-name{font-size:13.5px; width:210px}
+.zoom-body .srcrows{gap:16px}
+.zoom-body .srcname{font-size:14.5px; width:140px}
+.zoom-body .wkl{font-size:14.5px}
+.zoom-body .bullets{gap:16px}
+.zoom-body .bullet-name{font-size:14.5px; width:110px}
+.zoom-body .catbar-name{font-size:14px}
+
+/* ---------- small screens: nothing escapes its card, nothing overlaps */
+@media (max-width:700px){
+  /* graph: the floating cluster docks static so it can never sit on the
+     mode bars; the search pill spans the row */
+  .graphfull .graphkey{position:static; padding:12px 12px 0}
+  .cosmoswrap, .hxwrap, .g3dwrap{padding:10px 10px 8px}
+  .gk-search{width:100%}
+  /* finance add-expense form: fields take full/half rows instead of escaping */
+  .fform input:first-child{flex:1 1 100%; min-width:0}
+  .fform input[type=number]{flex:1 1 42%; width:auto; min-width:0}
+  .fform select{flex:1 1 42%; min-width:0}
+  /* filter rows: date inputs shrink instead of pushing out */
+  .bar > input{min-width:0}
+  .bar .datefilter{flex:1 1 100%; min-width:0}
+  .bar .datefilter input{width:100%; min-width:0}
+  /* analytics: KPIs stack, shape tabs wrap */
+  .kpi{flex:1 1 100%; min-width:0}
+  .charttabs{margin-left:0; flex-wrap:wrap; min-width:0}
+  /* budget bullets: tighter name/amount so the bar keeps its room */
+  .bullet-name{width:64px; font-size:11.5px}
+  .bullet-amt{font-size:10px}
+  /* bill cards: the footer actions wrap under the date instead of escaping */
+  .kcard-foot{flex-wrap:wrap; row-gap:4px}
+  /* tags: the create input lives inside the pill */
+  .bar.featbar input{flex:1 1 100%; min-width:0}
+}
+
+/* graph labels get a page-coloured halo so colliding labels stay readable */
+.gtext{paint-order:stroke; stroke:var(--bg); stroke-width:3px; stroke-linejoin:round}
+/* budget hero heading and its stat never collide */
+.bhero-top{display:flex; align-items:baseline; justify-content:space-between; flex-wrap:wrap; gap:4px 14px}
+/* truncated placeholders end in an ellipsis, never mid-letter */
+input::placeholder{text-overflow:ellipsis}
+input{text-overflow:ellipsis}

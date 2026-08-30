@@ -209,6 +209,18 @@ export default function TaskBoard() {
   };
 
   const [resched, setResched] = useState(null); // task id with the date editor open
+
+  /* ---- hours spent: each task keeps a tiny log of {d, h} entries, so
+     totals can be summed per task, per day, per section and per week */
+  const [hrsOpen, setHrsOpen] = useState(null);  // task id with the time editor open
+  const hrsOf = (t) => (t.hlog || []).reduce((a, e) => a + (+e.h || 0), 0);
+  const fmtH = (h) => `${parseFloat((Math.round(h * 4) / 4).toFixed(2))}h`;
+  const logHrs = (t, h) => {
+    if (!(h > 0)) return;
+    patch(t.id, { hlog: [...(t.hlog || []), { d: today(), h: Math.round(h * 4) / 4 }] });
+    setHrsOpen(null);
+  };
+  const hrsOnDay = (d) => tasks.reduce((a, t) => a + (t.hlog || []).filter((e) => e.d === d).reduce((x, e) => x + (+e.h || 0), 0), 0);
   const [subOpen, setSubOpen] = useState(null); // task id with its subtask checklist open
   const [subDraft, setSubDraft] = useState(""); // new-subtask text (one panel open at a time)
 
@@ -341,6 +353,11 @@ export default function TaskBoard() {
         onClick={() => { setSubOpen(subOpen === t.id ? null : t.id); setSubDraft(""); }}>
         ☑ {subs.length ? `${subDone}/${subs.length}` : "+"}
       </button>
+      <button className={`thrschip mono ${hrsOf(t) > 0 ? "has" : ""} ${hrsOpen === t.id ? "on" : ""}`}
+        title={hrsOf(t) > 0 ? `${fmtH(hrsOf(t))} spent on this task — click to log more` : "Log hours spent on this task"}
+        onClick={() => setHrsOpen(hrsOpen === t.id ? null : t.id)}>
+        ⏱ {hrsOf(t) > 0 ? fmtH(hrsOf(t)) : "+"}
+      </button>
       {showDue && !t.done && (
         <button className={`tduechip mono ${t.due && t.due < today() ? "late" : ""}`}
           title="Change the due date"
@@ -350,6 +367,20 @@ export default function TaskBoard() {
       )}
       <button className="tr-del" title="Delete task" aria-label="Delete task" onClick={() => del(t.id)}>✕</button>
       </div>
+      {hrsOpen === t.id && (
+        <div className="tresched thrs">
+          {[0.5, 1, 2, 4].map((h) => (
+            <button key={h} className="qtag" onClick={() => logHrs(t, h)}>＋{h}h</button>
+          ))}
+          <input type="number" step="0.25" min="0.25" placeholder="hours…" aria-label="Log hours spent" autoFocus
+            onKeyDown={(e) => { if (e.key === "Enter") logHrs(t, parseFloat(e.target.value)); if (e.key === "Escape") setHrsOpen(null); }} />
+          {hrsOf(t) > 0 && (
+            <button className="qtag" title="Clear all logged time on this task"
+              onClick={() => { patch(t.id, { hlog: [] }); setHrsOpen(null); }}>reset</button>
+          )}
+          <span className="mono thrs-note">{hrsOf(t) > 0 ? `${fmtH(hrsOf(t))} logged so far` : "quick-add, or type and press Enter"}</span>
+        </div>
+      )}
       {subOpen === t.id && (
         <div className="tsubs">
           {subs.map((s) => (
@@ -407,14 +438,14 @@ export default function TaskBoard() {
           onClick={() => setRecur(nextRecur)}>↻ {recur || "once"}</button>
         {todayTotal > 0 && (
           <span className="tprog">
-            <span className="mono">{todayDone}/{todayTotal} today</span>
+            <span className="mono">{todayDone}/{todayTotal} today{hrsOnDay(today()) > 0 ? ` · ⏱ ${fmtH(hrsOnDay(today()))}` : ""}</span>
             <span className="tl-bar"><span className="tl-bar-fill" style={{ width: `${(todayDone / todayTotal) * 100}%` }} /></span>
           </span>
         )}
       </div>
 
       {/* time views + navigation */}
-      <div className="tmodebar">
+      <div className="tmodebar featbar">
         <div className="doctabs" role="tablist" aria-label="Task views">
           {[["list", "☰ List"], ["day", "Day"], ["week", "Week"], ["month", "▦ Month"], ["year", "Year"]].map(([m, l]) => (
             <button key={m} className={mode === m ? "on" : ""} role="tab" aria-selected={mode === m}
@@ -493,6 +524,9 @@ export default function TaskBoard() {
               <div className="tsec-head">
                 <span className="kdot" style={{ background: "var(--ink-soft)" }} aria-hidden="true" />
                 <span className="tsec-title" style={{ color: "var(--ink-soft)" }}>Completed that day</span>
+                {hrsOnDay(anchor) > 0 && (
+                  <span className="tsec-hrs mono" title="Hours logged on this day">⏱ {fmtH(hrsOnDay(anchor))}</span>
+                )}
                 <span className="kcount mono">{doneOnDay.length}</span>
               </div>
               {doneOnDay.map((t) => <Row key={t.id} t={t} showDue={false} />)}
@@ -507,13 +541,18 @@ export default function TaskBoard() {
         <YearView tasks={tasks} anchor={anchor} onPickMonth={(m) => { setAnchor(m); setMode("month"); }} />
       ) : (
         <>
-      <div className="scrolllist scrolllist-tall">
+      <div className="scrolllist scrolllist-tall tsecgrid">
       {sections.map((s) => s.tasks.length > 0 && (
         <div key={s.key} className="tsec">
           <div className="tsec-head">
             <span className="kdot" style={{ background: s.color }} aria-hidden="true" />
             <span className="tsec-title">{s.title}</span>
             <span className="kcount mono">{s.tasks.length}</span>
+            {s.tasks.reduce((a, t) => a + hrsOf(t), 0) > 0 && (
+              <span className="tsec-hrs mono" title="Hours spent across this section">
+                ⏱ {fmtH(s.tasks.reduce((a, t) => a + hrsOf(t), 0))}
+              </span>
+            )}
           </div>
           {s.tasks.map((t) => (
             <React.Fragment key={t.id}>
@@ -538,6 +577,11 @@ export default function TaskBoard() {
               aria-expanded={showDone}>{showDone ? "▾" : "▸"}</button>
             <span className="tsec-title" style={{ color: "var(--ink-soft)" }}>Done</span>
             <span className="kcount mono">{doneTasks.length}</span>
+            {doneTasks.reduce((a, t) => a + hrsOf(t), 0) > 0 && (
+              <span className="tsec-hrs mono" title="Hours spent across completed tasks">
+                ⏱ {fmtH(doneTasks.reduce((a, t) => a + hrsOf(t), 0))}
+              </span>
+            )}
             <button className="kbtn kdel" style={{ marginLeft: "auto" }} onClick={clearDone}
               title="Remove all completed tasks">Clear all</button>
           </div>
@@ -553,6 +597,15 @@ export default function TaskBoard() {
           </summary>
           <MiniBars height={120} labels={weekLabels(8)} color="var(--moss)"
             values={weekSeries(tasks.filter((t) => t.done && t.doneAt).map((t) => t.doneAt))} />
+          {tasks.some((t) => t.hlog?.length) && (
+            <>
+              <div className="cardsub mono" style={{ marginTop: 10 }}>hours spent per week</div>
+              <MiniBars height={120} labels={weekLabels(8)} color="var(--gold)"
+                values={weekSeries(
+                  tasks.flatMap((t) => (t.hlog || []).map((e) => e.d)), 8,
+                  tasks.flatMap((t) => (t.hlog || []).map((e) => +e.h || 0)))} />
+            </>
+          )}
         </details>
       )}
     </div>

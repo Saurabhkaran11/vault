@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useMemo } from "react";
+import { createPortal } from "react-dom";
 import { SECTIONS, daysAgo, fmtK } from "@/lib/seed";
 
 export function WeeklyBars({ items }) {
@@ -386,21 +387,36 @@ export function TopMerchants({ expenses, fmt }) {
 
 /* ---------- Vault growth: the collection compounding — cumulative items by
  * type, monthly, since the vault began (capped at 12 months of x-axis). */
-export function VaultGrowth({ items }) {
+export function VaultGrowth({ items, range = "month" }) {
   const { ref, tip, show, hide } = useChartTip();
   const TYPES = ["note", "video", "book", "doc"];
+  /* buckets follow the dashboard's Daily/Weekly/Monthly/Yearly tab */
   const { months, layers, totals } = useMemo(() => {
     const now = new Date();
-    const n = 6;
-    const months = Array.from({ length: n }, (_, i) => {
-      const d = new Date(now.getFullYear(), now.getMonth() - (n - 1 - i), 1);
-      return { ym: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`, label: d.toLocaleDateString(undefined, { month: "short" }) };
-    });
-    const layers = TYPES.map((t) => months.map(({ ym }) =>
-      items.filter((it) => it.type === t && it.date && it.date.slice(0, 7) <= ym).length));
-    const totals = months.map((_, i) => layers.reduce((a, l) => a + l[i], 0));
-    return { months, layers, totals };
-  }, [items]);
+    const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    let buckets;
+    if (range === "day") {
+      buckets = Array.from({ length: 14 }, (_, i) => {
+        const d = new Date(now); d.setDate(d.getDate() - (13 - i));
+        return { end: iso(d), label: d.toLocaleDateString(undefined, { day: "numeric" }) };
+      });
+    } else if (range === "week") {
+      buckets = Array.from({ length: 10 }, (_, i) => {
+        const d = new Date(now); d.setDate(d.getDate() - (9 - i) * 7);
+        return { end: iso(d), label: `${d.getDate()}/${d.getMonth() + 1}` };
+      });
+    } else {
+      const n = range === "year" ? 12 : 6;
+      buckets = Array.from({ length: n }, (_, i) => {
+        const d = new Date(now.getFullYear(), now.getMonth() - (n - 1 - i) + 1, 0);
+        return { end: iso(d), label: d.toLocaleDateString(undefined, { month: "short" }) };
+      });
+    }
+    const layers = TYPES.map((t) => buckets.map(({ end }) =>
+      items.filter((it) => it.type === t && it.date && it.date <= end).length));
+    const totals = buckets.map((_, i) => layers.reduce((a, l) => a + l[i], 0));
+    return { months: buckets, layers, totals };
+  }, [items, range]);
 
   const W = 560, H = 210, pad = 40;
   const max = Math.max(...totals, 4) * 1.12;
@@ -415,51 +431,80 @@ export function VaultGrowth({ items }) {
     return { points: `${up} ${down}`, type: TYPES[li] };
   });
 
+  /* which month a pointer x lands on, in a CSS-stretched viewBox svg */
+  const monthAt = (e) => {
+    const svg = e.currentTarget.ownerSVGElement || e.currentTarget;
+    const vx = (e.nativeEvent.offsetX / (svg.clientWidth || W)) * W;
+    return Math.max(0, Math.min(months.length - 1, Math.round((vx - pad) / ((W - pad - 14) / (months.length - 1)))));
+  };
+  const last = months.length - 1;
+
   return (
-    <div className="chart-wrap" ref={ref} onMouseLeave={hide}>
-      <svg className="growth-svg" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img" aria-label="Items saved over time by type">
-        <line x1={pad} y1={H - 26} x2={W - 8} y2={H - 26} stroke="var(--line)" />
-        {polys.map((p, i) => (
-          <polygon key={p.type} points={p.points} fill={SECTIONS[p.type].color} opacity={0.9 - i * 0.07} />
+    <>
+      <div className="chart-wrap" ref={ref} onMouseLeave={hide}>
+        <svg className="growth-svg" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img" aria-label="Items saved over time by type">
+          <line x1={pad} y1={H - 26} x2={W - 8} y2={H - 26} stroke="var(--line)" />
+          {polys.map((p, li) => (
+            <polygon key={p.type} points={p.points} fill={SECTIONS[p.type].color} opacity={0.9 - li * 0.07}
+              onMouseMove={(e) => { const i = monthAt(e); show(e, `${SECTIONS[p.type].label} · by ${months[i].label}: ${fmtK(layers[li][i])} of ${fmtK(totals[i])}`); }} />
+          ))}
+          {months.map((m, i) => (
+            <text key={m.end} x={X(i) - 10} y={H - 9} fontFamily="IBM Plex Mono" fontSize="9.5" fill="var(--ink-soft)"
+              style={{ pointerEvents: "none" }}>{m.label}</text>
+          ))}
+          <text x={W - 90} y={Y(totals[last]) - 10} fontFamily="Public Sans" fontSize="13" fontWeight="600" fill="var(--ink)"
+            style={{ pointerEvents: "none" }}>
+            {fmtK(totals[last])} items
+          </text>
+        </svg>
+        <ChartTip tip={tip} />
+      </div>
+      {/* every layer ("pyramid") named, with its live count */}
+      <div className="growth-legend">
+        {TYPES.map((t, li) => (
+          <span key={t} className="gl-item" title={`${SECTIONS[t].label} — ${layers[li][last]} saved so far`}>
+            <i style={{ background: SECTIONS[t].color }} />
+            {SECTIONS[t].label} <b className="mono">{layers[li][last]}</b>
+          </span>
         ))}
-        {months.map((m, i) => (
-          <rect key={m.ym} x={X(i) - (W - pad) / months.length / 2} y="0" width={(W - pad) / months.length} height={H}
-            fill="transparent"
-            onMouseMove={(e) => show(e, `${m.label}: ${fmtK(totals[i])} item${totals[i] === 1 ? "" : "s"} total`)} />
-        ))}
-        {months.map((m, i) => (
-          <text key={m.ym} x={X(i) - 10} y={H - 9} fontFamily="IBM Plex Mono" fontSize="9.5" fill="var(--ink-soft)">{m.label}</text>
-        ))}
-        <text x={W - 90} y={Y(totals[months.length - 1]) - 10} fontFamily="Public Sans" fontSize="13" fontWeight="600" fill="var(--ink)">
-          {fmtK(totals[months.length - 1])} items
-        </text>
-      </svg>
-      <ChartTip tip={tip} />
-    </div>
+      </div>
+    </>
   );
 }
 
 /* ---------- Task rhythm: done-per-day for ten weeks with the live streak.
  * Streaks are the cheapest daily-return mechanic there is — and gaps stay
  * honest, which is what makes the streak worth protecting. */
-export function TaskRhythm({ doneDates }) {
+export function TaskRhythm({ doneDates, range = "week" }) {
   const { ref, tip, show, hide } = useChartTip();
-  const { counts, streak } = useMemo(() => {
-    const days = 70;
+  const { counts, streak, weekly, windowLabel } = useMemo(() => {
+    /* window follows the dashboard's range tab; long windows bucket by week
+       so bars stay visible (364 one-day bars would be sub-pixel) */
+    const days = { day: 14, week: 70, month: 182, year: 364 }[range] || 70;
     const now = new Date();
-    const counts = Array.from({ length: days }, (_, i) => {
+    const daily = Array.from({ length: days }, (_, i) => {
       const d = new Date(now); d.setDate(d.getDate() - (days - 1 - i));
       const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
       return { iso, label: d.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" }), n: doneDates.filter((x) => x === iso).length };
     });
     let streak = 0;
     for (let i = days - 1; i >= 0; i--) {
-      if (counts[i].n > 0) streak++;
+      if (daily[i].n > 0) streak++;
       else if (i === days - 1) continue;   // today can still be zero without breaking it
       else break;
     }
-    return { counts, streak };
-  }, [doneDates]);
+    const weekly = days > 100;
+    let counts = daily;
+    if (weekly) {
+      counts = [];
+      for (let s = 0; s < days; s += 7) {
+        const grp = daily.slice(s, s + 7);
+        counts.push({ iso: grp[0].iso, label: `week of ${grp[0].label}`, n: grp.reduce((a, c) => a + c.n, 0) });
+      }
+    }
+    const windowLabel = { day: "14 days ago", week: "10 weeks ago", month: "6 months ago", year: "a year ago" }[range] || "10 weeks ago";
+    return { counts, streak, weekly, windowLabel };
+  }, [doneDates, range]);
 
   const W = 560, H = 170, pad = 8;
   const max = Math.max(...counts.map((c) => c.n), 3);
@@ -470,9 +515,9 @@ export function TaskRhythm({ doneDates }) {
         <line x1={pad} y1={H - 24} x2={W - pad} y2={H - 24} stroke="var(--line)" />
         {counts.map((c, i) => {
           const h = (c.n / max) * (H - 62);
-          const inStreak = streak > 0 && i >= counts.length - streak;
+          const inStreak = !weekly && streak > 0 && i >= counts.length - streak;
           return (
-            <rect key={c.iso} x={pad + i * bw + 0.8} y={H - 24 - Math.max(h, 2.5)} width={bw - 1.6} height={Math.max(h, 2.5)} rx="1.5"
+            <rect key={c.iso} x={pad + i * bw + 0.8} y={H - 24 - Math.max(h, 2.5)} width={Math.max(bw - 1.6, 1)} height={Math.max(h, 2.5)} rx="1.5"
               fill={inStreak ? "var(--stamp)" : "var(--chart)"} opacity={c.n ? 1 : 0.16}
               onMouseMove={(e) => show(e, `${c.label} · ${c.n} done`)} />
           );
@@ -480,7 +525,7 @@ export function TaskRhythm({ doneDates }) {
         {streak > 1 && (
           <text x={W - 122} y={20} fontFamily="IBM Plex Mono" fontSize="12.5" fontWeight="600" fill="var(--stamp)">{streak}-day streak 🔥</text>
         )}
-        <text x={pad} y={H - 8} fontFamily="IBM Plex Mono" fontSize="9.5" fill="var(--ink-soft)">10 weeks ago</text>
+        <text x={pad} y={H - 8} fontFamily="IBM Plex Mono" fontSize="9.5" fill="var(--ink-soft)">{windowLabel}</text>
         <text x={W - 46} y={H - 8} fontFamily="IBM Plex Mono" fontSize="9.5" fill="var(--ink-soft)">today</text>
       </svg>
       <ChartTip tip={tip} />
@@ -539,77 +584,110 @@ export function MoneyFlow({ incomes, expenses, fmt }) {
   const { sources, cats, merchants } = model;
 
   const W = Math.max(320, w || 560);
-  const narrow = W < 560;
-  const H = narrow ? 300 : 320;
-  const nodeW = 13;
-  const rightLabelW = narrow ? 84 : 130;             // room reserved for merchant names
-  const x0 = 4, x1 = Math.round(W * 0.44), x2 = W - rightLabelW - nodeW - 8;
+  const narrow = W < 640;
+  const H = narrow ? 330 : 380;
+  const nodeW = 16;
+  const MIN_H = 12;                                   // every node stays visibly thick
+  const rightLabelW = narrow ? 118 : 190;
+  const midLabelW = narrow ? 96 : 150;
+  const x0 = 4, x1 = Math.round((W - rightLabelW) * 0.46), x2 = W - rightLabelW - nodeW - 6;
   const CAT_COLORS = ["var(--moss)", "var(--gold)", "var(--violet)", "var(--azure)", "var(--blue)"];
   const srcTotal = sources.reduce((a, [, v]) => a + v, 0);
-  const scaleH = (H - 78) / Math.max(srcTotal, model.spendTotal, 1);
+  const scaleH = (H - 96) / Math.max(srcTotal, model.spendTotal, 1);
   const ribbon = (xa, ya, ha, xb, yb, hb) => {
     const mx = (xa + xb) / 2;
     return `M${xa},${ya} C${mx},${ya} ${mx},${yb} ${xb},${yb} L${xb},${yb + hb} C${mx},${yb + hb} ${mx},${ya + ha} ${xa},${ya + ha} Z`;
   };
   const clip = (s, n) => (s.length > n ? s.slice(0, n - 1) + "…" : s);
 
-  let y = 30;
-  const S = sources.map(([n, v]) => { const o = { n, v, h: v * scaleH, y }; y += v * scaleH + 28; return o; });
-  y = 20;
-  const M = cats.map(([n, v], i) => { const o = { n, v, h: v * scaleH, y, c: n === "Saved" ? "#1F7A4D" : CAT_COLORS[i % CAT_COLORS.length] }; y += v * scaleH + 18; return o; });
-  y = 26;
-  const R = merchants.map(([n, m]) => { const o = { n, v: m.v, cat: m.cat, h: m.v * scaleH, y }; y += m.v * scaleH + 24; return o; });
+  /* columns: proportional height with a floor, stacked then vertically centered.
+     If floors + gaps blow the budget, the proportional part shrinks to fit so
+     nothing ever draws past the svg. */
+  const layoutCol = (entries, gap, topPad) => {
+    const avail = H - 20 - topPad;
+    const nodes = entries.map((e) => ({ ...e, h: Math.max(e.v * scaleH, MIN_H) }));
+    const gaps = gap * Math.max(nodes.length - 1, 0);
+    let total = nodes.reduce((a, n) => a + n.h, 0) + gaps;
+    if (total > avail) {
+      const flex = nodes.reduce((a, n) => a + Math.max(n.h - MIN_H, 0), 0);
+      if (flex > 0) {
+        const k = Math.max(1 - (total - avail) / flex, 0);
+        nodes.forEach((n) => { n.h = MIN_H + Math.max(n.h - MIN_H, 0) * k; });
+        total = nodes.reduce((a, n) => a + n.h, 0) + gaps;
+      }
+    }
+    let y = topPad + Math.max((avail - total) / 2, 0);
+    nodes.forEach((n) => { n.y = y; y += n.h + gap; });
+    return nodes;
+  };
+  const S = layoutCol(sources.map(([n, v]) => ({ n, v })), 34, 48);
+  const M = layoutCol(cats.map(([n, v], i) => ({ n, v, c: n === "Saved" ? "#1F7A4D" : CAT_COLORS[i % CAT_COLORS.length] })), 14, 34);
+  const R = layoutCol(merchants.map(([n, m]) => ({ n, v: m.v, cat: m.cat })), 20, 34);
 
+  /* ribbons: thickness proportional WITHIN each node's drawn height, so a
+     floored node still shows its flows without overlap */
   const paths = [];
-  const catOff = M.map(() => 0);
-  S.forEach((s) => {
-    let sy = s.y;
+  const srcOff = S.map(() => 0), catInOff = M.map(() => 0), catOutOff = M.map(() => 0), merOff = R.map(() => 0);
+  S.forEach((s, si) => {
     M.forEach((m, mi) => {
-      const share = (s.v / srcTotal) * m.h;
-      if (share < 0.8) return;
-      paths.push({ d: ribbon(x0 + nodeW, sy, share, x1, m.y + catOff[mi], share), fill: m.c, op: 0.28,
-        tip: `${s.n} → ${m.n} · ${fmt(Math.round((share / scaleH)))}` });
-      sy += share; catOff[mi] += share;
+      const share = (s.v / srcTotal) * m.v;           // dollars of m funded by s
+      if (share < 0.5) return;
+      const ha = (share / s.v) * s.h, hb = (share / m.v) * m.h;
+      paths.push({ d: ribbon(x0 + nodeW, s.y + srcOff[si], ha, x1, m.y + catInOff[mi], hb), fill: m.c, op: 0.30,
+        tip: `${s.n} → ${m.n} · ${fmt(Math.round(share))}` });
+      srcOff[si] += ha; catInOff[mi] += hb;
     });
   });
-  const merchOff = M.map(() => 0);
-  R.forEach((r) => {
+  R.forEach((r, ri) => {
     const mi = M.findIndex((m) => m.n === r.cat);
     if (mi < 0) return;
-    paths.push({ d: ribbon(x1 + nodeW, M[mi].y + merchOff[mi], r.h, x2, r.y, r.h), fill: M[mi].c, op: 0.20,
+    const ha = (r.v / M[mi].v) * M[mi].h, hb = r.h;
+    paths.push({ d: ribbon(x1 + nodeW, M[mi].y + catOutOff[mi], ha, x2, r.y + merOff[ri], hb), fill: M[mi].c, op: 0.22,
       tip: `${M[mi].n} → ${r.n} · ${fmt(Math.round(r.v))}` });
-    merchOff[mi] += r.h;
+    catOutOff[mi] += ha; merOff[ri] += hb;
   });
 
   return (
     <div className="chart-wrap flow-wrap" ref={ref} onMouseLeave={hide}>
       {w > 0 && (
       <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Money flow from income to categories to merchants" style={{ display: "block" }}>
+        <text x={x0} y={16} fontFamily="IBM Plex Mono" fontSize="9.5" letterSpacing="1.5" fill="var(--ink-soft)">INCOME</text>
+        <text x={x1} y={16} fontFamily="IBM Plex Mono" fontSize="9.5" letterSpacing="1.5" fill="var(--ink-soft)">CATEGORIES</text>
+        <text x={x2} y={16} fontFamily="IBM Plex Mono" fontSize="9.5" letterSpacing="1.5" fill="var(--ink-soft)">WHERE IT LANDS</text>
         {paths.map((p, i) => (
           <path key={i} d={p.d} fill={p.fill} opacity={p.op}
             onMouseMove={(e) => show(e, p.tip)} />
         ))}
         {S.map((s) => (
           <g key={s.n}>
-            <rect x={x0} y={s.y} width={nodeW} height={Math.max(s.h, 3)} rx="3.5" fill="var(--chart)" />
-            <text x={x0} y={s.y - 7} fontFamily="IBM Plex Mono" fontSize="11" fontWeight="600" fill="var(--ink)">
-              {clip(s.n, narrow ? 12 : 20)} · {fmt(Math.round(s.v))}
-            </text>
+            <rect x={x0} y={s.y} width={nodeW} height={s.h} rx="4" fill="var(--chart)" />
+            {narrow ? (
+              /* phones: stack name over amount in a short column so the
+                 label can never run under the category nodes */
+              <>
+                <text className="gtext" x={x0} y={s.y - 19} fontFamily="IBM Plex Mono" fontSize="10" fontWeight="600" fill="var(--ink)">{clip(s.n, 10)}</text>
+                <text className="gtext" x={x0} y={s.y - 7} fontFamily="IBM Plex Mono" fontSize="10" fill="var(--ink-soft)">{fmt(Math.round(s.v))}</text>
+              </>
+            ) : (
+              <text className="gtext" x={x0} y={s.y - 7} fontFamily="IBM Plex Mono" fontSize="11.5" fontWeight="600" fill="var(--ink)">
+                {clip(s.n, 22)} · {fmt(Math.round(s.v))}
+              </text>
+            )}
           </g>
         ))}
         {M.map((m) => (
           <g key={m.n}>
-            <rect x={x1} y={m.y} width={nodeW} height={Math.max(m.h, 3)} rx="3.5" fill={m.c} />
-            <text x={x1 + 19} y={m.y + Math.max(m.h, 3) / 2 + 4} fontFamily="IBM Plex Mono" fontSize="11" fill="var(--ink)">
-              {clip(m.n, narrow ? 8 : 14)}
+            <rect x={x1} y={m.y} width={nodeW} height={m.h} rx="4" fill={m.c} />
+            <text x={x1 + nodeW + 8} y={m.y + m.h / 2 + 4} fontFamily="IBM Plex Mono" fontSize="11" fontWeight="600" fill="var(--ink)">
+              {clip(m.n, narrow ? 7 : 10)} <tspan fill="var(--ink-soft)" fontWeight="400">· {fmt(Math.round(m.v))}</tspan>
             </text>
           </g>
         ))}
         {R.map((r) => (
           <g key={r.n}>
-            <rect x={x2} y={r.y} width={nodeW} height={Math.max(r.h, 3)} rx="3.5" fill="var(--ink-soft)" opacity="0.55" />
-            <text x={x2 + 18} y={r.y + Math.max(r.h, 3) / 2 + 3.5} fontFamily="IBM Plex Mono" fontSize="10" fill="var(--ink-soft)">
-              {clip(r.n, narrow ? 9 : 15)}
+            <rect x={x2} y={r.y} width={nodeW} height={r.h} rx="4" fill="var(--ink-soft)" opacity="0.6" />
+            <text x={x2 + nodeW + 7} y={r.y + r.h / 2 + 4} fontFamily="IBM Plex Mono" fontSize="10.5" fill="var(--ink)">
+              {clip(r.n, narrow ? 10 : 16)}
             </text>
           </g>
         ))}
@@ -870,3 +948,85 @@ export function BudgetBullets({ byCat, spentByCat, fmt }) {
   );
 }
 
+
+/* ---------- Zoom: click ANY chart to maximize it.
+ * Wrap a chart once and it gains an expand affordance + a full-screen
+ * popup that re-renders the same chart at reading size (the zoom dialog's
+ * CSS raises every chart class's height; width-responsive charts and the
+ * measured ones fill it naturally). */
+/* The "Open <feature>? / Stay here" confirmation. Reusable anywhere a
+ * chart-like element would otherwise navigate on click: pass
+ * ask = { label, title, fn } (or null) and an onClose that clears it. */
+export function AskGoDialog({ ask, onClose }) {
+  React.useEffect(() => {
+    if (!ask) return;
+    const onKey = (e) => { if (e.key === "Escape") { e.stopPropagation(); onClose(); } };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [ask, onClose]);
+  if (!ask) return null;
+  return createPortal(
+    <div className="pal-overlay centered" onClick={onClose} role="dialog" aria-label={`Open ${ask.label}?`}>
+      <div className="pal askgo" onClick={(e) => e.stopPropagation()}>
+        <h3 className="askgo-title">Open {ask.label}?</h3>
+        <p className="m askgo-sub">&ldquo;{ask.title}&rdquo; is powered by the {ask.label} feature — you can jump there for the full picture, or stay right here.</p>
+        <div className="askgo-foot">
+          <button className="btn ghost sm" onClick={onClose}>Stay here</button>
+          <button className="btn sm" onClick={() => { const fn = ask.fn; onClose(); fn(); }}>Open {ask.label} →</button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+export function Zoom({ title, sub, children, large, note, go }) {
+  const [open, setOpen] = React.useState(false);
+  React.useEffect(() => {
+    if (!open) return;
+    const onKey = (e) => { if (e.key === "Escape") { e.stopPropagation(); setOpen(false); } };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [open]);
+  return (
+    <>
+      {/* clicking ANYWHERE on the chart maximizes it — the ⤢ icon stays as
+          a visual affordance, not a requirement */}
+      <div className="zoomable zoom-click" role="button" tabIndex={0}
+        onClick={() => setOpen(true)}
+        onKeyDown={(e) => { if (e.key === "Enter") setOpen(true); }}
+        title={`${title} — click to maximize`}>
+        <button type="button" className="zoom-btn" aria-label={`Maximize ${title}`}
+          title="Maximize — see this chart in depth"
+          onClick={(e) => { e.stopPropagation(); setOpen(true); }}>⤢</button>
+        {children}
+        {note && <div className="chart-note">{note}</div>}
+      </div>
+      {open && createPortal(
+        /* portal to <body>: a glass card's backdrop-filter makes it the
+           containing block for position:fixed, which would trap the overlay
+           inside the card instead of covering the screen */
+        <div className="pal-overlay" onClick={() => setOpen(false)} role="dialog" aria-label={`${title} — maximized`}>
+          <div className="pal zoomdlg" onClick={(e) => e.stopPropagation()}>
+            <div className="zoom-head">
+              <div>
+                <h3 style={{ margin: 0 }}>{title}</h3>
+                {sub && <div className="m" style={{ color: "var(--ink-soft)", marginTop: 2 }}>{sub}</div>}
+              </div>
+              {go && (
+                <button className="kbtn" onClick={() => { setOpen(false); go.fn(); }}
+                  title={`This chart is powered by ${go.label}`}>↗ Open {go.label}</button>
+              )}
+              <button className="kbtn" onClick={() => setOpen(false)} aria-label="Close">✕</button>
+            </div>
+            <div className="zoom-body">
+              {large || children}
+              {note && <div className="chart-note">{note}</div>}
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+    </>
+  );
+}
