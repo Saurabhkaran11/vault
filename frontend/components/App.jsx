@@ -1416,7 +1416,12 @@ export default function App() {
       <GoogleDrivePicker open={driveOpen} onClose={() => setDriveOpen(false)} onImport={(it) => add(it)} />
       {chord && <div className="chordhint mono" role="status">G — then {NAV_ACTIONS.map((a) => (keymap[a.id] || a.def).toUpperCase()).join(" ")}</div>}
 
-      <nav className={`side ${open ? "open" : "rail"}`}>
+      <nav className={`side ${open ? "open" : "rail"}`}
+        onClick={(e) => {
+          /* on phones the open drawer squeezes the page — picking a
+             destination should tuck it away again */
+          if (e.target.closest?.(".navbtn") && window.matchMedia("(max-width: 860px)").matches) setOpen(false);
+        }}>
         <div className="top">
           <button className="burger" onClick={() => setOpen((o) => !o)}
             title={open ? "Collapse sidebar" : "Expand sidebar"}

@@ -50,7 +50,7 @@ body{background:var(--bg)}
 /* ---------- main */
 /* fill the screen: dashboards earn their width on big monitors. The cap
    only exists so ultrawides don't stretch lines absurdly. */
-.main{flex:1; padding:30px clamp(24px, 3vw, 52px); max-width:1560px; min-width:0}
+.main{--pagepad:clamp(24px, 3vw, 52px); flex:1; padding:30px var(--pagepad); max-width:1560px; min-width:0}
 .crumb{font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:2px; text-transform:uppercase; color:var(--ink-soft); margin-bottom:6px}
 .main h2{font-family:'Fraunces',serif; font-size:32px; font-weight:650; margin-bottom:4px}
 .sub{color:var(--ink-soft); font-size:14px; margin-bottom:22px}
@@ -1287,7 +1287,7 @@ img.fpreview{height:auto}
   .side.open{width:196px}
   .side.rail{width:56px; padding:16px 8px}
   .side .foot{display:none}
-  .main{padding:18px 14px}
+  .main{--pagepad:14px; padding:18px var(--pagepad)}
   /* 44px+ touch targets on phones (Apple HIG / Material minimum) */
   .navbtn, .qadd{padding:12px 10px}
   .side.rail .navbtn, .side.rail .qadd{padding:12px 6px}
@@ -1963,7 +1963,7 @@ button:disabled{opacity:.5; cursor:not-allowed}
 .graphwrap.graphfull{
   padding:0; overflow:hidden; border:none; box-shadow:none; background:transparent;
   height:calc(100vh - 52px); min-height:520px;
-  margin:-18px calc(-1 * clamp(24px, 3vw, 52px)) -30px;
+  margin:-18px calc(-1 * var(--pagepad, 24px)) -30px;
 }
 .vault.glass .graphwrap.graphfull:not(.gfull){background:transparent; backdrop-filter:none; -webkit-backdrop-filter:none; box-shadow:none; border:none}
 .graphfull .graphkey{position:absolute; top:16px; left:20px; right:20px; z-index:15; display:flex; flex-direction:column; align-items:flex-start; gap:9px; margin:0; padding:0; border:none; background:none; box-shadow:none; pointer-events:none}
@@ -2034,3 +2034,30 @@ button:disabled{opacity:.5; cursor:not-allowed}
 .zoom-body .bullets{gap:16px}
 .zoom-body .bullet-name{font-size:14.5px; width:110px}
 .zoom-body .catbar-name{font-size:14px}
+
+/* ---------- small screens: nothing escapes its card, nothing overlaps */
+@media (max-width:700px){
+  /* graph: the floating cluster docks static so it can never sit on the
+     mode bars; the search pill spans the row */
+  .graphfull .graphkey{position:static; padding:12px 12px 0}
+  .cosmoswrap, .hxwrap, .g3dwrap{padding:10px 10px 8px}
+  .gk-search{width:100%}
+  /* finance add-expense form: fields take full/half rows instead of escaping */
+  .fform input:first-child{flex:1 1 100%; min-width:0}
+  .fform input[type=number]{flex:1 1 42%; width:auto; min-width:0}
+  .fform select{flex:1 1 42%; min-width:0}
+  /* filter rows: date inputs shrink instead of pushing out */
+  .bar > input{min-width:0}
+  .bar .datefilter{flex:1 1 100%; min-width:0}
+  .bar .datefilter input{width:100%; min-width:0}
+  /* analytics: KPIs stack, shape tabs wrap */
+  .kpi{flex:1 1 100%; min-width:0}
+  .charttabs{margin-left:0; flex-wrap:wrap; min-width:0}
+  /* budget bullets: tighter name/amount so the bar keeps its room */
+  .bullet-name{width:64px; font-size:11.5px}
+  .bullet-amt{font-size:10px}
+  /* bill cards: the footer actions wrap under the date instead of escaping */
+  .kcard-foot{flex-wrap:wrap; row-gap:4px}
+  /* tags: the create input lives inside the pill */
+  .bar.featbar input{flex:1 1 100%; min-width:0}
+}
