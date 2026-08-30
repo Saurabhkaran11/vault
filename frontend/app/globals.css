@@ -1931,15 +1931,30 @@ button:disabled{opacity:.5; cursor:not-allowed}
 }
 .vault.glass .av-chip{background:rgba(255,255,255,0.55)}
 
-/* ---------- Graph: floating glass toolbar over a full-bleed canvas,
-   plus a full-page mode that takes over the viewport */
-.graphwrap.graphfull{padding:0; overflow:hidden}
-.graphfull .graphkey{position:absolute; top:12px; left:12px; right:12px; z-index:15; margin:0; border:1px solid var(--line); border-radius:99px; padding:8px 16px; background:var(--panel); box-shadow:0 10px 30px rgba(30,50,80,0.14)}
-.vault.glass .graphfull .graphkey{background:rgba(255,255,255,0.62); border-color:rgba(255,255,255,0.72); backdrop-filter:blur(16px) saturate(1.15); -webkit-backdrop-filter:blur(16px) saturate(1.15)}
-.cosmoswrap, .hxwrap, .g3dwrap{padding:64px 12px 8px}
-.graphwrap.graphfull.gfull{position:fixed; inset:10px; z-index:70; height:auto; min-height:0}
-.gfull-btn{margin-left:auto; white-space:nowrap}
-.graphhint + .gfull-btn{margin-left:0}
+/* ---------- Graph: the canvas IS the page — no box, no header. Controls
+   float above it as a stacked glass cluster (search pill, control row,
+   stats chip), exactly like the dashboard's floating bar. */
+.graphwrap.graphfull{
+  padding:0; overflow:hidden; border:none; box-shadow:none; background:transparent;
+  height:calc(100vh - 52px); min-height:520px;
+  margin:-18px calc(-1 * clamp(24px, 3vw, 52px)) -30px;
+}
+.vault.glass .graphwrap.graphfull:not(.gfull){background:transparent; backdrop-filter:none; -webkit-backdrop-filter:none; box-shadow:none; border:none}
+.graphfull .graphkey{position:absolute; top:16px; left:20px; right:20px; z-index:15; display:flex; flex-direction:column; align-items:flex-start; gap:9px; margin:0; padding:0; border:none; background:none; box-shadow:none; pointer-events:none}
+.graphfull .graphkey > *{pointer-events:auto}
+.gk-search{display:flex; align-items:center; gap:11px; width:min(560px, calc(100% - 12px)); background:var(--panel); border:1px solid var(--line); border-radius:99px; padding:11px 20px; box-shadow:0 12px 32px rgba(30,50,80,0.14)}
+.gk-icon{color:var(--ink-soft); font-size:16px; line-height:1}
+.gk-search .gsearch{flex:1; min-width:0; border:none; background:transparent; padding:0; font-size:14.5px; border-radius:0}
+.gk-search .gsearch:focus{outline:none}
+.gk-row{display:flex; align-items:center; gap:10px; flex-wrap:wrap; background:var(--panel); border:1px solid var(--line); border-radius:99px; padding:5px 8px; box-shadow:0 12px 32px rgba(30,50,80,0.12)}
+.gk-stats{font-size:9.5px; letter-spacing:1px; color:var(--ink-soft); background:var(--panel); border:1px solid var(--line); border-radius:99px; padding:5px 13px; box-shadow:0 8px 22px rgba(30,50,80,0.10)}
+.vault.glass .gk-search, .vault.glass .gk-row{background:rgba(255,255,255,0.64); border-color:rgba(255,255,255,0.72); backdrop-filter:blur(16px) saturate(1.15); -webkit-backdrop-filter:blur(16px) saturate(1.15)}
+.vault.glass .gk-stats{background:rgba(255,255,255,0.55); border-color:rgba(255,255,255,0.65)}
+.cosmoswrap, .hxwrap, .g3dwrap{padding:112px 16px 8px}
+/* full-page mode keeps a backdrop of its own (it floats above the app) */
+.graphwrap.graphfull.gfull{position:fixed; inset:10px; z-index:70; height:auto; min-height:0; margin:0; background:var(--bg); border:1px solid var(--line); border-radius:14px}
+.vault.glass .graphwrap.graphfull.gfull{background:linear-gradient(155deg, rgba(244,248,252,0.92), rgba(255,255,255,0.85)); backdrop-filter:blur(18px) saturate(1.12); -webkit-backdrop-filter:blur(18px) saturate(1.12); border-color:rgba(255,255,255,0.7)}
+.gfull-btn{white-space:nowrap}
 .gfull-btn.on{background:var(--moss-soft); border-color:var(--moss); color:var(--moss)}
 
 /* ---------- universal chart maximize */

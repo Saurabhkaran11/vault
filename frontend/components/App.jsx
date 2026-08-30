@@ -1926,12 +1926,9 @@ export default function App() {
         )}
 
         {view === "graph" && (
-          <>
-            <div className="crumb">Connections</div>
-            <h2 className="display">Graph</h2>
-            <Intro id="graph">Each project tag is a hub with its items gathered around it. Hover anything to spotlight its connections; click to open.</Intro>
-            <GraphView items={items} onOpenTag={openTag} onOpenSection={openSection} />
-          </>
+          /* no page header here — the graph owns the whole page, with its
+             controls floating over the canvas like the dashboard glass bar */
+          <GraphView items={items} onOpenTag={openTag} onOpenSection={openSection} />
         )}
 
         {view === "tags" && (

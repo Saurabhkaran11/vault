@@ -343,39 +343,46 @@ export default function GraphView({ items, onOpenTag, onOpenSection }) {
   return (
     <div className={`graphwrap graphfull${full ? " gfull" : ""}`}>
       <div className="graphkey">
+        {/* row 1 — the floating search pill, dashboard-style */}
         {mode !== "explorer" && (
-          <input className="gsearch" value={query} onChange={(e) => setQuery(e.target.value)}
-            placeholder={mode === "web" ? `Search ${g.totalTags} tag${g.totalTags === 1 ? "" : "s"}…` : "Filter items…"} aria-label="Search" />
+          <div className="gk-search">
+            <span className="gk-icon" aria-hidden="true">⌕</span>
+            <input className="gsearch" value={query} onChange={(e) => setQuery(e.target.value)}
+              placeholder={mode === "web" ? `Search ${g.totalTags} tag${g.totalTags === 1 ? "" : "s"} in your graph…` : "Filter items…"} aria-label="Search" />
+          </div>
         )}
+        {/* row 2 — mode toggle, zoom, full page */}
+        <div className="gk-row">
+          <span className="gzoom gmode" role="group" aria-label="Graph view mode">
+            <button className={mode === "web" ? "on" : ""} onClick={() => setMode("web")}
+              title="The living force-directed web">Web</button>
+            <button className={mode === "cosmos" ? "on" : ""} onClick={() => setMode("cosmos")}
+              title="Obsidian-style constellation — every item is a star, sized by its connections">Cosmos</button>
+            <button className={mode === "explorer" ? "on" : ""} onClick={() => setMode("explorer")}
+              title="Hume-style exploration — inspect a node, expand its connections on demand">Explorer</button>
+            <button className={mode === "3d" ? "on" : ""} onClick={() => setMode("3d")}
+              title="react-force-graph 3D — orbit your vault as a WebGL starfield">3D</button>
+          </span>
+          {mode === "web" && (
+          <span className="gzoom" role="group" aria-label="Zoom">
+            <button onClick={() => zoomCenter(1 / 1.3)} title="Zoom out" aria-label="Zoom out">−</button>
+            <span className="mono">{Math.round(view.k * 100)}%</span>
+            <button onClick={() => zoomCenter(1.3)} title="Zoom in" aria-label="Zoom in">+</button>
+            <button onClick={() => { setView({ k: 1, x: 0, y: 0 }); seedPositions(true); tick((t) => t + 1); }} title="Reset view & re-settle" aria-label="Reset view">⤢</button>
+          </span>
+          )}
+          <button className={`kbtn gfull-btn ${full ? "on" : ""}`} onClick={() => setFull((f) => !f)}
+            title={full ? "Back to the page (Esc works too)" : "Take over the whole page"}>
+            {full ? "🗕 Exit full page" : "⛶ Full page"}
+          </button>
+        </div>
+        {/* row 3 — the quiet stats line */}
         {mode === "web" && (
-          <span className="graphstats mono">
-            {g.totalMatching > g.tags.length ? `TOP ${g.tags.length} OF ${g.totalMatching} TAGS · ` : ""}
-            {g.shownItems}{g.shownItems < g.totalItems ? ` OF ${g.totalItems}` : ""} ITEMS
+          <span className="gk-stats mono">
+            {g.totalMatching > g.tags.length ? `top ${g.tags.length} of ${g.totalMatching} tags · ` : ""}
+            {g.shownItems}{g.shownItems < g.totalItems ? ` of ${g.totalItems}` : ""} items · live · scroll to zoom · drag anything
           </span>
         )}
-        <span className="gzoom gmode" role="group" aria-label="Graph view mode">
-          <button className={mode === "web" ? "on" : ""} onClick={() => setMode("web")}
-            title="The living force-directed web">Web</button>
-          <button className={mode === "cosmos" ? "on" : ""} onClick={() => setMode("cosmos")}
-            title="Obsidian-style constellation — every item is a star, sized by its connections">Cosmos</button>
-          <button className={mode === "explorer" ? "on" : ""} onClick={() => setMode("explorer")}
-            title="Hume-style exploration — inspect a node, expand its connections on demand">Explorer</button>
-          <button className={mode === "3d" ? "on" : ""} onClick={() => setMode("3d")}
-            title="react-force-graph 3D — orbit your vault as a WebGL starfield">3D</button>
-        </span>
-        {mode === "web" && (
-        <span className="gzoom" role="group" aria-label="Zoom">
-          <button onClick={() => zoomCenter(1 / 1.3)} title="Zoom out" aria-label="Zoom out">−</button>
-          <span className="mono">{Math.round(view.k * 100)}%</span>
-          <button onClick={() => zoomCenter(1.3)} title="Zoom in" aria-label="Zoom in">+</button>
-          <button onClick={() => { setView({ k: 1, x: 0, y: 0 }); seedPositions(true); tick((t) => t + 1); }} title="Reset view & re-settle" aria-label="Reset view">⤢</button>
-        </span>
-        )}
-        {mode === "web" && !full && <span className="graphhint mono">LIVE · SCROLL TO ZOOM · DRAG NODES OR BACKGROUND</span>}
-        <button className={`kbtn gfull-btn ${full ? "on" : ""}`} onClick={() => setFull((f) => !f)}
-          title={full ? "Back to the page (Esc works too)" : "Take over the whole page"}>
-          {full ? "🗕 Exit full page" : "⛶ Full page"}
-        </button>
       </div>
       {mode === "cosmos" ? (
         <CosmosGraph items={items} query={query} onOpenTag={onOpenTag} onOpenSection={onOpenSection} />
