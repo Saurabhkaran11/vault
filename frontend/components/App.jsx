@@ -748,22 +748,25 @@ export default function App() {
   useEffect(() => { setAiCfg(getAIConfig()); }, []);
   const updateAI = (patch) => setAiCfg(setAIConfig(patch));
 
-  /* ✦ weekly digest (dashboard) */
+  /* ✦ digest (dashboard) — scoped to the Daily/Weekly/Monthly/Yearly tab */
   const [digest, setDigest] = useState(null);
   const [digestBusy, setDigestBusy] = useState(false);
   const genDigest = async () => {
     if (digestBusy) return;
     setDigestBusy(true); setDigest(null);
-    const week = items.filter((i) => daysAgo(i.date) <= 7);
+    const dWord = { day: "day", week: "week", month: "month", year: "year" }[range] || "week";
+    const dAdj = { day: "daily", week: "weekly", month: "monthly", year: "yearly" }[range] || "weekly";
+    const dDays = { day: 1, week: 7, month: 31, year: 365 }[range] || 7;
+    const recent = items.filter((i) => daysAgo(i.date) <= dDays);
     const stale = items.filter((i) => !i.deleted).sort((a, b) => a.date.localeCompare(b.date)).slice(0, 6);
     const stats =
-      `Saved this week (${week.length}): ${week.map((i) => `${SECTIONS[i.type].label} — ${i.title}`).join("; ") || "nothing"}.\n` +
+      `Saved this ${dWord} (${recent.length}): ${recent.slice(0, 40).map((i) => `${SECTIONS[i.type].label} — ${i.title}`).join("; ") || "nothing"}.\n` +
       `Oldest saved items: ${stale.map((i) => `${i.title} (${daysAgo(i.date)} days)`).join("; ") || "none"}.\n` +
       `Projects: ${[...new Set(items.flatMap((i) => i.tags))].join(", ") || "none"}.`;
     try {
       setDigest(await askText(
-        `Here is the current state of my personal knowledge vault:\n\n${stats}\n\nWrite my weekly digest.`,
-        { system: "You write a short weekly digest for a personal knowledge hub. At most 3 short paragraphs: what happened this week; what's gathering dust and what to finish; one concrete suggestion for next week. Plain text, direct and encouraging, no headings or bullet lists." }
+        `Here is the current state of my personal knowledge vault:\n\n${stats}\n\nWrite my ${dAdj} digest.`,
+        { system: `You write a short ${dAdj} digest for a personal knowledge hub. At most 3 short paragraphs: what happened this ${dWord}; what's gathering dust and what to finish; one concrete suggestion for the next ${dWord}. Plain text, direct and encouraging, no headings or bullet lists.` }
       ));
     } catch (e) {
       setDigest(`⚠ ${e.message}`);
@@ -935,7 +938,7 @@ export default function App() {
     { group: "GO TO", label: "Tags", hint: `G ${navKeyFor("tags")}`, keywords: "projects tags labels", run: () => { setView("tags"); setTag(null); setAdding(false); setPageId(null); } },
     { group: "GO TO", label: "Recently deleted", keywords: "trash bin restore deleted", run: () => { setView("trash"); setTag(null); setAdding(false); setPageId(null); } },
     { group: "ACTION", label: "✦ Ask your Vault (AI)", keywords: "ai ask question claude rag search answers", run: () => setAskOpen(true) },
-    { group: "ACTION", label: "✦ Generate weekly digest (AI)", keywords: "ai digest review week summary", run: () => { setView("dash"); setTag(null); setAdding(false); setPageId(null); genDigest(); } },
+    { group: "ACTION", label: "✦ Generate digest (AI)", keywords: "ai digest review day week month year summary", run: () => { setView("dash"); setTag(null); setAdding(false); setPageId(null); genDigest(); } },
     { group: "ACTION", label: "New item", hint: "N", keywords: "add create capture", run: () => { if (!(view in SECTIONS) && view !== "tag" && view !== "all") openSection("note"); setPageId(null); setAdding(true); } },
     { group: "ACTION", label: "Toggle dark / light theme", hint: "T", keywords: "mode appearance", run: () => setProfile((p) => ({ ...p, theme: p.theme === "dark" ? "light" : "dark" })) },
     { group: "ACTION", label: "Toggle sidebar", hint: "B", keywords: "collapse expand menu", run: () => setOpen((o) => !o) },
@@ -1721,6 +1724,22 @@ export default function App() {
               const topCats = Object.entries(catMap).map(([cat, amt]) => ({ cat, amt })).sort((x, y) => y.amt - x.amt).slice(0, 5);
               return (
                 <>
+                  {/* digest lives at the TOP and follows the range tab */}
+                  <div className="card digestcard" style={{ borderColor: "var(--violet)" }}>
+                    <h3>✦ {({ day: "Daily", week: "Weekly", month: "Monthly", year: "Yearly" })[range] || "Weekly"} digest
+                      <button className="aibtn" style={{ marginLeft: 10 }} disabled={digestBusy || !aiReady}
+                        title={aiReady ? `Your AI reviews your ${RANGE_WORD[range]}: what you saved, what's rotting, what to do next` : "Set up an AI model in Settings to enable"}
+                        onClick={genDigest}>{digestBusy ? "Writing…" : digest ? "Regenerate" : "Generate"}</button>
+                    </h3>
+                    {digest
+                      ? <div className="digest">{digest}</div>
+                      : <div className="m" style={{ color: "var(--ink-soft)" }}>
+                          {aiReady
+                            ? `One click and your AI reviews ${RANGE_WORD[range]} — what you saved, what's going stale, and what to finish next. Switch the Daily/Weekly/Monthly/Yearly tab to change the window.`
+                            : "AI is off — connect Claude or an open-source model in Settings to unlock the digest, Ask AI, summaries and more."}
+                        </div>}
+                  </div>
+
                   <div className="sec-label mono"><span className="sl-dot" aria-hidden="true" /> Needs you now</div>
                   {needs.length ? (
                     <div className="needs-grid">
@@ -1783,6 +1802,12 @@ export default function App() {
                     )}
                   </div>
 
+                  {/* the chart area begins here — Add chart sits top-right above it */}
+                  <div className="sec-label mono charts-head">
+                    Insights · {RANGE_WORD[range]}
+                    <button className="kbtn yc-add" onClick={() => setExplore({ cfg: newChartCfg(), isNew: true })}
+                      title="Build your own chart from any feature's data — it lands at the bottom of the charts">＋ Add chart</button>
+                  </div>
                   <div className="charts-duo">
                     <div className="card"><h3>Where things live</h3><Zoom title="Where things live" sub={`Share of items saved ${RANGE_WORD[range]}.`}
                       go={{ label: "Content", fn: () => goView("all") }}
@@ -1868,21 +1893,6 @@ export default function App() {
                   </div>
                 );
               })}
-            </div>
-
-            <div className="card" style={{ borderColor: "var(--violet)" }}>
-              <h3>✦ Weekly digest
-                <button className="aibtn" style={{ marginLeft: 10 }} disabled={digestBusy || !aiReady}
-                  title={aiReady ? "Your AI reviews your week: what you saved, what's rotting, what to do next" : "Set up an AI model in Settings to enable"}
-                  onClick={genDigest}>{digestBusy ? "Writing…" : digest ? "Regenerate" : "Generate"}</button>
-              </h3>
-              {digest
-                ? <div className="digest">{digest}</div>
-                : <div className="m" style={{ color: "var(--ink-soft)" }}>
-                    {aiReady
-                      ? "One click and your AI reviews your week — what you saved, what's going stale, and what to finish next."
-                      : "AI is off — connect Claude or an open-source model in Settings to unlock the digest, Ask AI, summaries and more."}
-                  </div>}
             </div>
 
           </>

@@ -1818,6 +1818,8 @@ button:disabled{opacity:.5; cursor:not-allowed}
 
 /* ---------- Chart Lab: your own charts + the explorer */
 .yc-head{display:flex; align-items:center; gap:12px; margin-top:18px}
+.charts-head{display:flex; align-items:center; gap:12px}
+.charts-head .yc-add{margin-left:auto}
 .yc-add{margin-left:auto}
 .yc-empty{display:flex; flex-direction:column; gap:6px; align-items:flex-start; text-align:left; cursor:pointer; font-family:inherit; color:var(--ink); border-style:dashed; border-width:1.5px}
 .yc-empty b{font-size:15px}
