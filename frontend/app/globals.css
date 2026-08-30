@@ -8,6 +8,7 @@
   --bg:#EFF3F8; --panel:#F9FBFD; --ink:#16283C; --ink-soft:#54677C;
   --line:#D7E0EA; --stamp:#B23A2E; --stamp-soft:#F4E3E0;
   --moss:#1F5FA8; --moss-soft:#DFEAF7;      /* primary · notes */
+  --chart:#1F5FA8;                          /* single-series chart primary (Settings) */
   --gold:#0C6E8C; --gold-soft:#DCEEF4;      /* teal-blue · library */
   --blue:#3F6396; --blue-soft:#E2E9F3;      /* slate-blue · documents */
   --violet:#4C55A8; --violet-soft:#E4E6F6;  /* indigo · tags/AI */
@@ -882,9 +883,9 @@ img.fpreview{height:auto}
 /* the donut fills its card: it tracks the card's HEIGHT (the dimension that
    actually grows when the row stretches), square via the viewBox ratio,
    with width as a secondary bound so the legend always keeps its room */
-.donut-wrap{flex:1; align-self:stretch; min-height:300px}
+.donut-wrap{flex:1; align-self:stretch; min-height:340px}
 /* scales with the viewport so a big monitor gets a genuinely big chart */
-.donut-svg{height:clamp(300px, 42vh, 560px); width:auto; max-width:62%; flex:none}
+.donut-svg{height:clamp(340px, 48vh, 640px); width:auto; max-width:62%; flex:none}
 .donut-legend{font-size:15px; line-height:2.2; flex:1; min-width:0}
 .donut-legend .mono{font-size:14px}
 .chart-tip{position:absolute; transform:translate(-50%,-135%); background:var(--ink); color:var(--bg); font-size:11px; font-weight:600; padding:5px 10px; border-radius:7px; white-space:nowrap; pointer-events:none; z-index:60; box-shadow:var(--shadow-2)}
@@ -1050,11 +1051,11 @@ img.fpreview{height:auto}
 .spark-delta.down{color:var(--stamp)}
 .sparkline{width:100%; height:clamp(96px, 12vh, 160px); flex:1}
 .spark-span{font-size:10px; color:var(--ink-soft)}
-/* the donut card leads: wider column and a real minimum height, so the
-   chart is unmistakably large on every monitor */
-.charts-duo{display:grid; grid-template-columns:1.35fr 1fr; gap:12px; margin-top:18px}
+/* two equal hero cards with real height — the breakdown charts are the
+   dashboard's centerpiece, sized like it */
+.charts-duo{display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:18px}
 @media (max-width:760px){.charts-duo{grid-template-columns:1fr}}
-.charts-duo .card{margin-bottom:0; min-height:clamp(360px, 46vh, 620px)}
+.charts-duo .card{margin-bottom:0; min-height:clamp(430px, 54vh, 720px)}
 .proglist{display:flex; flex-direction:column; gap:13px; padding-top:4px}
 .prog-top{display:flex; justify-content:space-between; gap:10px; font-size:13px; color:var(--ink-soft); margin-bottom:5px}
 .prog-top b{color:var(--ink); font-weight:600; font-size:12px}
@@ -1622,3 +1623,170 @@ button:disabled{opacity:.5; cursor:not-allowed}
 .qcap-mic{flex-shrink:0; font-size:14px; min-width:34px}
 .qcap-mic[aria-pressed="true"]{color:var(--stamp); border-color:var(--stamp); animation:mic-pulse 1.2s ease-in-out infinite}
 @keyframes mic-pulse{0%,100%{opacity:1}50%{opacity:.45}}
+
+/* ---------- new insight charts (burn / growth / rhythm / merchants) */
+.burn-svg,.growth-svg{width:100%; height:clamp(200px, 26vh, 320px); flex:1}
+.rhythm-svg{width:100%; height:clamp(160px, 20vh, 240px); flex:1}
+.charts-row2{display:grid; grid-template-columns:1.3fr 1fr 1fr; gap:12px; margin-top:12px; margin-bottom:14px}
+@media (max-width:1180px){.charts-row2{grid-template-columns:1fr 1fr}}
+@media (max-width:760px){.charts-row2{grid-template-columns:1fr}}
+.charts-row2 .card{margin-bottom:0; display:flex; flex-direction:column; min-height:clamp(280px, 34vh, 420px)}
+.merchants{display:flex; flex-direction:column; gap:14px; padding-top:6px}
+.merchant-row{display:flex; align-items:center; gap:10px}
+.merchant-name{font-size:12px; width:172px; flex-shrink:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--ink)}
+.merchant-bar{flex:1; min-width:0; height:20px; background:var(--field); border-radius:6px; overflow:hidden}
+.merchant-bar i{display:block; height:100%; border-radius:6px}
+.merchant-row b{font-size:13px; flex-shrink:0}
+.merchant-n{font-size:11px; color:var(--ink-soft); flex-shrink:0}
+@media (max-width:560px){.merchant-name{width:110px}}
+.burn-hint{font-size:12.5px; color:var(--ink-soft); margin-top:8px}
+
+/* ---------- money flow + category shifts */
+.flow-svg{width:100%; height:clamp(230px, 30vh, 360px); flex:1}
+.shifts{display:flex; flex-direction:column; gap:12px; padding-top:6px}
+.shift-row{display:flex; align-items:center; gap:12px}
+.shift-name{width:96px; font-size:13.5px; flex-shrink:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.shift-spark{flex:1; min-width:0; height:30px}
+.shift-amt{font-size:13px; flex-shrink:0; min-width:52px; text-align:right}
+.shift-chip{font-size:12px; font-weight:600; border-radius:99px; padding:3px 10px; flex-shrink:0; color:var(--ink-soft); background:var(--field)}
+.shift-chip.up{color:var(--stamp); background:var(--stamp-soft)}
+.shift-chip.down{color:#1F7A4D; background:#E1F2E8}
+@media (max-width:560px){.shift-name{width:74px; font-size:12.5px}}
+
+/* ---------- wave-3 insight charts */
+.ivs-svg{width:100%; height:clamp(190px, 25vh, 300px)}
+.wf-svg{width:100%; height:clamp(200px, 26vh, 310px)}
+.srcrows{display:flex; flex-direction:column; gap:11px; padding-top:4px; flex:1; justify-content:center}
+.srcrow{display:flex; align-items:center; gap:10px}
+.srcname{font-size:13px; width:118px; flex-shrink:0}
+.srcbar{flex:1; min-width:0; height:16px; background:var(--field); border-radius:6px; overflow:hidden}
+.srcbar i{display:block; height:100%; border-radius:6px}
+.srcpct{font-size:12px; color:var(--ink-soft); min-width:34px; text-align:right}
+.wkprem{display:flex; flex-direction:column; gap:14px; padding-top:8px}
+.wkrow{display:flex; align-items:center; gap:12px}
+.wkl{font-size:13px; width:104px; flex-shrink:0; color:var(--ink-soft)}
+.wkbar{flex:1; min-width:0; height:26px; background:var(--field); border-radius:8px; overflow:hidden}
+.wkbar i{display:block; height:100%; border-radius:8px}
+.wkrow b{font-size:14px; flex-shrink:0}
+.bullets{display:flex; flex-direction:column; gap:13px; padding-top:4px}
+.bullet-row{display:flex; align-items:center; gap:10px}
+.bullet-name{font-size:13px; width:88px; flex-shrink:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.bullet-track{flex:1; min-width:0; height:18px; background:transparent; position:relative}
+.bullet-track i{position:absolute; top:0; height:100%; border-radius:5px}
+.bullet-cap{left:0; background:var(--field)}
+.bullet-fill{left:0}
+.bullet-over{background:var(--stamp); opacity:0.55}
+.bullet-tick{width:2.5px !important; background:var(--ink); border-radius:0 !important; top:-3px !important; height:24px !important}
+.bullet-amt{font-size:11.5px; color:var(--ink-soft); flex-shrink:0}
+.habit-card{margin-top:14px; background:var(--field); border-radius:12px; padding:16px 18px}
+.habit-name{font-family:'IBM Plex Mono',monospace; font-size:12.5px; font-weight:600}
+.habit-mo{font-family:'Fraunces',Georgia,serif; font-size:clamp(26px,3vw,36px); font-weight:650; color:var(--gold); margin:6px 0 2px}
+.habit-yr{font-family:'Fraunces',Georgia,serif; font-size:clamp(16px,2vw,21px); font-weight:650; color:var(--stamp)}
+.habit-sub{font-size:12px; color:var(--ink-soft); margin-top:6px}
+@media (max-width:560px){.srcname{width:92px; font-size:12px}}
+.merchant-row{background:none; border:none; font-family:inherit; color:var(--ink); cursor:pointer; padding:4px 6px; border-radius:8px; width:100%}
+.merchant-row:hover{background:var(--field)}
+.merchant-row.on{background:var(--moss-soft)}
+.gmode button.on{background:var(--moss); color:#fff; border-color:var(--moss)}
+
+/* ================================================================
+   GLASS UI — frosted surfaces over a soft ambient wash. A Settings
+   toggle (on by default); the flat look remains underneath it. */
+.vault.glass{
+  background:
+    radial-gradient(900px 520px at 12% -4%, rgba(31,95,168,0.10), transparent 60%),
+    radial-gradient(760px 460px at 88% 12%, rgba(12,110,140,0.10), transparent 62%),
+    radial-gradient(820px 560px at 55% 105%, rgba(76,85,168,0.08), transparent 60%),
+    var(--bg);
+  background-attachment: fixed;
+}
+.vault.glass .card,
+.vault.glass .tile,
+.vault.glass .needcard,
+.vault.glass .ringcard,
+.vault.glass .tagcard,
+.vault.glass .exp-total-card,
+.vault.glass .smartbar,
+.vault.glass .dash-search,
+.vault.glass .trow,
+.vault.glass .kcol{
+  background: rgba(255,255,255,0.62);
+  backdrop-filter: blur(16px) saturate(1.25);
+  -webkit-backdrop-filter: blur(16px) saturate(1.25);
+  border-color: rgba(255,255,255,0.75);
+  box-shadow: 0 6px 22px rgba(22,40,60,0.07), inset 0 1px 0 rgba(255,255,255,0.85);
+}
+.vault.glass .tile:hover,
+.vault.glass .needcard:hover,
+.vault.glass .ringcard:hover,
+.vault.glass .tagcard:hover{
+  background: rgba(255,255,255,0.78);
+  box-shadow: 0 10px 30px rgba(22,40,60,0.12), inset 0 1px 0 rgba(255,255,255,0.9);
+}
+.vault.glass .doctabs{background:rgba(255,255,255,0.5); backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px)}
+.vault.glass .doctabs button{background:transparent}
+.vault.glass .doctabs button.on{background:var(--stamp)}
+.vault.glass .pal, .vault.glass .settingsdlg{
+  background: rgba(255,255,255,0.82);
+  backdrop-filter: blur(24px) saturate(1.3);
+  -webkit-backdrop-filter: blur(24px) saturate(1.3);
+  border: 1px solid rgba(255,255,255,0.8);
+}
+.vault.glass .pal-overlay{background:rgba(15,34,55,0.28); backdrop-filter:blur(3px); -webkit-backdrop-filter:blur(3px)}
+/* charts keep a whisper of glass but text stays fully solid */
+.vault.glass .chart-tip{background:rgba(22,40,60,0.92); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px)}
+
+/* ---------- clarity pass: finance tiles, tabs, tags, card headers */
+.tile .k{font-size:12px; letter-spacing:1.2px; display:flex; align-items:center; gap:7px}
+.tile .k .icn{width:18px; height:18px; vertical-align:-4px}
+.tile .d{font-size:13px; margin-top:7px; line-height:1.45}
+.doctabs button{font-size:13px; padding:8px 15px}
+.tabbadge{font-size:11px}
+.card h3{font-size:18px}
+.cardsub{font-size:12.5px}
+.fcat{font-size:12px; padding:4px 11px}
+.fexp{font-size:14px}
+.famt{font-size:13.5px}
+.tagcard{padding:18px 20px}
+.tg-name{font-size:19px}
+.tg-count{font-size:12.5px; margin:4px 0 10px}
+.tg-secs .pill{font-size:12px; padding:4px 11px}
+.glegend{font-size:13px; line-height:2}
+
+/* ---------- analytics: each insight chart in its own card */
+.fanal-grid{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; margin-top:14px}
+.fanal-card{margin-bottom:0; display:flex; flex-direction:column; min-height:clamp(320px, 38vh, 460px)}
+.fanal-wide{grid-column:1 / -1}
+.fanal-sub{color:var(--ink-soft); margin-bottom:10px}
+@media (max-width:900px){.fanal-grid{grid-template-columns:minmax(0,1fr)}.fanal-card{min-height:0}}
+
+/* ---------- Chart Lab: your own charts + the explorer */
+.yc-head{display:flex; align-items:center; gap:12px; margin-top:18px}
+.yc-add{margin-left:auto}
+.yc-empty{display:flex; flex-direction:column; gap:6px; align-items:flex-start; text-align:left; cursor:pointer; font-family:inherit; color:var(--ink); border-style:dashed; border-width:1.5px}
+.yc-empty b{font-size:15px}
+.yc-empty span{font-size:13px; color:var(--ink-soft); line-height:1.5}
+.yc-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(300px, 1fr)); gap:12px}
+.yc-card{display:flex; flex-direction:column; gap:4px; align-items:stretch; text-align:left; cursor:pointer; font-family:inherit; color:var(--ink); margin-bottom:0}
+.yc-card:hover{box-shadow:var(--shadow-2); transform:translateY(-1px)}
+.yc-title{font-family:'Fraunces',Georgia,serif; font-size:16px; font-weight:650; display:flex; align-items:center}
+.yc-open{margin-left:auto; color:var(--ink-soft); font-size:13px}
+.yc-sub{font-size:10.5px; letter-spacing:1px; color:var(--ink-soft); text-transform:uppercase; margin-bottom:6px}
+.pal.explorer{max-width:900px; width:min(94vw, 900px); max-height:88vh; overflow-y:auto; padding:20px 24px}
+.exp-head{display:flex; align-items:center; gap:12px; margin-bottom:14px}
+.exp-title{flex:1; min-width:0; border:none; background:transparent; font-family:'Fraunces',Georgia,serif; font-size:22px; font-weight:650; color:var(--ink); border-bottom:1.5px dashed var(--line); padding:4px 2px}
+.exp-title:focus{outline:none; border-bottom-color:var(--moss)}
+.exp-controls{display:flex; flex-wrap:wrap; gap:14px 22px; margin-bottom:12px; align-items:flex-end}
+.exp-ctl{display:flex; flex-direction:column; gap:5px}
+.exp-ctl > .mono{font-size:9.5px; letter-spacing:1.5px; color:var(--ink-soft)}
+.exp-ctl select{border:1px solid var(--line); border-radius:8px; background:var(--field); color:var(--ink); font-family:'Public Sans',sans-serif; font-size:13px; padding:7px 10px}
+.exp-stats{display:flex; gap:20px; flex-wrap:wrap; font-size:12px; color:var(--ink-soft); margin-bottom:10px}
+.exp-stats b{color:var(--ink)}
+.exp-table{margin-top:14px; display:flex; flex-direction:column; gap:6px; max-height:200px; overflow-y:auto}
+.exp-row{display:flex; align-items:center; gap:12px; font-size:12px}
+.exp-row > .mono:first-child{width:120px; flex-shrink:0; color:var(--ink-soft)}
+.exp-bar{flex:1; min-width:0; height:10px; background:var(--field); border-radius:4px; overflow:hidden}
+.exp-bar i{display:block; height:100%; background:var(--chart, var(--moss)); border-radius:4px}
+.exp-row b{min-width:64px; text-align:right}
+.exp-foot{display:flex; gap:10px; margin-top:18px; align-items:center}
+@media (max-width:700px){.exp-row > .mono:first-child{width:86px}.pal.explorer{padding:16px}}

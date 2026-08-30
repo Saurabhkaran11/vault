@@ -20,7 +20,7 @@ const TOP_TAGS = 60;
 const MAX_PER_HUB = 20;
 const MAX_ITEMS_TOTAL = 360;
 const K_MIN = 0.4, K_MAX = 6;
-const LABEL_K = 1.05;
+const LABEL_K = 0.8;   // labels appear earlier — clarity beats minimalism here
 
 /* physics tuning */
 const ALPHA_FLOOR = 0.02;      // never fully freezes — the "alive" part
@@ -100,6 +100,7 @@ function layout(items, query) {
 
 export default function GraphView({ items, onOpenTag, onOpenSection }) {
   const [query, setQuery] = useState("");
+  const [mode, setMode] = useState("web");   // "web" (force sim) | "orbit" (staleness rings)
   const g = useMemo(() => layout(items, query), [items, query]);
   const [hover, setHover] = useState(null);
   const [view, setView] = useState({ k: 1, x: 0, y: 0 });
@@ -313,6 +314,12 @@ export default function GraphView({ items, onOpenTag, onOpenSection }) {
           {g.totalMatching > g.tags.length ? `TOP ${g.tags.length} OF ${g.totalMatching} TAGS · ` : ""}
           {g.shownItems}{g.shownItems < g.totalItems ? ` OF ${g.totalItems}` : ""} ITEMS
         </span>
+        <span className="gzoom gmode" role="group" aria-label="Graph view mode">
+          <button className={mode === "web" ? "on" : ""} onClick={() => setMode("web")}
+            title="The living force-directed web">Web</button>
+          <button className={mode === "orbit" ? "on" : ""} onClick={() => setMode("orbit")}
+            title="Items orbit their tags — neglected ones drift to the outer rings">Orbit</button>
+        </span>
         <span className="gzoom" role="group" aria-label="Zoom">
           <button onClick={() => zoomCenter(1 / 1.3)} title="Zoom out" aria-label="Zoom out">−</button>
           <span className="mono">{Math.round(view.k * 100)}%</span>
@@ -328,7 +335,8 @@ export default function GraphView({ items, onOpenTag, onOpenSection }) {
         onPointerDown={onPanStart} onPointerMove={onMove}
         onPointerUp={onUp} onPointerLeave={onUp}>
         <g transform={`translate(${view.x} ${view.y}) scale(${view.k})`}>
-          {g.edges.filter((e) => e.visible).map((e, i) => {
+          {mode === "orbit" && <OrbitLayer items={items} onOpenTag={onOpenTag} onOpenSection={onOpenSection} k={view.k} />}
+          {mode === "web" && g.edges.filter((e) => e.visible).map((e, i) => {
             const a = at(e.a), b = at(e.b);
             if (!a || !b) return null;
             return (
@@ -340,7 +348,7 @@ export default function GraphView({ items, onOpenTag, onOpenSection }) {
             );
           })}
 
-          {g.tags.map((t) => {
+          {mode === "web" && g.tags.map((t) => {
             const key = `t${t}`;
             const h = at(key, g.hubs[t]);
             return (
@@ -350,7 +358,7 @@ export default function GraphView({ items, onOpenTag, onOpenSection }) {
                 onClick={onNodeClick(key, () => onOpenTag(t))}>
                 <circle cx={h.x} cy={h.y} r={24} fill="var(--violet)" stroke="var(--panel)" strokeWidth="3" />
                 <text x={h.x} y={h.y + 4} textAnchor="middle" fontSize="12" fontFamily="IBM Plex Mono" fontWeight="600" fill="#fff" style={{ pointerEvents: "none" }}>{g.counts[t]}</text>
-                <text x={h.x} y={h.y - 33} textAnchor="middle" fontSize="14" fontFamily="Fraunces" fontWeight="650" fill="var(--ink)" style={{ pointerEvents: "none" }}>#{t}</text>
+                <text x={h.x} y={h.y - 33} textAnchor="middle" fontSize="16" fontFamily="Fraunces" fontWeight="650" fill="var(--ink)" style={{ pointerEvents: "none" }}>#{t}</text>
               </g>
             );
           })}
@@ -360,7 +368,7 @@ export default function GraphView({ items, onOpenTag, onOpenSection }) {
            * an invisible centre. Muted, and inert on click — it's a category,
            * not a real tag with a page to open — but it still hover-spotlights
            * its items. Only present when !q (search hides the untagged pile). */}
-          {g.untagged > 0 && (() => {
+          {mode === "web" && g.untagged > 0 && (() => {
             const key = "t__untagged";
             const h = at(key, g.hubs.__untagged);
             if (!h) return null;
@@ -371,12 +379,12 @@ export default function GraphView({ items, onOpenTag, onOpenSection }) {
                 <title>{`${g.untagged} untagged item${g.untagged === 1 ? "" : "s"} — add a #tag to file them`}</title>
                 <circle cx={h.x} cy={h.y} r={24} fill="var(--ink-soft)" stroke="var(--panel)" strokeWidth="3" strokeDasharray="4 4" />
                 <text x={h.x} y={h.y + 4} textAnchor="middle" fontSize="12" fontFamily="IBM Plex Mono" fontWeight="600" fill="#fff" style={{ pointerEvents: "none" }}>{g.untagged}</text>
-                <text x={h.x} y={h.y - 33} textAnchor="middle" fontSize="14" fontFamily="Fraunces" fontWeight="650" fill="var(--ink-soft)" style={{ pointerEvents: "none" }}>Untagged</text>
+                <text x={h.x} y={h.y - 33} textAnchor="middle" fontSize="16" fontFamily="Fraunces" fontWeight="650" fill="var(--ink-soft)" style={{ pointerEvents: "none" }}>Untagged</text>
               </g>
             );
           })()}
 
-          {g.nodes.map((n) => {
+          {mode === "web" && g.nodes.map((n) => {
             const p = at(n.key, n);
             if (n.kind === "more") {
               return (
@@ -400,7 +408,7 @@ export default function GraphView({ items, onOpenTag, onOpenSection }) {
                 <circle cx={p.x} cy={p.y} r={10} fill={s.color} stroke="var(--panel)" strokeWidth="2.5" />
                 <text x={p.x} y={p.y + 3.5} textAnchor="middle" fontSize="9" fill="#fff" style={{ pointerEvents: "none" }}>{s.icon}</text>
                 {(showItemLabels || hover === n.key) && (
-                  <text x={p.x} y={p.y + 24} textAnchor="middle" fontSize={11.5 / Math.max(1, view.k * 0.8)} fontFamily="Public Sans"
+                  <text x={p.x} y={p.y + 24} textAnchor="middle" fontSize={13 / Math.max(1, view.k * 0.8)} fontFamily="Public Sans"
                     fill={hover === n.key ? "var(--ink)" : "var(--ink-soft)"} fontWeight={hover === n.key ? 600 : 400}
                     style={{ pointerEvents: "none" }}>
                     {label.length > 22 ? label.slice(0, 20) + "…" : label}
@@ -412,5 +420,90 @@ export default function GraphView({ items, onOpenTag, onOpenSection }) {
         </g>
       </svg>
     </div>
+  );
+}
+
+/* ---------- Orbit view: items orbit their anchor tag, and how far out they
+ * sit is how long they've gone untouched — fresh work hugs the hub, neglect
+ * drifts to the outer ring. Same pan/zoom as the web view (it renders inside
+ * the same transform group); no simulation, so it's perfectly still. */
+const orbitDaysAgo = (it) => {
+  const ref = it.edited || it.date;
+  if (!ref) return 999;
+  return Math.max(0, Math.floor((Date.now() - new Date(ref + "T00:00:00")) / 86400000));
+};
+
+function OrbitLayer({ items, onOpenTag, onOpenSection, k }) {
+  const model = React.useMemo(() => {
+    const byTag = {};
+    const untagged = [];
+    items.forEach((it) => {
+      if (!it.tags?.length) { untagged.push(it); return; }
+      (byTag[it.tags[0]] = byTag[it.tags[0]] || []).push(it);
+    });
+    const groups = Object.entries(byTag)
+      .sort((a, b) => b[1].length - a[1].length)
+      .slice(0, 12);
+    if (untagged.length) groups.push(["__untagged", untagged]);
+
+    const n = groups.length || 1;
+    const cols = Math.ceil(Math.sqrt(n * (W / H)));
+    const rows = Math.ceil(n / cols);
+    const cellW = W / cols, cellH = H / rows;
+
+    return groups.map(([tag, members], gi) => {
+      const cx = (gi % cols) * cellW + cellW / 2;
+      const cy = Math.floor(gi / cols) * cellH + cellH / 2;
+      const maxR = Math.min(cellW, cellH) * 0.42;
+      const rings = [maxR * 0.45, maxR * 0.72, maxR];
+      const nodes = members.slice(0, 24).map((it, i) => {
+        const age = orbitDaysAgo(it);
+        const ring = age <= 14 ? 0 : age <= 60 ? 1 : 2;
+        const ang = i * 2.399963;                 // golden angle — no clumping
+        return {
+          it, age, ring,
+          x: cx + Math.cos(ang) * rings[ring],
+          y: cy + Math.sin(ang) * rings[ring] * 0.92,
+        };
+      });
+      return { tag, cx, cy, rings, nodes, total: members.length };
+    });
+  }, [items]);
+
+  return (
+    <g className="orbitlayer">
+      {model.map((grp) => (
+        <g key={grp.tag}>
+          {grp.rings.map((r, i) => (
+            <ellipse key={i} cx={grp.cx} cy={grp.cy} rx={r} ry={r * 0.92}
+              fill="none" stroke="var(--line)" strokeDasharray="3 5" strokeWidth={1 / k} />
+          ))}
+          <g className="gnode" style={{ cursor: "pointer" }}
+            onClick={() => grp.tag !== "__untagged" && onOpenTag(grp.tag)}>
+            <title>{grp.tag === "__untagged" ? `${grp.total} untagged items` : `Open #${grp.tag} — ${grp.total} item${grp.total === 1 ? "" : "s"}`}</title>
+            <circle cx={grp.cx} cy={grp.cy} r={15} fill={grp.tag === "__untagged" ? "var(--ink-soft)" : "var(--moss)"} stroke="var(--panel)" strokeWidth="2.5" />
+            <text x={grp.cx} y={grp.cy - 24} textAnchor="middle" fontSize="13" fontFamily="Fraunces" fontWeight="650" fill="var(--ink)"
+              style={{ pointerEvents: "none" }}>
+              {grp.tag === "__untagged" ? "Untagged" : `#${grp.tag}`}
+            </text>
+          </g>
+          {grp.nodes.map((n) => {
+            const s = SECTIONS[n.it.type] || {};
+            return (
+              <g key={n.it.id} className="gnode" style={{ cursor: "pointer" }}
+                onClick={() => onOpenSection(n.it.type)}>
+                <title>{`${n.it.alias || n.it.title} — ${n.age === 999 ? "undated" : `${n.age} day${n.age === 1 ? "" : "s"} since touched`}${n.ring === 2 ? " · drifting" : ""}`}</title>
+                <circle cx={n.x} cy={n.y} r={n.ring === 0 ? 8 : n.ring === 1 ? 6.5 : 5.5}
+                  fill={s.color || "var(--ink-soft)"} opacity={n.ring === 0 ? 1 : n.ring === 1 ? 0.72 : 0.4}
+                  stroke="var(--panel)" strokeWidth="1.5" />
+              </g>
+            );
+          })}
+        </g>
+      ))}
+      <text x={W - 8} y={H - 10} textAnchor="end" fontSize="11" fontFamily="IBM Plex Mono" fill="var(--ink-soft)">
+        inner ring = touched this fortnight · outer ring = drifting
+      </text>
+    </g>
   );
 }

@@ -3,6 +3,7 @@
 import React, { useMemo, useState } from "react";
 import { today } from "@/lib/seed";
 import { askText } from "@/lib/ai";
+import { TopMerchants, MoneyFlow, CategoryShifts, IncomeVsSpend, SavingsWaterfall, WeekendPremium } from "./Charts";
 import { useAiReady } from "@/hooks/useAiReady";
 
 /* Finance analytics: spending reports over daily / weekly / monthly / yearly
@@ -271,6 +272,7 @@ export default function FinanceAnalytics({ fin, fmt, spentByCat = {}, savingsRat
   }, [expenses, fin, fmt, spentByCat, recurringMonthly]);
 
   return (
+    <>
     <div className="card">
       <div className="fanal-head">
         <div className="doctabs" role="tablist" aria-label="Report period">
@@ -329,6 +331,45 @@ export default function FinanceAnalytics({ fin, fmt, spentByCat = {}, savingsRat
       ) : (
         <TimeChart buckets={buckets} type={chart} fmt={fmt} />
       )}
+
+
     </div>
+
+    {/* every insight chart gets its OWN card — one mega-card buried them all */}
+    {expenses.length > 0 && (
+      <div className="fanal-grid">
+        <div className="card fanal-card">
+          <h3>Category shifts</h3>
+          <div className="m fanal-sub">This month vs last — red grows, green shrinks.</div>
+          <CategoryShifts expenses={fin.expenses} fmt={fmt} />
+        </div>
+        <div className="card fanal-card">
+          <h3>Income vs spend</h3>
+          <div className="m fanal-sub">Last 5 months — the green haze is what you kept.</div>
+          <IncomeVsSpend incomes={fin.incomes} expenses={fin.expenses} fmt={fmt} />
+        </div>
+        <div className="card fanal-card">
+          <h3>Savings waterfall</h3>
+          <div className="m fanal-sub">This month: income stepping down to what you kept.</div>
+          <SavingsWaterfall incomes={fin.incomes} expenses={fin.expenses} fmt={fmt} />
+        </div>
+        <div className="card fanal-card">
+          <h3>Weekend premium</h3>
+          <div className="m fanal-sub">Average daily spend, weekday vs weekend · last 8 weeks.</div>
+          <WeekendPremium expenses={fin.expenses} fmt={fmt} />
+        </div>
+        <div className="card fanal-card fanal-wide">
+          <h3>Money flow</h3>
+          <div className="m fanal-sub">This month: income → categories → where it lands. Hover any ribbon.</div>
+          <MoneyFlow incomes={fin.incomes} expenses={fin.expenses} fmt={fmt} />
+        </div>
+        <div className="card fanal-card fanal-wide">
+          <h3>Top merchants</h3>
+          <div className="m fanal-sub">Last 90 days — click a merchant for its habit math.</div>
+          <TopMerchants expenses={expenses} fmt={fmt} />
+        </div>
+      </div>
+    )}
+    </>
   );
 }
