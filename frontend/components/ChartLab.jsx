@@ -30,17 +30,48 @@ export const deleteChart = (id) => {
   try { safeSet(KEY, JSON.stringify(loadCharts().filter((c) => c.id !== id))); } catch {}
 };
 
+/* Every feature is a source, and every source declares its DIMENSIONS —
+ * the axes a user can filter on or nest by. `get` turns a row into a
+ * human-readable group name. Dateless sources (board cards carry no
+ * timestamps) chart as breakdowns instead of time series. */
 export const SOURCES = {
-  items:    { label: "Items saved",  money: false, catKey: "type", catLabel: "Section" },
-  tasks:    { label: "Tasks done",   money: false },
-  expenses: { label: "Spending",     money: true,  catKey: "cat",  catLabel: "Category" },
-  income:   { label: "Income",       money: true },
-  bills:    { label: "Bills paid",   money: true },
+  items: {
+    label: "Items saved", money: false,
+    dims: {
+      type: { label: "Section", get: (r) => SECTIONS[r.type]?.label || r.type || "Other" },
+      tag:  { label: "Tag", get: (r) => (r.tags?.[0] ? `#${r.tags[0]}` : "untagged") },
+    },
+  },
+  tasks:    { label: "Tasks done", money: false, dims: {} },
+  expenses: {
+    label: "Spending", money: true,
+    dims: {
+      cat:      { label: "Category", get: (r) => r.cat || "Other" },
+      merchant: { label: "Merchant", get: (r) => (r.desc || "—").trim().replace(/\s+/g, " ").toUpperCase().slice(0, 18) },
+      pay:      { label: "Entry", get: (r) => (r.pay ? "Imported" : "Manual") },
+    },
+  },
+  income: {
+    label: "Income", money: true,
+    dims: { source: { label: "Source", get: (r) => r.source || "Income" } },
+  },
+  bills: {
+    label: "Bills paid", money: true,
+    dims: { name: { label: "Bill", get: (r) => r.name || "Bill" } },
+  },
+  cards: {
+    label: "Board cards", money: false, dateless: true,
+    dims: {
+      col:   { label: "Column", get: (r) => r.col || "Column" },
+      board: { label: "Board", get: (r) => r.board || "Board" },
+    },
+  },
 };
+const primaryDimKey = (src) => Object.keys(src.dims || {})[0] || null;
 const TYPES = [["bars", "▮ Bars"], ["area", "◺ Area"], ["donut", "◔ Donut"]];
 const RANGES = [["day", "14 days"], ["week", "8 weeks"], ["month", "12 months"], ["year", "5 years"]];
 
-export const newChartCfg = () => ({ id: uid(), title: "", source: "expenses", type: "bars", range: "month", filter: "" });
+export const newChartCfg = () => ({ id: uid(), title: "", source: "expenses", type: "bars", range: "month", filter: "", filterDim: "", nest: "" });
 export const PRESET_TASKS = () => ({ ...newChartCfg(), title: "Tasks finished", source: "tasks", type: "area", range: "week" });
 export const PRESET_SPEND = () => ({ ...newChartCfg(), title: "Spending", source: "expenses", type: "bars", range: "week" });
 
@@ -48,38 +79,82 @@ export const PRESET_SPEND = () => ({ ...newChartCfg(), title: "Spending", source
 export function readStores() {
   const j = (k, fb) => { try { return JSON.parse(localStorage.getItem(k) || "null") ?? fb; } catch { return fb; } };
   const fin = j("vault.finance.v1", {});
+  const boards = j("vault.boards.v1", {}).boards || [];
   return {
     items: (j("vault.items.v1", []) || []).filter((i) => !i.deleted),
     tasks: (j("vault.todos.v1", {}).tasks || []).filter((t) => t.done && t.doneAt),
     expenses: fin.expenses || [],
     income: fin.incomes || [],
     bills: (fin.bills || []).filter((b) => b.paid && b.paidOn),
+    cards: boards.flatMap((b) => (b.cols || []).flatMap((c) =>
+      (c.cards || []).map((k) => ({ ...k, col: c.title || "Column", board: b.name || "Board" })))),
   };
 }
 
-/* config → plotted data. Money sources sum amounts; the rest count. */
+/* config → plotted data. Money sources sum amounts; the rest count.
+ * filterDim narrows rows on any dimension; nest splits every bucket by a
+ * second dimension (stacked bars / multi-line / nested donut). */
 export function chartData(cfg, stores) {
   const src = SOURCES[cfg.source] || SOURCES.expenses;
+  const dims = src.dims || {};
+  const pKey = primaryDimKey(src);
   let rows = stores[cfg.source] || [];
-  if (cfg.filter && src.catKey) rows = rows.filter((r) => (r[src.catKey] || "Other") === cfg.filter);
+
+  /* filter on the chosen dimension (defaults to the primary one). Old saved
+     charts stored raw values ("note"), new ones store display values
+     ("Notes") — match either so nothing silently breaks. */
+  const fKey = dims[cfg.filterDim] ? cfg.filterDim : pKey;
+  const fDim = fKey ? dims[fKey] : null;
+  if (cfg.filter && fDim) rows = rows.filter((r) => fDim.get(r) === cfg.filter || String(r[fKey] ?? "") === cfg.filter);
+
   const dateOf = (r) => r.doneAt || r.paidOn || r.date;
-  const dates = rows.map(dateOf);
-  const weights = src.money ? rows.map((r) => +r.amount || 0) : null;
-  const series = rangeSeries(dates, cfg.range, weights);
+  const wOf = (r) => (src.money ? (+r.amount || 0) : 1);
+  const nDim = cfg.nest && dims[cfg.nest] ? dims[cfg.nest] : null;
+
+  /* dateless sources (board cards): no time axis — always a breakdown */
+  if (src.dateless) {
+    const sliceDim = nDim || (pKey ? dims[pKey] : null);
+    const by = {};
+    rows.forEach((r) => { const k = sliceDim ? sliceDim.get(r) : "All"; by[k] = (by[k] || 0) + wOf(r); });
+    const slices = Object.entries(by).sort((a, b) => b[1] - a[1]).slice(0, 6);
+    const total = rows.reduce((a, r) => a + wOf(r), 0);
+    return { values: [], labels: [], tips: [], total, slices, money: src.money, dateless: true, catLabel: sliceDim?.label };
+  }
+
+  const series = rangeSeries(rows.map(dateOf), cfg.range, src.money ? rows.map((r) => +r.amount || 0) : null);
   const total = series.values.reduce((a, v) => a + v, 0);
 
+  /* nested dimension → one series per group (top 4 + Other) */
+  let nested = null;
+  if (nDim) {
+    const groups = {};
+    rows.forEach((r) => { const k = nDim.get(r) || "Other"; (groups[k] = groups[k] || []).push(r); });
+    let keys = Object.entries(groups)
+      .map(([k, rs]) => [k, rs.reduce((a, r) => a + wOf(r), 0)])
+      .sort((a, b) => b[1] - a[1]).map(([k]) => k);
+    if (keys.length > 5) {
+      groups.Other = [...(groups.Other || []), ...keys.slice(4).filter((k) => k !== "Other").flatMap((k) => groups[k])];
+      keys = [...keys.slice(0, 4).filter((k) => k !== "Other"), "Other"];
+    }
+    const matrix = keys.map((k) => rangeSeries(groups[k].map(dateOf), cfg.range,
+      src.money ? groups[k].map((r) => +r.amount || 0) : null).values);
+    nested = { keys, matrix, label: nDim.label };
+  }
+
+  /* donut slices honour the filter AND the nest choice (nest wins) */
   let slices = null;
-  if (src.catKey) {
+  const sliceDim = nDim || (pKey ? dims[pKey] : null);
+  if (sliceDim) {
     const windowDays = { day: 14, week: 56, month: 365, year: 1830 }[cfg.range] || 56;
     const by = {};
-    (stores[cfg.source] || []).forEach((r) => {
+    rows.forEach((r) => {
       if (daysAgo(dateOf(r)) > windowDays) return;
-      const k = r[src.catKey] || "Other";
-      by[k] = (by[k] || 0) + (src.money ? (+r.amount || 0) : 1);
+      const k = sliceDim.get(r) || "Other";
+      by[k] = (by[k] || 0) + wOf(r);
     });
     slices = Object.entries(by).sort((a, b) => b[1] - a[1]).slice(0, 6);
   }
-  return { ...series, total, slices, money: src.money, catKey: src.catKey, catLabel: src.catLabel };
+  return { ...series, total, slices, nested, money: src.money, catLabel: fDim?.label };
 }
 
 const fmtVal = (v, money, sym = "$") => (money ? `${sym}${Math.round(v).toLocaleString()}` : fmtK(v));
@@ -104,10 +179,17 @@ export function LabPlot({ cfg, data, height = 150, big = false, sym = "$" }) {
   const w = useWidth(ref);
   const [tip, setTip] = useState(null);
   const W = Math.max(240, w || 560), H = height;
-  const { values, labels, tips, money, slices } = data;
+  const { values, labels, tips, money, slices, nested } = data;
 
   let body = null;
-  if (cfg.type === "donut" && slices?.length) {
+  const wantDonut = cfg.type === "donut" || data.dateless;
+  if (wantDonut && !slices?.length) {
+    body = (
+      <div className="m" style={{ color: "var(--ink-soft)", padding: "34px 10px" }}>
+        Nothing to plot yet — add some data in this feature and the chart draws itself.
+      </div>
+    );
+  } else if (wantDonut && slices?.length) {
     const total = slices.reduce((a, [, v]) => a + v, 0) || 1;
     const R = H / 2 - 8, cx = R + 10, cy = H / 2;
     let acc = 0;
@@ -156,7 +238,7 @@ export function LabPlot({ cfg, data, height = 150, big = false, sym = "$" }) {
             <text x={2} y={Y(max * f) + 3} fontFamily="IBM Plex Mono" fontSize="9.5" fill="var(--ink-soft)">{fmtVal(max * f, money, sym)}</text>
           </g>
         ))}
-        {cfg.type === "area" && (
+        {cfg.type === "area" && !nested && (
           <>
             <polygon points={`${pad},${Y(0)} ${values.map((v, i) => `${pad + i * bw + bw / 2},${Y(v)}`).join(" ")} ${pad + (n - 1) * bw + bw / 2},${Y(0)}`}
               fill="var(--chart)" opacity="0.14" />
@@ -164,27 +246,60 @@ export function LabPlot({ cfg, data, height = 150, big = false, sym = "$" }) {
               fill="none" stroke="var(--chart)" strokeWidth={big ? 3.5 : 2.5} strokeLinejoin="round" />
           </>
         )}
-        {values.map((v, i) => (
-          <g key={i}>
-            <rect x={pad + i * bw} y="0" width={bw} height={H} fill="transparent"
-              onMouseMove={(e) => setTip({ x: e.nativeEvent.offsetX, y: e.nativeEvent.offsetY, text: `${tips?.[i] ?? labels[i]} · ${fmtVal(v, money, sym)}` })} />
-            {cfg.type !== "area" && (
-              <rect x={pad + i * bw + 1.5} y={Y(v)} width={Math.max(bw - 3, 2)} height={Math.max(H - 26 - Y(v), 2)}
-                rx="2.5" fill="var(--chart)" opacity={v ? 1 : 0.18} style={{ pointerEvents: "none" }} />
-            )}
-            {i % labelEvery === 0 && (
-              <text x={pad + i * bw + bw / 2} y={H - 9} textAnchor="middle" fontFamily="IBM Plex Mono" fontSize="9.5" fill="var(--ink-soft)"
-                style={{ pointerEvents: "none" }}>{labels[i]}</text>
-            )}
-          </g>
+        {/* nested area = one line per group */}
+        {cfg.type === "area" && nested && nested.keys.map((k, ki) => (
+          <polyline key={k} points={nested.matrix[ki].map((v, i) => `${pad + i * bw + bw / 2},${Y(v)}`).join(" ")}
+            fill="none" stroke={PALETTE[ki % PALETTE.length]} strokeWidth={big ? 3 : 2.2} strokeLinejoin="round" />
         ))}
+        {values.map((v, i) => {
+          const breakdown = nested
+            ? " · " + nested.keys.map((k, ki) => nested.matrix[ki][i] ? `${k} ${fmtVal(nested.matrix[ki][i], money, sym)}` : null)
+                .filter(Boolean).slice(0, 3).join(" · ")
+            : "";
+          return (
+            <g key={i}>
+              <rect x={pad + i * bw} y="0" width={bw} height={H} fill="transparent"
+                onMouseMove={(e) => setTip({ x: e.nativeEvent.offsetX, y: e.nativeEvent.offsetY, text: `${tips?.[i] ?? labels[i]} · ${fmtVal(v, money, sym)}${breakdown}` })} />
+              {cfg.type !== "area" && !nested && (
+                <rect x={pad + i * bw + 1.5} y={Y(v)} width={Math.max(bw - 3, 2)} height={Math.max(H - 26 - Y(v), 2)}
+                  rx="2.5" fill="var(--chart)" opacity={v ? 1 : 0.18} style={{ pointerEvents: "none" }} />
+              )}
+              {/* nested bars = stacked segments, bottom-up in group order */}
+              {cfg.type !== "area" && nested && (() => {
+                let acc = 0;
+                return nested.keys.map((k, ki) => {
+                  const sv = nested.matrix[ki][i];
+                  if (!sv) return null;
+                  const y0 = acc; acc += sv;
+                  const yTop = Y(acc), yBot = Y(y0);
+                  return (
+                    <rect key={k} x={pad + i * bw + 1.5} y={yTop} width={Math.max(bw - 3, 2)}
+                      height={Math.max(yBot - yTop, 1)} rx="1.5" fill={PALETTE[ki % PALETTE.length]}
+                      onMouseMove={(e) => { e.stopPropagation(); setTip({ x: e.nativeEvent.offsetX, y: e.nativeEvent.offsetY, text: `${tips?.[i] ?? labels[i]} · ${k} · ${fmtVal(sv, money, sym)} of ${fmtVal(v, money, sym)}` }); }} />
+                  );
+                });
+              })()}
+              {i % labelEvery === 0 && (
+                <text x={pad + i * bw + bw / 2} y={H - 9} textAnchor="middle" fontFamily="IBM Plex Mono" fontSize="9.5" fill="var(--ink-soft)"
+                  style={{ pointerEvents: "none" }}>{labels[i]}</text>
+              )}
+            </g>
+          );
+        })}
       </svg>
     );
   }
 
   return (
-    <div className="chart-wrap" ref={ref} onMouseLeave={() => setTip(null)}>
+    <div className="chart-wrap labplot-wrap" ref={ref} onMouseLeave={() => setTip(null)}>
       {w > 0 && body}
+      {nested && cfg.type !== "donut" && (
+        <div className="lab-legend">
+          {nested.keys.map((k, ki) => (
+            <span key={k} className="ll-chip"><i style={{ background: PALETTE[ki % PALETTE.length] }} />{k}</span>
+          ))}
+        </div>
+      )}
       {tip && <div className="chart-tip mono" style={{ left: tip.x, top: tip.y }} role="status">{tip.text}</div>}
     </div>
   );
@@ -214,7 +329,7 @@ export function YourCharts({ rev, onExplore, sym = "$" }) {
                   {cfg.title || SOURCES[cfg.source].label}
                   <span className="yc-open" aria-hidden="true">⤢</span>
                 </span>
-                <span className="yc-sub mono">{SOURCES[cfg.source].label} · {RANGES.find(([k]) => k === cfg.range)?.[1]}{cfg.filter ? ` · ${cfg.filter}` : ""}</span>
+                <span className="yc-sub mono">{SOURCES[cfg.source].label}{SOURCES[cfg.source].dateless ? "" : ` · ${RANGES.find(([k]) => k === cfg.range)?.[1]}`}{cfg.filter ? ` · ${cfg.filter}` : ""}{cfg.nest && SOURCES[cfg.source].dims?.[cfg.nest] ? ` · by ${SOURCES[cfg.source].dims[cfg.nest].label.toLowerCase()}` : ""}</span>
                 <LabPlot cfg={cfg} data={data} height={130} sym={sym} />
               </button>
             );
@@ -259,10 +374,15 @@ export function ChartExplorer({ cfg: initial, isNew, onSave, onDelete, onClose, 
     return () => window.removeEventListener("keydown", onKey, true);
   }, [onClose]);
 
+  const dims = src.dims || {};
+  const dimKeys = Object.keys(dims);
+  const fKey = dims[cfg.filterDim] ? cfg.filterDim : dimKeys[0];
   const catOptions = useMemo(() => {
-    if (!src.catKey) return [];
-    return [...new Set((stores[cfg.source] || []).map((r) => r[src.catKey] || "Other"))].sort();
-  }, [cfg.source, src.catKey, stores]);
+    const d = fKey ? dims[fKey] : null;
+    if (!d) return [];
+    return [...new Set((stores[cfg.source] || []).map((r) => d.get(r)))].sort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cfg.source, fKey, stores]);
 
   const avg = data.values.length ? data.total / Math.max(data.values.filter((v) => v > 0).length, 1) : 0;
   const peakIdx = data.values.indexOf(Math.max(...data.values));
@@ -279,7 +399,7 @@ export function ChartExplorer({ cfg: initial, isNew, onSave, onDelete, onClose, 
           ) : (
             <div className="exp-vhead">
               <h3 className="exp-vtitle">{cfg.title || src.label}</h3>
-              <div className="exp-vsub m">{src.label} · {RANGES.find(([k]) => k === cfg.range)?.[1]}{cfg.filter ? ` · ${cfg.filter}` : ""}</div>
+              <div className="exp-vsub m">{src.label}{src.dateless ? "" : ` · ${RANGES.find(([k]) => k === cfg.range)?.[1]}`}{cfg.filter ? ` · ${cfg.filter}` : ""}{cfg.nest && dims[cfg.nest] ? ` · split by ${dims[cfg.nest].label.toLowerCase()}` : ""}</div>
             </div>
           )}
           {!editing && (
@@ -293,18 +413,23 @@ export function ChartExplorer({ cfg: initial, isNew, onSave, onDelete, onClose, 
         <div className="exp-controls">
           <label className="exp-ctl">
             <span className="mono">SOURCE</span>
-            <select value={cfg.source} onChange={(e) => set({ source: e.target.value, filter: "" })} aria-label="Data source">
+            <select value={cfg.source}
+              onChange={(e) => {
+                const v = e.target.value;
+                set({ source: v, filter: "", filterDim: "", nest: "", ...(SOURCES[v].dateless ? { type: "donut" } : {}) });
+              }} aria-label="Data source">
               {Object.entries(SOURCES).map(([k, s]) => <option key={k} value={k}>{s.label}</option>)}
             </select>
           </label>
           <span className="exp-ctl">
             <span className="mono">SHAPE</span>
             <span className="doctabs">
-              {TYPES.filter(([k]) => k !== "donut" || src.catKey).map(([k, label]) => (
+              {TYPES.filter(([k]) => (src.dateless ? k === "donut" : k !== "donut" || dimKeys.length)).map(([k, label]) => (
                 <button key={k} className={cfg.type === k ? "on" : ""} onClick={() => set({ type: k })}>{label}</button>
               ))}
             </span>
           </span>
+          {!src.dateless && (
           <span className="exp-ctl">
             <span className="mono">RANGE</span>
             <span className="doctabs">
@@ -313,12 +438,31 @@ export function ChartExplorer({ cfg: initial, isNew, onSave, onDelete, onClose, 
               ))}
             </span>
           </span>
-          {src.catKey && (
+          )}
+          {dimKeys.length > 0 && (
             <label className="exp-ctl">
-              <span className="mono">{src.catLabel.toUpperCase()}</span>
-              <select value={cfg.filter} onChange={(e) => set({ filter: e.target.value })} aria-label={src.catLabel}>
-                <option value="">All</option>
-                {catOptions.map((c) => <option key={c} value={c}>{c}</option>)}
+              <span className="mono">FILTER BY</span>
+              <span className="exp-duo">
+                {dimKeys.length > 1 && (
+                  <select value={fKey} aria-label="Filter dimension"
+                    onChange={(e) => set({ filterDim: e.target.value, filter: "" })}>
+                    {dimKeys.map((k) => <option key={k} value={k}>{dims[k].label}</option>)}
+                  </select>
+                )}
+                <select value={cfg.filter} onChange={(e) => set({ filter: e.target.value })} aria-label={dims[fKey]?.label || "Filter"}>
+                  <option value="">All</option>
+                  {catOptions.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </span>
+            </label>
+          )}
+          {dimKeys.length > 0 && (
+            <label className="exp-ctl">
+              <span className="mono">NEST BY</span>
+              <select value={cfg.nest || ""} onChange={(e) => set({ nest: e.target.value })}
+                aria-label="Nest by dimension" title="Split every bucket by a second dimension — stacked bars, one line per group, or donut slices">
+                <option value="">None</option>
+                {dimKeys.map((k) => <option key={k} value={k}>{dims[k].label}</option>)}
               </select>
             </label>
           )}
@@ -327,7 +471,9 @@ export function ChartExplorer({ cfg: initial, isNew, onSave, onDelete, onClose, 
 
         <div className="exp-stats mono">
           <span><b>{fmtVal(data.total, data.money, sym)}</b> total</span>
-          <span><b>{fmtVal(avg, data.money, sym)}</b> avg per active bucket</span>
+          {data.dateless
+            ? <span><b>{data.slices?.length || 0}</b> groups by {data.catLabel?.toLowerCase() || "group"}</span>
+            : <span><b>{fmtVal(avg, data.money, sym)}</b> avg per active bucket</span>}
           {peakIdx >= 0 && data.values[peakIdx] > 0 && (
             <span>peak <b>{fmtVal(data.values[peakIdx], data.money, sym)}</b> · {data.tips?.[peakIdx] ?? data.labels[peakIdx]}</span>
           )}
@@ -336,7 +482,9 @@ export function ChartExplorer({ cfg: initial, isNew, onSave, onDelete, onClose, 
         <LabPlot cfg={cfg} data={data} height={editing ? 280 : 420} big sym={sym} />
 
         {!editing && (
-          <div className="chart-note"><b>How to read:</b> {src.label.toLowerCase()} bucketed over your chosen range — hover any {cfg.type === "donut" ? "slice" : "bar or point"} for the exact value. Hit ✎ Edit to change the source, shape, range or filter.</div>
+          <div className="chart-note"><b>How to read:</b> {src.dateless
+            ? `${src.label.toLowerCase()} broken down by ${data.catLabel?.toLowerCase() || "group"} — hover any slice for the exact count.`
+            : `${src.label.toLowerCase()} bucketed over your chosen range — hover any ${cfg.type === "donut" ? "slice" : "bar or point"} for the exact value${cfg.nest ? "; colours split each bucket by " + (dims[cfg.nest]?.label || "").toLowerCase() : ""}.`} Hit ✎ Edit to change the source, shape, range, filter or nesting.</div>
         )}
 
         {editing && cfg.type !== "donut" && (
