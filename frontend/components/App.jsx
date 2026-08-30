@@ -2323,6 +2323,12 @@ export default function App() {
               : <div className="empty">{dateFilter || q || (view === "doc" && docFilter !== "All")
                   ? <>{dateFilter ? <>Nothing added on <b>{fmtStamp(dateFilter)}</b></> : (view === "doc" && docFilter !== "All") ? <>No <b>{docFilter}</b> documents yet</> : "Nothing matching your filter"} — <button className="av-link" onClick={() => { setDateFilter(""); setQ(""); setDocFilter("All"); }}>clear filters</button>.</>
                   : <>Nothing here yet. Tap <b>+ Add item</b>, paste a link for instant capture, or drop a file straight into the form.</>}</div>}
+
+            {/* the user's own charts round out every content section */}
+            {isContentView(view) && (
+              <YourCharts rev={chartsRev} sym={pulse?.ins?.money?.sym || "$"}
+                onExplore={(cfg) => setExplore({ cfg, isNew: false })} />
+            )}
           </>
         )}
       </main>
