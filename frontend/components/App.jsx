@@ -1777,9 +1777,9 @@ export default function App() {
                   </div>
 
                   <div className="charts-duo">
-                    <div className="card"><h3>Where things live</h3><Zoom title="Where things live" sub="Share of items by section."
+                    <div className="card"><h3>Where things live</h3><Zoom title="Where things live" sub={`Share of items saved ${RANGE_WORD[range]}.`}
                       go={{ label: "Content", fn: () => goView("all") }}
-                      note={<><b>How to read:</b> each slice is one section of your vault; the number in the middle is everything you&rsquo;ve saved. A slice growing fast shows where your attention is going.</>}><Donut items={items} /></Zoom></div>
+                      note={<><b>How to read:</b> each slice is one section; the number in the middle is everything saved {RANGE_WORD[range]}. It follows the Daily/Weekly/Monthly/Yearly tab above.</>}><Donut items={items.filter((i) => inRange(i.date))} /></Zoom></div>
                     <div className="card">
                       {/* no amount up here — the TOTAL block below is the one number */}
                       <div className="wstrip-head">
@@ -1819,24 +1819,24 @@ export default function App() {
                   <div className="charts-row2">
                     <div className="card">
                       <h3>Your vault, compounding</h3>
-                      <div className="m" style={{ color: "var(--ink-soft)", marginBottom: 8 }}>Everything you&rsquo;ve saved, accumulating by type.</div>
-                      <Zoom title="Your vault, compounding" sub="Everything saved, accumulating by type."
+                      <div className="m" style={{ color: "var(--ink-soft)", marginBottom: 8 }}>Everything you&rsquo;ve saved, accumulating by type · {({ day: "last 14 days", week: "last 10 weeks", month: "last 6 months", year: "last 12 months" })[range]}.</div>
+                      <Zoom title="Your vault, compounding" sub={`Everything saved, accumulating by type · ${{ day: "last 14 days", week: "last 10 weeks", month: "last 6 months", year: "last 12 months" }[range]}.`}
                         go={{ label: "Content", fn: () => goView("all") }}
-                        note={<><b>How to read:</b> each coloured band is one type — notes, videos, library, documents — stacked so the top edge is your whole vault. Hover a band for its count in any month; the legend shows where each stands today.</>}><VaultGrowth items={items} /></Zoom>
+                        note={<><b>How to read:</b> each coloured band is one type — notes, videos, library, documents — stacked so the top edge is your whole vault. Hover a band for its count in any bucket; the window follows the Daily/Weekly/Monthly/Yearly tab.</>}><VaultGrowth items={items} range={range} /></Zoom>
                     </div>
                     <div className="card">
                       <h3>Task rhythm</h3>
-                      <div className="m" style={{ color: "var(--ink-soft)", marginBottom: 8 }}>Tasks finished per day — streaks glow.</div>
-                      <Zoom title="Task rhythm" sub="Tasks finished per day — streaks glow."
+                      <div className="m" style={{ color: "var(--ink-soft)", marginBottom: 8 }}>Tasks finished · {({ day: "last 14 days", week: "last 10 weeks", month: "last 6 months, by week", year: "last 12 months, by week" })[range]} — streaks glow.</div>
+                      <Zoom title="Task rhythm" sub={`Tasks finished per day · ${{ day: "last 14 days", week: "last 10 weeks", month: "last 6 months", year: "last 12 months" }[range]} — streaks glow.`}
                         go={{ label: "Tasks", fn: () => goView("todos") }}
-                        note={<><b>How to read:</b> one bar per day, taller = more tasks finished. Consecutive active days glow as a streak — protect it.</>}><TaskRhythm doneDates={pulse?.doneDates || []} /></Zoom>
+                        note={<><b>How to read:</b> one bar per day (per week on the Monthly and Yearly tabs), taller = more tasks finished; the window follows the range tab above. Consecutive active days glow as a streak — protect it.</>}><TaskRhythm doneDates={pulse?.doneDates || []} range={range} /></Zoom>
                     </div>
                     <div className="card">
                       <h3>How things arrive</h3>
-                      <div className="m" style={{ color: "var(--ink-soft)", marginBottom: 8 }}>Your capture mix — typed, pasted, dropped, imported.</div>
-                      <Zoom title="How things arrive" sub="Your capture mix — typed, pasted, dropped, imported."
+                      <div className="m" style={{ color: "var(--ink-soft)", marginBottom: 8 }}>Your capture mix {RANGE_WORD[range]} — typed, pasted, dropped, imported.</div>
+                      <Zoom title="How things arrive" sub={`Your capture mix ${RANGE_WORD[range]} — typed, pasted, dropped, imported.`}
                         go={{ label: "Content", fn: () => goView("all") }}
-                        note={<><b>How to read:</b> each bar counts how items entered Vault. Lots of &ldquo;pasted&rdquo; means you collect from elsewhere; &ldquo;typed&rdquo; means original notes.</>}><CaptureSources items={items} importedCount={pulse?.importedCount || 0} /></Zoom>
+                        note={<><b>How to read:</b> each bar counts how items entered Vault {RANGE_WORD[range]} — it follows the range tab above. Lots of &ldquo;pasted&rdquo; means you collect from elsewhere; &ldquo;typed&rdquo; means original notes.</>}><CaptureSources items={items.filter((i) => inRange(i.date))} importedCount={pulse?.importedCount || 0} /></Zoom>
                     </div>
                   </div>
 

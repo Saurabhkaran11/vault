@@ -387,21 +387,36 @@ export function TopMerchants({ expenses, fmt }) {
 
 /* ---------- Vault growth: the collection compounding — cumulative items by
  * type, monthly, since the vault began (capped at 12 months of x-axis). */
-export function VaultGrowth({ items }) {
+export function VaultGrowth({ items, range = "month" }) {
   const { ref, tip, show, hide } = useChartTip();
   const TYPES = ["note", "video", "book", "doc"];
+  /* buckets follow the dashboard's Daily/Weekly/Monthly/Yearly tab */
   const { months, layers, totals } = useMemo(() => {
     const now = new Date();
-    const n = 6;
-    const months = Array.from({ length: n }, (_, i) => {
-      const d = new Date(now.getFullYear(), now.getMonth() - (n - 1 - i), 1);
-      return { ym: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`, label: d.toLocaleDateString(undefined, { month: "short" }) };
-    });
-    const layers = TYPES.map((t) => months.map(({ ym }) =>
-      items.filter((it) => it.type === t && it.date && it.date.slice(0, 7) <= ym).length));
-    const totals = months.map((_, i) => layers.reduce((a, l) => a + l[i], 0));
-    return { months, layers, totals };
-  }, [items]);
+    const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    let buckets;
+    if (range === "day") {
+      buckets = Array.from({ length: 14 }, (_, i) => {
+        const d = new Date(now); d.setDate(d.getDate() - (13 - i));
+        return { end: iso(d), label: d.toLocaleDateString(undefined, { day: "numeric" }) };
+      });
+    } else if (range === "week") {
+      buckets = Array.from({ length: 10 }, (_, i) => {
+        const d = new Date(now); d.setDate(d.getDate() - (9 - i) * 7);
+        return { end: iso(d), label: `${d.getDate()}/${d.getMonth() + 1}` };
+      });
+    } else {
+      const n = range === "year" ? 12 : 6;
+      buckets = Array.from({ length: n }, (_, i) => {
+        const d = new Date(now.getFullYear(), now.getMonth() - (n - 1 - i) + 1, 0);
+        return { end: iso(d), label: d.toLocaleDateString(undefined, { month: "short" }) };
+      });
+    }
+    const layers = TYPES.map((t) => buckets.map(({ end }) =>
+      items.filter((it) => it.type === t && it.date && it.date <= end).length));
+    const totals = buckets.map((_, i) => layers.reduce((a, l) => a + l[i], 0));
+    return { months: buckets, layers, totals };
+  }, [items, range]);
 
   const W = 560, H = 210, pad = 40;
   const max = Math.max(...totals, 4) * 1.12;
@@ -434,7 +449,7 @@ export function VaultGrowth({ items }) {
               onMouseMove={(e) => { const i = monthAt(e); show(e, `${SECTIONS[p.type].label} · by ${months[i].label}: ${fmtK(layers[li][i])} of ${fmtK(totals[i])}`); }} />
           ))}
           {months.map((m, i) => (
-            <text key={m.ym} x={X(i) - 10} y={H - 9} fontFamily="IBM Plex Mono" fontSize="9.5" fill="var(--ink-soft)"
+            <text key={m.end} x={X(i) - 10} y={H - 9} fontFamily="IBM Plex Mono" fontSize="9.5" fill="var(--ink-soft)"
               style={{ pointerEvents: "none" }}>{m.label}</text>
           ))}
           <text x={W - 90} y={Y(totals[last]) - 10} fontFamily="Public Sans" fontSize="13" fontWeight="600" fill="var(--ink)"
@@ -460,24 +475,36 @@ export function VaultGrowth({ items }) {
 /* ---------- Task rhythm: done-per-day for ten weeks with the live streak.
  * Streaks are the cheapest daily-return mechanic there is — and gaps stay
  * honest, which is what makes the streak worth protecting. */
-export function TaskRhythm({ doneDates }) {
+export function TaskRhythm({ doneDates, range = "week" }) {
   const { ref, tip, show, hide } = useChartTip();
-  const { counts, streak } = useMemo(() => {
-    const days = 70;
+  const { counts, streak, weekly, windowLabel } = useMemo(() => {
+    /* window follows the dashboard's range tab; long windows bucket by week
+       so bars stay visible (364 one-day bars would be sub-pixel) */
+    const days = { day: 14, week: 70, month: 182, year: 364 }[range] || 70;
     const now = new Date();
-    const counts = Array.from({ length: days }, (_, i) => {
+    const daily = Array.from({ length: days }, (_, i) => {
       const d = new Date(now); d.setDate(d.getDate() - (days - 1 - i));
       const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
       return { iso, label: d.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" }), n: doneDates.filter((x) => x === iso).length };
     });
     let streak = 0;
     for (let i = days - 1; i >= 0; i--) {
-      if (counts[i].n > 0) streak++;
+      if (daily[i].n > 0) streak++;
       else if (i === days - 1) continue;   // today can still be zero without breaking it
       else break;
     }
-    return { counts, streak };
-  }, [doneDates]);
+    const weekly = days > 100;
+    let counts = daily;
+    if (weekly) {
+      counts = [];
+      for (let s = 0; s < days; s += 7) {
+        const grp = daily.slice(s, s + 7);
+        counts.push({ iso: grp[0].iso, label: `week of ${grp[0].label}`, n: grp.reduce((a, c) => a + c.n, 0) });
+      }
+    }
+    const windowLabel = { day: "14 days ago", week: "10 weeks ago", month: "6 months ago", year: "a year ago" }[range] || "10 weeks ago";
+    return { counts, streak, weekly, windowLabel };
+  }, [doneDates, range]);
 
   const W = 560, H = 170, pad = 8;
   const max = Math.max(...counts.map((c) => c.n), 3);
@@ -488,9 +515,9 @@ export function TaskRhythm({ doneDates }) {
         <line x1={pad} y1={H - 24} x2={W - pad} y2={H - 24} stroke="var(--line)" />
         {counts.map((c, i) => {
           const h = (c.n / max) * (H - 62);
-          const inStreak = streak > 0 && i >= counts.length - streak;
+          const inStreak = !weekly && streak > 0 && i >= counts.length - streak;
           return (
-            <rect key={c.iso} x={pad + i * bw + 0.8} y={H - 24 - Math.max(h, 2.5)} width={bw - 1.6} height={Math.max(h, 2.5)} rx="1.5"
+            <rect key={c.iso} x={pad + i * bw + 0.8} y={H - 24 - Math.max(h, 2.5)} width={Math.max(bw - 1.6, 1)} height={Math.max(h, 2.5)} rx="1.5"
               fill={inStreak ? "var(--stamp)" : "var(--chart)"} opacity={c.n ? 1 : 0.16}
               onMouseMove={(e) => show(e, `${c.label} · ${c.n} done`)} />
           );
@@ -498,7 +525,7 @@ export function TaskRhythm({ doneDates }) {
         {streak > 1 && (
           <text x={W - 122} y={20} fontFamily="IBM Plex Mono" fontSize="12.5" fontWeight="600" fill="var(--stamp)">{streak}-day streak 🔥</text>
         )}
-        <text x={pad} y={H - 8} fontFamily="IBM Plex Mono" fontSize="9.5" fill="var(--ink-soft)">10 weeks ago</text>
+        <text x={pad} y={H - 8} fontFamily="IBM Plex Mono" fontSize="9.5" fill="var(--ink-soft)">{windowLabel}</text>
         <text x={W - 46} y={H - 8} fontFamily="IBM Plex Mono" fontSize="9.5" fill="var(--ink-soft)">today</text>
       </svg>
       <ChartTip tip={tip} />
