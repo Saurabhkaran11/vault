@@ -1874,7 +1874,7 @@ export default function App() {
 
                   <YourCharts rev={chartsRev} sym={sym}
                     onExplore={(cfg) => setExplore({ cfg, isNew: false })}
-                    onNew={() => setExplore({ cfg: newChartCfg(), isNew: true })} />
+                    />
                 </>
               );
             })()}

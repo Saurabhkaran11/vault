@@ -191,24 +191,19 @@ export function LabPlot({ cfg, data, height = 150, big = false, sym = "$" }) {
 }
 
 /* ---------- the dashboard section: the user's own charts */
-export function YourCharts({ rev, onExplore, onNew, sym = "$" }) {
+export function YourCharts({ rev, onExplore, sym = "$" }) {
   const [stores, setStores] = useState(null);
   useEffect(() => { setStores(readStores()); }, [rev]);
   const charts = useMemo(() => (stores ? loadCharts() : []), [stores, rev]);
   if (!stores) return null;
+  /* one Add-chart entry point lives in the Insights header up top — with no
+     charts yet this section simply stays out of the way */
+  if (charts.length === 0) return null;
 
   return (
     <>
-      <div className="sec-label mono yc-head">
-        Your charts
-        <button className="kbtn yc-add" onClick={onNew} title="Build a chart from any feature's data">＋ Add chart</button>
-      </div>
-      {charts.length === 0 ? (
-        <button className="card yc-empty" onClick={onNew}>
-          <b>＋ Build your own chart</b>
-          <span>Any feature, any range — spending by month, tasks by week, items by section. Click any chart to explore and customize it.</span>
-        </button>
-      ) : (
+      <div className="sec-label mono yc-head">Your charts</div>
+      {(
         <div className="yc-grid">
           {charts.map((cfg) => {
             const data = chartData(cfg, stores);
