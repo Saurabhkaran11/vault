@@ -1800,6 +1800,9 @@ button:disabled{opacity:.5; cursor:not-allowed}
 .exp-head{display:flex; align-items:center; gap:12px; margin-bottom:14px}
 .exp-title{flex:1; min-width:0; border:none; background:transparent; font-family:'Fraunces',Georgia,serif; font-size:22px; font-weight:650; color:var(--ink); border-bottom:1.5px dashed var(--line); padding:4px 2px}
 .exp-title:focus{outline:none; border-bottom-color:var(--moss)}
+.exp-vhead{flex:1; min-width:0}
+.exp-vtitle{font-family:'Fraunces',Georgia,serif; font-size:22px; font-weight:650; margin:0; color:var(--ink)}
+.exp-vsub{color:var(--ink-soft); margin-top:2px}
 .exp-controls{display:flex; flex-wrap:wrap; gap:14px 22px; margin-bottom:12px; align-items:flex-end}
 .exp-ctl{display:flex; flex-direction:column; gap:5px}
 .exp-ctl > .mono{font-size:9.5px; letter-spacing:1.5px; color:var(--ink-soft)}
@@ -1871,10 +1874,28 @@ button:disabled{opacity:.5; cursor:not-allowed}
 
 /* ---------- universal chart maximize */
 .zoomable{position:relative; display:flex; flex-direction:column; flex:1; min-width:0; min-height:0}
+/* inside a height-capped dialog (.pal is a column flexbox with max-height),
+   a squeezable .zoomable lets its fixed-height svg overflow onto whatever
+   sits below — never shrink there, let the dialog scroll instead */
+.pal .zoomable{flex:0 0 auto; min-height:auto}
 .zoom-btn{position:absolute; top:-2px; right:0; z-index:5; background:var(--field); border:1px solid var(--line); border-radius:7px; color:var(--ink-soft); font-size:13px; width:26px; height:24px; cursor:pointer; opacity:0; transition:opacity .12s}
 .zoomable:hover .zoom-btn{opacity:1}
 .zoom-btn:hover{color:var(--moss); border-color:var(--moss)}
 .pal.zoomdlg{max-width:1100px; width:min(94vw, 1100px); max-height:84vh; align-self:flex-start; overflow-y:auto; padding:22px 26px}
+/* growth-chart legend: one chip per stacked layer with its live count */
+.growth-legend{display:flex; flex-wrap:wrap; gap:6px 16px; margin-top:8px; font-size:11.5px; color:var(--ink); min-width:0}
+.growth-legend .gl-item{display:inline-flex; align-items:center; gap:6px; white-space:nowrap}
+.growth-legend i{width:10px; height:10px; border-radius:3px; flex-shrink:0}
+.growth-legend b{font-weight:600}
+.zoom-body .growth-legend{font-size:13px}
+
+/* ask-before-navigating card (chart → its feature section) */
+.pal.askgo{max-width:430px; width:min(92vw,430px); padding:20px 22px}
+.askgo-title{font-family:'Fraunces',Georgia,serif; font-size:19px; font-weight:650; margin:0 0 6px}
+.askgo-sub{color:var(--ink-soft); margin:0; line-height:1.55}
+.askgo-foot{display:flex; gap:10px; justify-content:flex-end; margin-top:16px}
+.zoomable.zoom-linked{cursor:pointer}
+
 /* how-to-read caption under every chart: fixed 11.5px, wraps inside the
    card (min-width:0 + break-word — it can never widen or escape the box) */
 .chart-note{margin-top:10px; padding-top:8px; border-top:1px dashed var(--line); font-size:11.5px; line-height:1.55; color:var(--ink-soft); min-width:0; max-width:100%; overflow-wrap:break-word}

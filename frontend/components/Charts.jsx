@@ -416,27 +416,44 @@ export function VaultGrowth({ items }) {
     return { points: `${up} ${down}`, type: TYPES[li] };
   });
 
+  /* which month a pointer x lands on, in a CSS-stretched viewBox svg */
+  const monthAt = (e) => {
+    const svg = e.currentTarget.ownerSVGElement || e.currentTarget;
+    const vx = (e.nativeEvent.offsetX / (svg.clientWidth || W)) * W;
+    return Math.max(0, Math.min(months.length - 1, Math.round((vx - pad) / ((W - pad - 14) / (months.length - 1)))));
+  };
+  const last = months.length - 1;
+
   return (
-    <div className="chart-wrap" ref={ref} onMouseLeave={hide}>
-      <svg className="growth-svg" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img" aria-label="Items saved over time by type">
-        <line x1={pad} y1={H - 26} x2={W - 8} y2={H - 26} stroke="var(--line)" />
-        {polys.map((p, i) => (
-          <polygon key={p.type} points={p.points} fill={SECTIONS[p.type].color} opacity={0.9 - i * 0.07} />
+    <>
+      <div className="chart-wrap" ref={ref} onMouseLeave={hide}>
+        <svg className="growth-svg" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img" aria-label="Items saved over time by type">
+          <line x1={pad} y1={H - 26} x2={W - 8} y2={H - 26} stroke="var(--line)" />
+          {polys.map((p, li) => (
+            <polygon key={p.type} points={p.points} fill={SECTIONS[p.type].color} opacity={0.9 - li * 0.07}
+              onMouseMove={(e) => { const i = monthAt(e); show(e, `${SECTIONS[p.type].label} · by ${months[i].label}: ${fmtK(layers[li][i])} of ${fmtK(totals[i])}`); }} />
+          ))}
+          {months.map((m, i) => (
+            <text key={m.ym} x={X(i) - 10} y={H - 9} fontFamily="IBM Plex Mono" fontSize="9.5" fill="var(--ink-soft)"
+              style={{ pointerEvents: "none" }}>{m.label}</text>
+          ))}
+          <text x={W - 90} y={Y(totals[last]) - 10} fontFamily="Public Sans" fontSize="13" fontWeight="600" fill="var(--ink)"
+            style={{ pointerEvents: "none" }}>
+            {fmtK(totals[last])} items
+          </text>
+        </svg>
+        <ChartTip tip={tip} />
+      </div>
+      {/* every layer ("pyramid") named, with its live count */}
+      <div className="growth-legend">
+        {TYPES.map((t, li) => (
+          <span key={t} className="gl-item" title={`${SECTIONS[t].label} — ${layers[li][last]} saved so far`}>
+            <i style={{ background: SECTIONS[t].color }} />
+            {SECTIONS[t].label} <b className="mono">{layers[li][last]}</b>
+          </span>
         ))}
-        {months.map((m, i) => (
-          <rect key={m.ym} x={X(i) - (W - pad) / months.length / 2} y="0" width={(W - pad) / months.length} height={H}
-            fill="transparent"
-            onMouseMove={(e) => show(e, `${m.label}: ${fmtK(totals[i])} item${totals[i] === 1 ? "" : "s"} total`)} />
-        ))}
-        {months.map((m, i) => (
-          <text key={m.ym} x={X(i) - 10} y={H - 9} fontFamily="IBM Plex Mono" fontSize="9.5" fill="var(--ink-soft)">{m.label}</text>
-        ))}
-        <text x={W - 90} y={Y(totals[months.length - 1]) - 10} fontFamily="Public Sans" fontSize="13" fontWeight="600" fill="var(--ink)">
-          {fmtK(totals[months.length - 1])} items
-        </text>
-      </svg>
-      <ChartTip tip={tip} />
-    </div>
+      </div>
+    </>
   );
 }
 
@@ -901,23 +918,41 @@ export function BudgetBullets({ byCat, spentByCat, fmt }) {
  * popup that re-renders the same chart at reading size (the zoom dialog's
  * CSS raises every chart class's height; width-responsive charts and the
  * measured ones fill it naturally). */
-export function Zoom({ title, sub, children, large, note }) {
+export function Zoom({ title, sub, children, large, note, go }) {
   const [open, setOpen] = React.useState(false);
+  const [ask, setAsk] = React.useState(false);
   React.useEffect(() => {
-    if (!open) return;
-    const onKey = (e) => { if (e.key === "Escape") { e.stopPropagation(); setOpen(false); } };
+    if (!open && !ask) return;
+    const onKey = (e) => { if (e.key === "Escape") { e.stopPropagation(); setOpen(false); setAsk(false); } };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [open]);
+  }, [open, ask]);
   return (
     <>
-      <div className="zoomable">
+      <div className={go ? "zoomable zoom-linked" : "zoomable"}
+        onClick={go ? () => setAsk(true) : undefined}
+        role={go ? "button" : undefined} tabIndex={go ? 0 : undefined}
+        onKeyDown={go ? (e) => { if (e.key === "Enter") setAsk(true); } : undefined}
+        title={go ? `Powered by ${go.label} — click to open that section` : undefined}>
         <button type="button" className="zoom-btn" aria-label={`Maximize ${title}`}
           title="Maximize — see this chart in depth"
           onClick={(e) => { e.stopPropagation(); setOpen(true); }}>⤢</button>
         {children}
         {note && <div className="chart-note">{note}</div>}
       </div>
+      {ask && go && createPortal(
+        <div className="pal-overlay centered" onClick={() => setAsk(false)} role="dialog" aria-label={`Open ${go.label}?`}>
+          <div className="pal askgo" onClick={(e) => e.stopPropagation()}>
+            <h3 className="askgo-title">Open {go.label}?</h3>
+            <p className="m askgo-sub">&ldquo;{title}&rdquo; is powered by the {go.label} feature — you can jump there for the full picture, or stay right here.</p>
+            <div className="askgo-foot">
+              <button className="btn ghost sm" onClick={() => setAsk(false)}>Stay here</button>
+              <button className="btn sm" onClick={() => { setAsk(false); go.fn(); }}>Open {go.label} →</button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
       {open && createPortal(
         /* portal to <body>: a glass card's backdrop-filter makes it the
            containing block for position:fixed, which would trap the overlay

@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { SECTIONS, daysAgo, fmtK } from "@/lib/seed";
-import { rangeSeries, Zoom } from "./Charts";
+import { rangeSeries } from "./Charts";
 import { safeSet } from "@/lib/safeStorage";
 import { uid } from "@/lib/id";
 
@@ -233,15 +233,33 @@ export function YourCharts({ rev, onExplore, onNew, sym = "$" }) {
 /* ---------- full-screen explorer: every config choice is a live control */
 export function ChartExplorer({ cfg: initial, isNew, onSave, onDelete, onClose, sym = "$" }) {
   const [cfg, setCfg] = useState(initial);
+  /* charts open as a clean VIEW; the builder controls only appear on ✎ Edit.
+     A brand-new chart starts in edit (there is nothing to view yet). */
+  const [editing, setEditing] = useState(!!isNew);
+  const [fresh, setFresh] = useState(!!isNew);
+  const [saved, setSaved] = useState(initial);
   const [stores] = useState(readStores);
   const data = useMemo(() => chartData(cfg, stores), [cfg, stores]);
   const src = SOURCES[cfg.source];
   const set = (patch) => setCfg((c) => ({ ...c, ...patch }));
 
+  const cancelEdit = () => {
+    if (fresh) { onClose(); return; }
+    setCfg(saved); setEditing(false);
+  };
+  const saveEdit = () => {
+    onSave(cfg); setSaved(cfg); setFresh(false); setEditing(false);
+  };
+
+  const editingRef = React.useRef(null);
+  editingRef.current = { editing, cancelEdit };
   useEffect(() => {
-    /* when the maximized chart view is open, Escape should close only it —
-       our capture listener registered first, so check the DOM, not the event */
-    const onKey = (e) => { if (e.key === "Escape" && !document.querySelector(".zoomdlg")) onClose(); };
+    /* Escape unwinds one layer: edit mode falls back to view, view closes */
+    const onKey = (e) => {
+      if (e.key !== "Escape") return;
+      const cur = editingRef.current;
+      if (cur.editing) { e.stopPropagation(); cur.cancelEdit(); } else onClose();
+    };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
   }, [onClose]);
@@ -260,11 +278,23 @@ export function ChartExplorer({ cfg: initial, isNew, onSave, onDelete, onClose, 
     <div className="pal-overlay centered" onClick={onClose} role="dialog" aria-label="Chart explorer">
       <div className="pal explorer" onClick={(e) => e.stopPropagation()}>
         <div className="exp-head">
-          <input className="exp-title" value={cfg.title} placeholder={src.label}
-            aria-label="Chart title" onChange={(e) => set({ title: e.target.value })} />
+          {editing ? (
+            <input className="exp-title" value={cfg.title} placeholder={src.label}
+              aria-label="Chart title" onChange={(e) => set({ title: e.target.value })} />
+          ) : (
+            <div className="exp-vhead">
+              <h3 className="exp-vtitle">{cfg.title || src.label}</h3>
+              <div className="exp-vsub m">{src.label} · {RANGES.find(([k]) => k === cfg.range)?.[1]}{cfg.filter ? ` · ${cfg.filter}` : ""}</div>
+            </div>
+          )}
+          {!editing && (
+            <button className="kbtn" onClick={() => setEditing(true)}
+              title="Change this chart's source, shape, range or filter">✎ Edit</button>
+          )}
           <button className="kbtn" onClick={onClose} aria-label="Close">✕</button>
         </div>
 
+        {editing && (
         <div className="exp-controls">
           <label className="exp-ctl">
             <span className="mono">SOURCE</span>
@@ -298,6 +328,7 @@ export function ChartExplorer({ cfg: initial, isNew, onSave, onDelete, onClose, 
             </label>
           )}
         </div>
+        )}
 
         <div className="exp-stats mono">
           <span><b>{fmtVal(data.total, data.money, sym)}</b> total</span>
@@ -307,14 +338,13 @@ export function ChartExplorer({ cfg: initial, isNew, onSave, onDelete, onClose, 
           )}
         </div>
 
-        <Zoom title={cfg.title || src.label}
-          sub={`${src.label} · maximized view`}
-          note={<><b>How to read:</b> {src.label.toLowerCase()} bucketed over your chosen range — hover any {cfg.type === "donut" ? "slice" : "bar or point"} for the exact value. Every control above redraws it live, and the table underneath lists each bucket&rsquo;s number.</>}
-          large={<LabPlot cfg={cfg} data={data} height={440} big sym={sym} />}>
-          <LabPlot cfg={cfg} data={data} height={300} big sym={sym} />
-        </Zoom>
+        <LabPlot cfg={cfg} data={data} height={editing ? 280 : 420} big sym={sym} />
 
-        {cfg.type !== "donut" && (
+        {!editing && (
+          <div className="chart-note"><b>How to read:</b> {src.label.toLowerCase()} bucketed over your chosen range — hover any {cfg.type === "donut" ? "slice" : "bar or point"} for the exact value. Hit ✎ Edit to change the source, shape, range or filter.</div>
+        )}
+
+        {editing && cfg.type !== "donut" && (
           <div className="exp-table">
             {data.values.map((v, i) => (
               <div key={i} className="exp-row" style={{ opacity: v ? 1 : 0.45 }}>
@@ -326,12 +356,14 @@ export function ChartExplorer({ cfg: initial, isNew, onSave, onDelete, onClose, 
           </div>
         )}
 
+        {editing && (
         <div className="exp-foot">
-          {!isNew && <button className="kbtn kdel" onClick={() => onDelete(cfg.id)}>Delete chart</button>}
+          {!fresh && <button className="kbtn kdel" onClick={() => onDelete(cfg.id)}>Delete chart</button>}
           <span style={{ flex: 1 }} />
-          <button className="btn ghost sm" onClick={onClose}>Cancel</button>
-          <button className="btn sm" onClick={() => onSave(cfg)}>{isNew ? "Add to my charts" : "Save changes"}</button>
+          <button className="btn ghost sm" onClick={cancelEdit}>Cancel</button>
+          <button className="btn sm" onClick={saveEdit}>{fresh ? "Add to my charts" : "Save changes"}</button>
         </div>
+        )}
       </div>
     </div>,
     document.body

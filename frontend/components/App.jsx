@@ -1082,7 +1082,7 @@ export default function App() {
       {explore && (
         <ChartExplorer cfg={explore.cfg} isNew={explore.isNew} sym={pulse?.ins?.money?.sym || "$"}
           onClose={() => setExplore(null)}
-          onSave={(cfg) => { upsertChart(cfg); setChartsRev((r) => r + 1); setExplore(null); }}
+          onSave={(cfg) => { upsertChart(cfg); setChartsRev((r) => r + 1); }}
           onDelete={(id) => { deleteChart(id); setChartsRev((r) => r + 1); setExplore(null); }} />
       )}
 
@@ -1778,6 +1778,7 @@ export default function App() {
 
                   <div className="charts-duo">
                     <div className="card"><h3>Where things live</h3><Zoom title="Where things live" sub="Share of items by section."
+                      go={{ label: "Content", fn: () => goView("all") }}
                       note={<><b>How to read:</b> each slice is one section of your vault; the number in the middle is everything you&rsquo;ve saved. A slice growing fast shows where your attention is going.</>}><Donut items={items} /></Zoom></div>
                     <div className="card">
                       {/* no amount up here — the TOTAL block below is the one number */}
@@ -1786,7 +1787,9 @@ export default function App() {
                         <span className="cardsub mono">{RANGE_WORD[range]}</span>
                       </div>
                       {topCats.length ? (
-                        <>
+                        <Zoom title="Where money goes" sub={`Biggest spending categories · ${RANGE_WORD[range]}.`}
+                          go={{ label: "Finance", fn: () => goView("finance") }}
+                          note={<><b>How to read:</b> your biggest spending categories for this range, largest first — the % is each one&rsquo;s share of the total below.</>}>
                           <div className="catbars catbars-fill">
                             {topCats.map((c) => {
                               const catMax = topCats[0].amt || 1;
@@ -1805,8 +1808,7 @@ export default function App() {
                             <span className="etc-label mono">TOTAL</span>
                             <span className="wtotal-amt">{sym}{Math.round(spentNow).toLocaleString()}</span>
                           </div>
-                          <div className="chart-note"><b>How to read:</b> your biggest spending categories for this range, largest first — the % is each one&rsquo;s share of the total below.</div>
-                        </>
+                        </Zoom>
                       ) : (
                         <div className="m" style={{ color: "var(--ink-soft)" }}>No expenses logged {RANGE_WORD[range]} — add one in Finance.</div>
                       )}
@@ -1819,18 +1821,21 @@ export default function App() {
                       <h3>Your vault, compounding</h3>
                       <div className="m" style={{ color: "var(--ink-soft)", marginBottom: 8 }}>Everything you&rsquo;ve saved, accumulating by type.</div>
                       <Zoom title="Your vault, compounding" sub="Everything saved, accumulating by type."
-                        note={<><b>How to read:</b> the line climbs by one each time you save something — a steeper slope means a faster capture pace. Flat stretches are quiet weeks.</>}><VaultGrowth items={items} /></Zoom>
+                        go={{ label: "Content", fn: () => goView("all") }}
+                        note={<><b>How to read:</b> each coloured band is one type — notes, videos, library, documents — stacked so the top edge is your whole vault. Hover a band for its count in any month; the legend shows where each stands today.</>}><VaultGrowth items={items} /></Zoom>
                     </div>
                     <div className="card">
                       <h3>Task rhythm</h3>
                       <div className="m" style={{ color: "var(--ink-soft)", marginBottom: 8 }}>Tasks finished per day — streaks glow.</div>
                       <Zoom title="Task rhythm" sub="Tasks finished per day — streaks glow."
+                        go={{ label: "Tasks", fn: () => goView("todos") }}
                         note={<><b>How to read:</b> one bar per day, taller = more tasks finished. Consecutive active days glow as a streak — protect it.</>}><TaskRhythm doneDates={pulse?.doneDates || []} /></Zoom>
                     </div>
                     <div className="card">
                       <h3>How things arrive</h3>
                       <div className="m" style={{ color: "var(--ink-soft)", marginBottom: 8 }}>Your capture mix — typed, pasted, dropped, imported.</div>
                       <Zoom title="How things arrive" sub="Your capture mix — typed, pasted, dropped, imported."
+                        go={{ label: "Content", fn: () => goView("all") }}
                         note={<><b>How to read:</b> each bar counts how items entered Vault. Lots of &ldquo;pasted&rdquo; means you collect from elsewhere; &ldquo;typed&rdquo; means original notes.</>}><CaptureSources items={items} importedCount={pulse?.importedCount || 0} /></Zoom>
                     </div>
                   </div>
