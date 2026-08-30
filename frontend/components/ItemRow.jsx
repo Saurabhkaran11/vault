@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { SECTIONS, STATUSES, fmtStamp, daysAgo, ytId } from "@/lib/seed";
+import { SECTIONS, fmtStamp, daysAgo, ytId } from "@/lib/seed";
 import { detectCloud } from "@/lib/cloud";
 import NoteBlocks from "./NoteBlocks";
 import { Ic } from "./Icons";
@@ -480,13 +480,6 @@ export default function ItemRow({ it, onTag, onUpdate, onRemove, allItems = [], 
                 finally { setRelBusy(false); }
               }}>≈ {relBusy ? "Finding…" : "Related"}</button>
           )}
-          {/* Documents are personal files to edit freely — no workflow status there */}
-          {onUpdate && it.type !== "doc" && (
-            <select className="status" value={it.status} aria-label="Status"
-              onChange={(e) => onUpdate({ ...it, status: e.target.value })}>
-              {STATUSES.map((st) => <option key={st}>{st}</option>)}
-            </select>
-          )}
           {it.type === "note" && onUpdate && (
             <select className="status" value={it.folder || ""} aria-label="Folder"
               onChange={(e) => pickFolder(e.target.value)} title="Move this note to a folder">
@@ -592,7 +585,7 @@ export default function ItemRow({ it, onTag, onUpdate, onRemove, allItems = [], 
               <span className="readlabel">Progress</span>
               <input type="range" min="0" max="100" step="1" value={it.progress || 0}
                 aria-label="Reading progress"
-                onChange={(e) => onUpdate({ ...it, progress: +e.target.value, status: +e.target.value >= 100 ? "Done" : +e.target.value > 0 ? "In progress" : it.status })} />
+                onChange={(e) => onUpdate({ ...it, progress: +e.target.value })} />
               <span className="readpct mono">{it.progress || 0}%</span>
               <button className="bexpand" style={{ marginTop: 0 }} onClick={() => setAliasEdit((v) => !v)}
                 title="Give this item a short display title">✎ Short title</button>

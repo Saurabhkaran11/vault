@@ -753,16 +753,15 @@ export default function App() {
     if (digestBusy) return;
     setDigestBusy(true); setDigest(null);
     const week = items.filter((i) => daysAgo(i.date) <= 7);
-    const stale = items.filter((i) => i.status === "Inbox").sort((a, b) => a.date.localeCompare(b.date)).slice(0, 6);
+    const stale = items.filter((i) => !i.deleted).sort((a, b) => a.date.localeCompare(b.date)).slice(0, 6);
     const stats =
       `Saved this week (${week.length}): ${week.map((i) => `${SECTIONS[i.type].label} — ${i.title}`).join("; ") || "nothing"}.\n` +
-      `In progress: ${items.filter((i) => i.status === "In progress").map((i) => i.title).join("; ") || "nothing"}.\n` +
-      `Oldest untouched Inbox items: ${stale.map((i) => `${i.title} (${daysAgo(i.date)} days)`).join("; ") || "none"}.\n` +
+      `Oldest saved items: ${stale.map((i) => `${i.title} (${daysAgo(i.date)} days)`).join("; ") || "none"}.\n` +
       `Projects: ${[...new Set(items.flatMap((i) => i.tags))].join(", ") || "none"}.`;
     try {
       setDigest(await askText(
         `Here is the current state of my personal knowledge vault:\n\n${stats}\n\nWrite my weekly digest.`,
-        { system: "You write a short weekly digest for a personal knowledge hub. At most 3 short paragraphs: what happened this week; what's rotting in the inbox and what to finish; one concrete suggestion for next week. Plain text, direct and encouraging, no headings or bullet lists." }
+        { system: "You write a short weekly digest for a personal knowledge hub. At most 3 short paragraphs: what happened this week; what's gathering dust and what to finish; one concrete suggestion for next week. Plain text, direct and encouraging, no headings or bullet lists." }
       ));
     } catch (e) {
       setDigest(`⚠ ${e.message}`);
@@ -798,7 +797,6 @@ export default function App() {
         pendingBills: (fin.bills || []).filter((b) => !b.paid).length,
         overdueBills: (fin.bills || []).filter((b) => !b.paid && daysAgo(b.due) > 0).length,
         pendingBillsTotal: (fin.bills || []).filter((b) => !b.paid).reduce((a, b) => a + (+b.amount || 0), 0),
-        inbox: items.filter((i) => i.status === "Inbox").length,
         doneDates: tasks.filter((t) => t.done && t.doneAt).map((t) => t.doneAt),
         expensesRaw: (fin.expenses || []).map((e) => ({ date: e.date, amt: +e.amount || 0, cat: e.cat || "Other" })),
         importedCount: (fin.expenses || []).filter((e) => e.pay).length,
@@ -1675,7 +1673,6 @@ export default function App() {
                 pulse.dueToday && { k: "dt", label: "Due today", n: pulse.dueToday, sub: "Open tasks →", tone: "amber", go: () => goView("todos") },
                 pulse.pendingBills && { k: "bill", label: "Unpaid bills", sub: pulse.overdueBills ? `${pulse.overdueBills} overdue · Finance →` : "Open Finance →", n: `${sym}${Math.round(pulse.pendingBillsTotal).toLocaleString()}`, tone: pulse.overdueBills ? "red" : "amber", go: () => goView("finance") },
                 cardsOpen && { k: "cards", label: "Cards in progress", n: cardsOpen, sub: "Open Boards →", tone: "neutral", go: () => goView("board") },
-                pulse.inbox && { k: "inbox", label: "Inbox to sort", n: pulse.inbox, sub: "Open Content →", tone: "neutral", go: () => goView("all") },
               ].filter(Boolean);
               /* one aggregate Reading ring, not one per book — a vault with
                  200 in-progress books still gets a single calm card */
