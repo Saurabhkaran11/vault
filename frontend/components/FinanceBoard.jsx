@@ -706,7 +706,7 @@ export default function FinanceBoard() {
       {smartMsg && <div className={`smartmsg ${smartMsg.ok ? "ok" : "err"}`}>{smartMsg.ok ? "✓" : "⚠"} {smartMsg.text}</div>}
 
       {/* Board | Analytics tabs + export */}
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14, flexWrap: "wrap" }}>
+      <div className="featbar">
         <div className="doctabs" role="tablist" aria-label="Finance view" style={{ display: "inline-flex" }}>
           <button className={tab === "board" ? "on" : ""} role="tab" aria-selected={tab === "board"}
             onClick={() => setTab("board")}>▥ Board</button>

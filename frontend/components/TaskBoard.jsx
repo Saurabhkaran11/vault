@@ -414,7 +414,7 @@ export default function TaskBoard() {
       </div>
 
       {/* time views + navigation */}
-      <div className="tmodebar">
+      <div className="tmodebar featbar">
         <div className="doctabs" role="tablist" aria-label="Task views">
           {[["list", "☰ List"], ["day", "Day"], ["week", "Week"], ["month", "▦ Month"], ["year", "Year"]].map(([m, l]) => (
             <button key={m} className={mode === m ? "on" : ""} role="tab" aria-selected={mode === m}

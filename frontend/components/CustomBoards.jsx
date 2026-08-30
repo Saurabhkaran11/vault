@@ -392,7 +392,7 @@ export default function CustomBoards({ itemsBoard }) {
         </div>
       )}
       {/* board tabs */}
-      <div className="btabs">
+      <div className="btabs featbar">
         <div className="doctabs" role="tablist" aria-label="Boards">
           {boards.map((b) => (
             <button key={b.id} className={active === b.id ? "on" : ""} role="tab" aria-selected={active === b.id}

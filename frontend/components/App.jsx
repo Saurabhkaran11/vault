@@ -1937,7 +1937,7 @@ export default function App() {
             <h2 className="display">Tags</h2>
             <Intro id="tags">Every project tag in your vault, with what it links together — click one to open the project.</Intro>
 
-            <div className="bar">
+            <div className="bar featbar">
               <input placeholder="＋ Create a tag — e.g. “side-project” (Enter)" aria-label="Create a tag"
                 onKeyDown={(e) => {
                   if (e.key !== "Enter") return;
@@ -2060,7 +2060,7 @@ export default function App() {
             {/* Type switcher — the four saved-item kinds, unified. "All" shows
                 everything mixed; each type shows its own view and extras. */}
             {isContentView(view) && (
-              <div className="doctabs ctype-tabs" role="tablist" aria-label="Content type">
+              <div className="doctabs ctype-tabs featbar" role="tablist" aria-label="Content type">
                 <button className={view === "all" ? "on" : ""} role="tab" aria-selected={view === "all"}
                   onClick={() => { setView("all"); setTag(null); setAdding(false); setPageId(null); setQ(""); }}>
                   All · {items.filter((i) => CONTENT_TYPES.includes(i.type)).length}
