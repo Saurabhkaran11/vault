@@ -1034,7 +1034,7 @@ export default function App() {
   };
 
   return (
-    <div className={`vault ${profile?.glass === false ? "" : "glass"}`}>
+    <div className={`vault ${profile?.glass === false ? "" : profile?.glass === "vivid" ? "glass vivid" : "glass"}`}>
       {storageWarn && (
         <div className={`storage-warn ${storageWarn}`} role="alert">
           {storageWarn === "full"
@@ -1167,10 +1167,10 @@ export default function App() {
                     })}
                   </div>
                   <button className="menu-item" aria-pressed={profile.glass !== false}
-                    title="Frosted card surfaces over a soft ambient wash"
-                    onClick={() => setProfile({ ...profile, glass: profile.glass === false ? true : false })}>
+                    title="Frosted card surfaces over a soft ambient wash — subtle, vivid, or off"
+                    onClick={() => setProfile({ ...profile, glass: profile.glass === false ? true : profile.glass === "vivid" ? false : "vivid" })}>
                     ❄ Glass surfaces
-                    <span className="menukey">{profile.glass === false ? "off" : "on"}</span>
+                    <span className="menukey">{profile.glass === false ? "off" : profile.glass === "vivid" ? "vivid" : "subtle"}</span>
                   </button>
 
                   <div className="conn-row" style={{ marginTop: 10 }}>
@@ -1600,41 +1600,46 @@ export default function App() {
 
         {view === "dash" && (
           <>
-            <div className="crumb">Overview · {fmtStamp(today())}</div>
-            <h2 className="display">
-              {profile.name && profile.name.trim() && profile.name.trim() !== "You"
-                ? `Good ${new Date().getHours() < 12 ? "morning" : new Date().getHours() < 18 ? "afternoon" : "evening"}, ${profile.name.trim().split(/\s+/)[0]}`
-                : "Your collection, at a glance"}
-            </h2>
-            <Intro id="dash">Search everything with <span className="kbd">Ctrl</span>+<span className="kbd">K</span> — here&rsquo;s just what matters today.</Intro>
+            {/* the landing moment: greeting in a glass hero slab, then a
+                sticky glass toolbar carrying search + ranges + the numbers */}
+            <div className="hero-band">
+              <div className="crumb">Overview · {fmtStamp(today())}</div>
+              <h2 className="display">
+                {profile.name && profile.name.trim() && profile.name.trim() !== "You"
+                  ? `Good ${new Date().getHours() < 12 ? "morning" : new Date().getHours() < 18 ? "afternoon" : "evening"}, ${profile.name.trim().split(/\s+/)[0]}`
+                  : "Your collection, at a glance"}
+              </h2>
+              <Intro id="dash">Search everything with <span className="kbd">Ctrl</span>+<span className="kbd">K</span> — here&rsquo;s just what matters today.</Intro>
+            </div>
 
-            <button className="dash-search" onClick={() => setPalette(true)}>
-              <span className="ds-ic" aria-hidden="true"><Ic name="search" size={16} /></span>
-              <span className="ds-ph">Search or ask your vault…</span>
-              <span className="ds-kbd kbd">Ctrl K</span>
-            </button>
-
-            {pulse?.ins && (
-              <div className="rangebar">
-                <div className="doctabs" role="tablist" aria-label="Time range">
-                  {RANGES.map(([k, label]) => (
-                    <button key={k} className={range === k ? "on" : ""} role="tab" aria-selected={range === k}
-                      onClick={() => setProfile((p) => ({ ...p, range: k }))}>{label}</button>
-                  ))}
-                </div>
-                {(() => {
-                  const done = pulse.doneDates.filter(inRange).length;
-                  const saved = items.filter((i) => inRange(i.date)).length;
-                  const spent = pulse.expensesRaw.filter((e) => inRange(e.date)).reduce((a, e) => a + e.amt, 0);
-                  const sym = pulse.ins.money.sym;
-                  return (
-                    <span className="rangeroll mono">
-                      {RANGE_WORD[range]}: <b>{fmtK(done)}</b> finished · <b>{fmtK(saved)}</b> saved · <b>{sym}{Math.round(spent).toLocaleString()}</b> spent
-                    </span>
-                  );
-                })()}
-              </div>
-            )}
+            <div className="glass-bar">
+              <button className="dash-search" onClick={() => setPalette(true)}>
+                <span className="ds-ic" aria-hidden="true"><Ic name="search" size={16} /></span>
+                <span className="ds-ph">Search or ask your vault…</span>
+                <span className="ds-kbd kbd">Ctrl K</span>
+              </button>
+              {pulse?.ins && (
+                <>
+                  <div className="doctabs" role="tablist" aria-label="Time range">
+                    {RANGES.map(([k, label]) => (
+                      <button key={k} className={range === k ? "on" : ""} role="tab" aria-selected={range === k}
+                        onClick={() => setProfile((p) => ({ ...p, range: k }))}>{label}</button>
+                    ))}
+                  </div>
+                  {(() => {
+                    const done = pulse.doneDates.filter(inRange).length;
+                    const saved = items.filter((i) => inRange(i.date)).length;
+                    const spent = pulse.expensesRaw.filter((e) => inRange(e.date)).reduce((a, e) => a + e.amt, 0);
+                    const sym = pulse.ins.money.sym;
+                    return (
+                      <span className="rangeroll mono">
+                        {RANGE_WORD[range]}: <b>{fmtK(done)}</b> finished · <b>{fmtK(saved)}</b> saved · <b>{sym}{Math.round(spent).toLocaleString()}</b> spent
+                      </span>
+                    );
+                  })()}
+                </>
+              )}
+            </div>
 
             {ob && !ob.dismissed && ob.choice && (() => {
               let boardsOwn = false;

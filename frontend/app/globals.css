@@ -1790,3 +1790,57 @@ button:disabled{opacity:.5; cursor:not-allowed}
 .exp-row b{min-width:64px; text-align:right}
 .exp-foot{display:flex; gap:10px; margin-top:18px; align-items:center}
 @media (max-width:700px){.exp-row > .mono:first-child{width:86px}.pal.explorer{padding:16px}}
+
+/* ---------- combined glass direction: hero band + sticky toolbar + tints */
+.hero-band{background:var(--panel); border:1px solid var(--line); border-radius:18px; padding:22px 26px 14px; margin-bottom:14px}
+.hero-band .crumb{margin-bottom:2px}
+.hero-band .display{margin-bottom:6px}
+.vault.glass .hero-band{
+  background:linear-gradient(120deg, rgba(255,255,255,0.5), rgba(255,255,255,0.74));
+  backdrop-filter:blur(24px) saturate(1.5); -webkit-backdrop-filter:blur(24px) saturate(1.5);
+  border:1px solid rgba(255,255,255,0.85);
+  box-shadow:0 14px 40px rgba(15,34,55,0.10), inset 0 1px 0 rgba(255,255,255,0.95);
+}
+
+.glass-bar{position:sticky; top:10px; z-index:40; display:flex; align-items:center; gap:14px; flex-wrap:wrap;
+  background:var(--panel); border:1px solid var(--line); border-radius:99px; padding:8px 16px; margin-bottom:18px}
+.vault.glass .glass-bar{
+  background:rgba(255,255,255,0.55);
+  backdrop-filter:blur(20px) saturate(1.4); -webkit-backdrop-filter:blur(20px) saturate(1.4);
+  border:1px solid rgba(255,255,255,0.8);
+  box-shadow:0 10px 30px rgba(15,34,55,0.13), inset 0 1px 0 rgba(255,255,255,0.9);
+}
+.glass-bar .dash-search{flex:1 1 240px; max-width:none; margin:0; background:transparent; border:none; padding:6px 4px}
+.glass-bar .doctabs{flex-shrink:0}
+.glass-bar .rangeroll{font-size:12px}
+@media (max-width:860px){.glass-bar{border-radius:16px; top:6px}}
+
+/* feature-tinted glass on the needs-you-now cards */
+.vault.glass .needcard{border-left-width:4px}
+.vault.glass .needcard.tone-red{background:linear-gradient(135deg, rgba(178,58,46,0.10), rgba(255,255,255,0.62))}
+.vault.glass .needcard.tone-amber{background:linear-gradient(135deg, rgba(12,110,140,0.10), rgba(255,255,255,0.62))}
+.vault.glass .needcard.tone-neutral{background:linear-gradient(135deg, rgba(31,95,168,0.10), rgba(255,255,255,0.62))}
+
+/* vivid intensity: aurora wash + deeper frost */
+.vault.glass.vivid{
+  background:
+    radial-gradient(900px 520px at 12% -4%, rgba(31,95,168,0.26), transparent 60%),
+    radial-gradient(760px 460px at 88% 12%, rgba(12,110,140,0.22), transparent 62%),
+    radial-gradient(820px 560px at 55% 105%, rgba(91,75,196,0.20), transparent 60%),
+    linear-gradient(160deg, #EAF1F9, var(--bg));
+  background-attachment: fixed;
+}
+.vault.glass.vivid .card,
+.vault.glass.vivid .tile,
+.vault.glass.vivid .ringcard,
+.vault.glass.vivid .tagcard,
+.vault.glass.vivid .exp-total-card,
+.vault.glass.vivid .smartbar,
+.vault.glass.vivid .dash-search,
+.vault.glass.vivid .trow,
+.vault.glass.vivid .kcol{
+  background:rgba(255,255,255,0.46);
+  backdrop-filter:blur(26px) saturate(1.5); -webkit-backdrop-filter:blur(26px) saturate(1.5);
+}
+.vault.glass.vivid .glass-bar{background:rgba(255,255,255,0.48)}
+.vault.glass.vivid .hero-band{background:linear-gradient(120deg, rgba(255,255,255,0.42), rgba(255,255,255,0.68))}
