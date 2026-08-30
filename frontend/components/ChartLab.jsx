@@ -1,8 +1,9 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { SECTIONS, daysAgo, fmtK } from "@/lib/seed";
-import { rangeSeries } from "./Charts";
+import { rangeSeries, Zoom } from "./Charts";
 import { safeSet } from "@/lib/safeStorage";
 import { uid } from "@/lib/id";
 
@@ -238,7 +239,9 @@ export function ChartExplorer({ cfg: initial, isNew, onSave, onDelete, onClose, 
   const set = (patch) => setCfg((c) => ({ ...c, ...patch }));
 
   useEffect(() => {
-    const onKey = (e) => { if (e.key === "Escape") onClose(); };
+    /* when the maximized chart view is open, Escape should close only it —
+       our capture listener registered first, so check the DOM, not the event */
+    const onKey = (e) => { if (e.key === "Escape" && !document.querySelector(".zoomdlg")) onClose(); };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
   }, [onClose]);
@@ -251,8 +254,10 @@ export function ChartExplorer({ cfg: initial, isNew, onSave, onDelete, onClose, 
   const avg = data.values.length ? data.total / Math.max(data.values.filter((v) => v > 0).length, 1) : 0;
   const peakIdx = data.values.indexOf(Math.max(...data.values));
 
-  return (
-    <div className="pal-overlay" onClick={onClose} role="dialog" aria-label="Chart explorer">
+  return createPortal(
+    /* portal + centered: pops in the middle of the screen, and no glass
+       ancestor's backdrop-filter can trap the fixed overlay */
+    <div className="pal-overlay centered" onClick={onClose} role="dialog" aria-label="Chart explorer">
       <div className="pal explorer" onClick={(e) => e.stopPropagation()}>
         <div className="exp-head">
           <input className="exp-title" value={cfg.title} placeholder={src.label}
@@ -302,7 +307,11 @@ export function ChartExplorer({ cfg: initial, isNew, onSave, onDelete, onClose, 
           )}
         </div>
 
-        <LabPlot cfg={cfg} data={data} height={300} big sym={sym} />
+        <Zoom title={cfg.title || src.label}
+          sub={`${src.label} · maximized view`}
+          large={<LabPlot cfg={cfg} data={data} height={440} big sym={sym} />}>
+          <LabPlot cfg={cfg} data={data} height={300} big sym={sym} />
+        </Zoom>
 
         {cfg.type !== "donut" && (
           <div className="exp-table">
@@ -323,6 +332,7 @@ export function ChartExplorer({ cfg: initial, isNew, onSave, onDelete, onClose, 
           <button className="btn sm" onClick={() => onSave(cfg)}>{isNew ? "Add to my charts" : "Save changes"}</button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

@@ -1772,6 +1772,7 @@ button:disabled{opacity:.5; cursor:not-allowed}
 .yc-title{font-family:'Fraunces',Georgia,serif; font-size:16px; font-weight:650; display:flex; align-items:center}
 .yc-open{margin-left:auto; color:var(--ink-soft); font-size:13px}
 .yc-sub{font-size:10.5px; letter-spacing:1px; color:var(--ink-soft); text-transform:uppercase; margin-bottom:6px}
+.pal-overlay.centered{align-items:center; padding-top:0}
 .pal.explorer{max-width:900px; width:min(94vw, 900px); max-height:88vh; overflow-y:auto; padding:20px 24px}
 .exp-head{display:flex; align-items:center; gap:12px; margin-bottom:14px}
 .exp-title{flex:1; min-width:0; border:none; background:transparent; font-family:'Fraunces',Georgia,serif; font-size:22px; font-weight:650; color:var(--ink); border-bottom:1.5px dashed var(--line); padding:4px 2px}

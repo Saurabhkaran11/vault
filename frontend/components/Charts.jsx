@@ -901,7 +901,7 @@ export function BudgetBullets({ byCat, spentByCat, fmt }) {
  * popup that re-renders the same chart at reading size (the zoom dialog's
  * CSS raises every chart class's height; width-responsive charts and the
  * measured ones fill it naturally). */
-export function Zoom({ title, sub, children }) {
+export function Zoom({ title, sub, children, large }) {
   const [open, setOpen] = React.useState(false);
   React.useEffect(() => {
     if (!open) return;
@@ -930,7 +930,7 @@ export function Zoom({ title, sub, children }) {
               </div>
               <button className="kbtn" onClick={() => setOpen(false)} aria-label="Close">✕</button>
             </div>
-            <div className="zoom-body">{children}</div>
+            <div className="zoom-body">{large || children}</div>
           </div>
         </div>,
         document.body
