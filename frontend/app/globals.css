@@ -660,6 +660,15 @@ img.fpreview{height:auto}
 .doctabs button.on .tabbadge{background:#fff; color:var(--stamp)}
 
 /* ---------- To-dos, simplified: quick add + smart sections */
+/* hours-spent logging on tasks */
+.thrschip{border:1px solid var(--line); background:var(--field); border-radius:14px; padding:2px 9px; font-size:10px; color:var(--ink-soft); cursor:pointer; white-space:nowrap; flex-shrink:0}
+.thrschip.has{color:var(--moss); border-color:var(--moss); background:var(--moss-soft)}
+.thrschip.on{outline:2px solid var(--moss); outline-offset:1px}
+.tresched.thrs{align-items:center}
+.tresched.thrs input[type=number]{width:88px; border:1px solid var(--line); border-radius:8px; padding:5px 9px; font-family:'IBM Plex Mono',monospace; font-size:12px; background:var(--field); color:var(--ink)}
+.thrs-note{font-size:9.5px; letter-spacing:0.5px; color:var(--ink-soft)}
+.tsec-hrs{font-size:10px; color:var(--moss); background:var(--moss-soft); border-radius:12px; padding:2px 9px; white-space:nowrap}
+
 /* Tasks own the whole page: no width cap, and the open sections lay out
    as a responsive grid of equal-height cards (Overdue · Today · Upcoming ·
    Someday side by side on wide screens). */
