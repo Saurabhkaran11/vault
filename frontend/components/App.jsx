@@ -120,6 +120,13 @@ function buildInsights(items, tasks, fin, t0) {
 }
 import { TEMPLATES, templateStats, instantiateTemplate } from "@/lib/templates";
 
+/* Reading fonts the user can pick in Settings — applied to the Read view */
+export const READ_FONTS = [
+  { id: "sans",  name: "Sans",  stack: "'Public Sans', system-ui, sans-serif" },
+  { id: "serif", name: "Serif", stack: "'Iowan Old Style', 'Palatino Linotype', Georgia, serif" },
+  { id: "mono",  name: "Mono",  stack: "'IBM Plex Mono', ui-monospace, monospace" },
+];
+
 /* Clean read-only rendering of note blocks — the "Read" view. */
 function ReadBlocks({ blocks }) {
   if (!blocks.length) return <p style={{ color: "var(--ink-soft)" }}>Nothing written yet — switch to ✎ Edit to start.</p>;
@@ -706,7 +713,8 @@ export default function App() {
     document.documentElement.setAttribute("data-theme", theme);
     applyAccent(profile.accent || DEFAULT_ACCENT, theme);
     applyThemeExtras(profile.bgTint || DEFAULT_BG, profile.chartColor || DEFAULT_CHART, profile.accent || DEFAULT_ACCENT, theme);
-  }, [profile.theme, profile.accent, profile.bgTint, profile.chartColor]);
+    document.documentElement.style.setProperty("--readfont", (READ_FONTS.find((f) => f.id === profile.readFont) || READ_FONTS[0]).stack);
+  }, [profile.theme, profile.accent, profile.bgTint, profile.chartColor, profile.readFont]);
 
   /* autosave indicator */
   const [saveState, setSaveState] = useState("Saved ✓");
@@ -1215,6 +1223,22 @@ export default function App() {
                           onClick={() => setProfile({ ...profile, chartColor: c.id })}>
                           {c.id === "accent" ? <span style={{ color: "#fff", fontSize: 10, fontWeight: 700 }}>A</span> : null}
                         </button>
+                      );
+                    })}
+                  </div>
+
+                  <div className="conn-row" style={{ marginTop: 10 }}>
+                    <span>Reading font</span>
+                    <span className="cardsub mono">{(READ_FONTS.find((f) => f.id === profile.readFont) || READ_FONTS[0]).name}</span>
+                  </div>
+                  <div className="accent-swatches" role="group" aria-label="Reading font">
+                    {READ_FONTS.map((f) => {
+                      const on = (profile.readFont || "sans") === f.id;
+                      return (
+                        <button key={f.id} type="button" className={"font-sw" + (on ? " on" : "")}
+                          style={{ fontFamily: f.stack }} aria-pressed={on}
+                          title={`${f.name} — how the Read view renders your notes`}
+                          onClick={() => setProfile({ ...profile, readFont: f.id })}>Aa</button>
                       );
                     })}
                   </div>
