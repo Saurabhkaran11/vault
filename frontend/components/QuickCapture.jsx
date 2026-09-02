@@ -82,12 +82,14 @@ const KINDS = {
   note: { label: "Note", hint: "saved to Notes" },
 };
 
-export default function QuickCapture({ open, onClose, onAddItem, onSaved }) {
+export default function QuickCapture({ open, onClose, onAddItem, onSaved, seed = "" }) {
   const [text, setText] = useState("");
   const [override, setOverride] = useState(null);
   const [flash, setFlash] = useState(null);
   const inputRef = useRef(null);
-  useEffect(() => { if (open) { setText(""); setOverride(null); setFlash(null); setTimeout(() => inputRef.current?.focus(), 30); } }, [open]);
+  /* a share-target / bookmarklet capture arrives pre-filled via `seed` —
+     the routing preview runs on it immediately, Enter confirms */
+  useEffect(() => { if (open) { setText(seed || ""); setOverride(null); setFlash(null); setTimeout(() => inputRef.current?.focus(), 30); } }, [open, seed]);
 
   /* dictation appends (not replaces) so voice composes with typed text,
      and the normal setText path keeps the routing preview live */
