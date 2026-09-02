@@ -815,6 +815,16 @@ img.fpreview{height:auto}
 .readblocks p{margin:0 0 12px}
 .readblocks h3{font-size:22px; font-weight:650; margin:22px 0 10px}
 @media (max-width:700px){.readblocks{padding:18px 16px; font-size:16px}}
+/* Settings: collapsible sections — one clear fold per feature area */
+.setfold{border:1px solid var(--line); border-radius:12px; margin-bottom:10px; background:var(--panel); overflow:hidden}
+.setfold-head{display:flex; align-items:center; justify-content:space-between; gap:10px; padding:12px 14px; cursor:pointer; list-style:none; font-size:14px; font-weight:600; color:var(--ink)}
+.setfold-head::-webkit-details-marker{display:none}
+.setfold-head:hover{background:var(--field)}
+.setfold[open] > .setfold-head{border-bottom:1px dashed var(--line)}
+.setfold[open] > .setfold-head .cardsub{color:var(--moss)}
+.setfold > .set-sec, .setfold > .capkit{margin:8px 10px 12px; border:none; background:transparent; padding:4px}
+.vault.glass .setfold{background:rgba(255,255,255,0.55)}
+
 /* Settings: capture-from-anywhere kit */
 .capkit{display:flex; flex-direction:column; gap:10px; padding:12px 14px; border:1px solid var(--line); border-radius:12px; margin:10px 0; background:var(--field)}
 .capkit-row{display:flex; align-items:center; gap:10px; flex-wrap:wrap}
