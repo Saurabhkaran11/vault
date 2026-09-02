@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { today } from "@/lib/seed";
 import { askText } from "@/lib/ai";
 import { TopMerchants, MoneyFlow, CategoryShifts, IncomeVsSpend, SavingsWaterfall, WeekendPremium, Zoom } from "./Charts";
@@ -148,10 +148,14 @@ function CategoryDonut({ slices, total, fmt }) {
   );
 }
 
-export default function FinanceAnalytics({ fin, fmt, spentByCat = {}, savingsRate = null, recurringMonthly = 0 }) {
+export default function FinanceAnalytics({ fin, fmt, spentByCat = {}, savingsRate = null, recurringMonthly = 0, range: globalRange, onRange }) {
   const expenses = fin.expenses;
   const budgets = fin.budgets || { overall: null, byCat: {} };
-  const [period, setPeriod] = useState("daily");
+  /* follows the app-wide range toggle, and pushes changes back to it */
+  const G2P = { day: "daily", week: "weekly", month: "monthly", year: "yearly" };
+  const P2G = { daily: "day", weekly: "week", monthly: "month", yearly: "year" };
+  const [period, setPeriod] = useState(G2P[globalRange] || "daily");
+  useEffect(() => { if (globalRange && G2P[globalRange] !== period) setPeriod(G2P[globalRange]); /* eslint-disable-line react-hooks/exhaustive-deps */ }, [globalRange]);
   const [chart, setChart] = useState("bar");
 
   /* ✦ AI monthly review */
@@ -278,7 +282,7 @@ export default function FinanceAnalytics({ fin, fmt, spentByCat = {}, savingsRat
         <div className="doctabs" role="tablist" aria-label="Report period">
           {PERIODS.map((p) => (
             <button key={p.key} className={period === p.key ? "on" : ""} role="tab"
-              aria-selected={period === p.key} onClick={() => setPeriod(p.key)}>{p.label}</button>
+              aria-selected={period === p.key} onClick={() => { setPeriod(p.key); onRange?.(P2G[p.key]); }}>{p.label}</button>
           ))}
         </div>
         <div className="charttabs" role="group" aria-label="Chart type">

@@ -198,7 +198,7 @@ const incToApi = (i) => ({ id: i.id, source: i.source, amount_cents: toCents(i.a
 const pmToApi = (m) => ({ id: m.id, name: m.name, kind: m.kind });
 const goalToApi = (g) => ({ id: g.id, name: g.name, target_cents: toCents(g.target), saved_cents: toCents(g.saved ?? 0) });
 
-export default function FinanceBoard() {
+export default function FinanceBoard({ range: globalRange, onRange } = {}) {
   const [fin, setFin] = useState(seedFinance);
   const [hydrated, setHydrated] = useState(false);
   useCrossTab("vault.finance.v1", (v) => setFin(migrate(v)));
@@ -316,7 +316,10 @@ export default function FinanceBoard() {
 
   /* expense list view: one day / one week / a whole month, grouped by day —
      each range has its own ‹ › walker so any past period is reachable */
-  const [expView, setExpView] = useState("month");
+  /* the Expenses view follows the app-wide Daily/Weekly/Monthly/Yearly
+     toggle — and changing it here updates that global state too */
+  const [expView, setExpView] = useState(globalRange || "month");
+  useEffect(() => { if (globalRange && globalRange !== expView) setExpView(globalRange); /* eslint-disable-line react-hooks/exhaustive-deps */ }, [globalRange]);
   /* all walker date math in UTC — mixing local-midnight parsing with
      toISOString() loses a day in any UTC-positive timezone (IST, CET…),
      which made ‹ › skip or stick. UTC end-to-end matches today()'s ISO. */
@@ -739,7 +742,7 @@ export default function FinanceBoard() {
       <StatementImport open={stmtOpen} onClose={() => setStmtOpen(false)} onImport={importTransactions}
         categories={CATEGORIES} cur={cur} aiReady={aiReady} />
 
-      {tab === "analytics" && <FinanceAnalytics fin={fin} fmt={fmt} spentByCat={spentByCat} savingsRate={savingsRate} recurringMonthly={recurringMonthly} />}
+      {tab === "analytics" && <FinanceAnalytics fin={fin} fmt={fmt} spentByCat={spentByCat} savingsRate={savingsRate} recurringMonthly={recurringMonthly} range={globalRange} onRange={onRange} />}
 
       {tab === "payments" && (<>
       {/* one plain sentence before the machinery — what do I owe, what's next */}
@@ -968,7 +971,7 @@ export default function FinanceBoard() {
             <span className="doctabs" role="tablist" aria-label="Expense range" style={{ display: "inline-flex" }}>
               {[["day", "Daily"], ["week", "Weekly"], ["month", "Monthly"], ["year", "Yearly"]].map(([k, label]) => (
                 <button key={k} className={expView === k ? "on" : ""} role="tab" aria-selected={expView === k}
-                  onClick={() => setExpView(k)}>{label}</button>
+                  onClick={() => { setExpView(k); onRange?.(k); }}>{label}</button>
               ))}
             </span>
             {expView === "month" && (
