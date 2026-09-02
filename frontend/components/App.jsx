@@ -1146,8 +1146,8 @@ export default function App() {
                 onClick={() => { setSettingsOpen(false); setKeyEdit(false); }}>✕</button>
             </div>
             <div className="cd-body">
+              <details className="setfold"><summary className="setfold-head"><span>🗄 Your data</span><span className="cardsub mono">backup · import · reports · erase ▾</span></summary>
               <div className="set-sec">
-                <div className="menu-sec">Your data</div>
                 <button className="menu-item" onClick={() => { downloadBackup(); setToast("Backup downloaded — keep it somewhere safe."); }}>
                   ⬇ Back up this vault (.json)
                   <span className="menukey">{(keymap.backup || "e").toUpperCase()}</span>
@@ -1167,8 +1167,19 @@ export default function App() {
                   {armFresh ? "Click again to erase everything in this browser" : "Start fresh"}
                   {!armFresh && <span className="menukey">erase this browser&rsquo;s vault</span>}
                 </button>
+                <button className="menu-item" onClick={() => importRef.current?.click()}>⬆ Import backup</button>
+                <button className="menu-item" onClick={() => downloadICS()}
+                  title="Due to-dos and bills as calendar events — import into Google/Apple/Outlook and get reminded there">
+                  📅 Export due dates to calendar (.ics)
+                </button>
+                <button className="menu-item" onClick={() => { setReportsOpen(true); setSettingsOpen(false); }}
+                  title="A formatted, printable report for any feature — or the whole vault">
+                  📊 Generate reports…
+                </button>
               </div>
+              </details>
 
+              <details className="setfold"><summary className="setfold-head"><span>👤 Account & profile</span><span className="cardsub mono">sign-in · display name ▾</span></summary>
               <AccountSection />
 
               <div className="set-sec">
@@ -1180,9 +1191,10 @@ export default function App() {
                   Shown in your dashboard greeting. Your sign-in email lives under Account.
                 </div>
               </div>
+              </details>
 
+              <details className="setfold"><summary className="setfold-head"><span>🎨 Appearance</span><span className="cardsub mono">theme · colours · fonts ▾</span></summary>
               <div className="set-sec">
-                <div className="menu-sec">⚙ PREFERENCES</div>
                 <button className="menu-item" onClick={() => setProfile({ ...profile, theme: profile.theme === "dark" ? "light" : "dark" })}>
                   {profile.theme === "dark" ? "☀ Light mode" : "◐ Dark mode"} <span className="menukey kbd">{keymap.theme.toUpperCase()}</span>
                 </button>
@@ -1263,8 +1275,11 @@ export default function App() {
                   </div>
                 </div>
 
+              </div>
+              </details>
+
+              <details className="setfold"><summary className="setfold-head"><span>📥 Capture from anywhere</span><span className="cardsub mono">bookmarklet · share sheet · iPhone ▾</span></summary>
                 <div className="capkit">
-                  <div className="conn-row"><span>📥 Capture from anywhere</span></div>
                   <div className="capkit-row">
                     <span className="capkit-label"><b>Bookmarklet</b> — drag this to your bookmarks bar; click it on any page to capture it:</span>
                     <span dangerouslySetInnerHTML={{ __html:
@@ -1282,7 +1297,10 @@ export default function App() {
                     }}>Copy capture URL</button>
                   </div>
                 </div>
+              </details>
 
+              <details className="setfold"><summary className="setfold-head"><span>⌨ Shortcuts</span><span className="cardsub mono">cheat sheet · custom bindings ▾</span></summary>
+              <div className="set-sec">
                 <button className="menu-item" onClick={() => { setHelpOpen(true); setSettingsOpen(false); }}>
                   ⌨ Keyboard shortcuts <span className="menukey kbd">?</span>
                 </button>
@@ -1327,9 +1345,10 @@ export default function App() {
                 </button>
                 </details>
               </div>
+              </details>
 
+              <details className="setfold"><summary className="setfold-head"><span>✦ AI models</span><span className="cardsub mono">Claude · local models · search index ▾</span></summary>
               <div className="set-sec">
-                <div className="menu-sec">AI model</div>
                 <select className="menu-input" value={aiCfg.provider || "anthropic"} aria-label="AI provider"
                   onChange={(e) => { updateAI({ provider: e.target.value }); setKeyEdit(false); }}>
                   <option value="anthropic">Claude</option>
@@ -1431,9 +1450,10 @@ export default function App() {
 
               <LocalModels />
               <SearchIndexCard items={items} />
+              </details>
 
+              <details className="setfold"><summary className="setfold-head"><span>🔗 Connected apps & sync</span><span className="cardsub mono">calendar · cloud files · devices ▾</span></summary>
               <div className="set-sec">
-                <div className="menu-sec">🔗 CONNECTED APPS</div>
                 <div className="conn-row">
                   <span>☁ Cloud files linked</span>
                   <span className="mono">{items.filter((i) => i.cloud).length}</span>
@@ -1457,19 +1477,8 @@ export default function App() {
               </div>
 
               <SyncSection />
+              </details>
 
-              <div className="set-sec">
-                <div className="menu-sec">🗄 YOUR DATA</div>
-                <button className="menu-item" onClick={() => importRef.current?.click()}>⬆ Import backup</button>
-                <button className="menu-item" onClick={() => downloadICS()}
-                  title="Due to-dos and bills as calendar events — import into Google/Apple/Outlook and get reminded there">
-                  📅 Export due dates to calendar (.ics)
-                </button>
-                <button className="menu-item" onClick={() => { setReportsOpen(true); setSettingsOpen(false); }}
-                  title="A formatted, printable report for any feature — or the whole vault">
-                  📊 Generate reports…
-                </button>
-              </div>
             </div>
           </div>
         </div>
