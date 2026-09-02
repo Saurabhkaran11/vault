@@ -81,7 +81,9 @@ function TimeChart({ buckets, type, fmt }) {
       {/* baseline + max gridline */}
       <line x1={padX} y1={padT + innerH} x2={W - padX} y2={padT + innerH} stroke="var(--line)" strokeWidth="1" />
       <line x1={padX} y1={padT} x2={W - padX} y2={padT} stroke="var(--line)" strokeWidth="1" strokeDasharray="4 5" />
-      <text x={padX - 4} y={padT + 4} textAnchor="end" fontSize="9.5" fontFamily="IBM Plex Mono" fill="var(--ink-soft)">{fmt(max)}</text>
+      {/* max label sits INSIDE the plot — the left gutter can't fit wide money
+          values ("$1,620.34" was clipping to "…20.34" on Yearly) */}
+      <text x={padX + 2} y={padT - 6} textAnchor="start" fontSize="9.5" fontFamily="IBM Plex Mono" fill="var(--ink-soft)">{fmt(max)}</text>
 
       {type === "bar" && buckets.map((b, i) => {
         const bw = Math.min(44, (innerW / n) * 0.62);
