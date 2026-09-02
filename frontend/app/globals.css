@@ -845,6 +845,9 @@ img.fpreview{height:auto}
 .cd-head{display:flex; align-items:center; gap:12px; padding:12px 16px; border-bottom:1px solid var(--line)}
 .cd-col{margin-left:auto; font-size:10px; color:var(--ink-soft); letter-spacing:.5px}
 .cd-body{padding:16px 18px; overflow-y:auto; display:flex; flex-direction:column; gap:10px}
+/* a scrolling column must SCROLL, never crush its children — otherwise an
+   overflow:hidden child (like a settings fold) silently clips its controls */
+.cd-body > *{flex-shrink:0}
 .cd-title{border:1px solid var(--line); border-radius:9px; padding:10px 12px; font-family:'Fraunces',serif; font-size:18px; font-weight:650; color:var(--ink); background:var(--field); resize:none}
 .cd-title:focus{outline:2px solid var(--moss); outline-offset:1px}
 .cd-desc{border:1px solid var(--line); border-radius:9px; padding:12px; font-family:'Public Sans',sans-serif; font-size:13.5px; line-height:1.7; color:var(--ink); background:var(--field); resize:vertical}
