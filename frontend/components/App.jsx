@@ -647,6 +647,24 @@ export default function App() {
   }, [toast]);
   /* ---- universal quick capture + notification bell ---- */
   const [capOpen, setCapOpen] = useState(false);
+  const [capSeed, setCapSeed] = useState("");
+
+  /* capture-from-anywhere: the PWA share target, bookmarklet and iOS
+     Shortcut all arrive as /?vcap_url=…&vcap_title=…&vcap_text=… — open
+     Quick Capture pre-filled (URL alone routes best), then clean the URL */
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const q = new URLSearchParams(window.location.search);
+    const u = (q.get("vcap_url") || "").trim();
+    const tx = (q.get("vcap_text") || "").trim();
+    const ti = (q.get("vcap_title") || "").trim();
+    if (!(u || tx || ti)) return;
+    /* Android share sheets often put the URL in `text` */
+    const urlInText = !u && /^https?:\/\/\S+$/.test(tx) ? tx : "";
+    setCapSeed(u || urlInText || tx || ti);
+    setCapOpen(true);
+    window.history.replaceState({}, "", window.location.pathname);
+  }, []);
   const [capBump, setCapBump] = useState(0);      // remounts To-dos/Finance so captures show instantly
   const [bellOpen, setBellOpen] = useState(false);
   const [alerts, setAlerts] = useState([]);
@@ -1064,7 +1082,8 @@ export default function App() {
         onGo={(r) => (r.kind === "tag" ? openTag(r.tag) : openSection(r.item.type))} />
       <ShortcutsHelp open={helpOpen} onClose={() => setHelpOpen(false)} keymap={keymap} />
 
-      <QuickCapture open={capOpen} onClose={() => setCapOpen(false)}
+      <QuickCapture open={capOpen} seed={capSeed}
+        onClose={() => { setCapOpen(false); setCapSeed(""); }}
         onAddItem={(it) => add(it)}
         onSaved={() => { setCapBump((b) => b + 1); setAlerts(computeAlerts()); }} />
 
@@ -1241,6 +1260,26 @@ export default function App() {
                           onClick={() => setProfile({ ...profile, readFont: f.id })}>Aa</button>
                       );
                     })}
+                  </div>
+                </div>
+
+                <div className="capkit">
+                  <div className="conn-row"><span>📥 Capture from anywhere</span></div>
+                  <div className="capkit-row">
+                    <span className="capkit-label"><b>Bookmarklet</b> — drag this to your bookmarks bar; click it on any page to capture it:</span>
+                    <span dangerouslySetInnerHTML={{ __html:
+                      `<a class="kbtn capkit-bm" href="javascript:(function(){location.href='${typeof window !== "undefined" ? window.location.origin : ""}/?vcap_url='+encodeURIComponent(location.href)+'&vcap_title='+encodeURIComponent(document.title)+'&vcap_text='+encodeURIComponent(String(getSelection()))})()">📥 Save to Vault</a>` }} />
+                  </div>
+                  <div className="capkit-row">
+                    <span className="capkit-label"><b>Android</b> — install Vault (browser menu → &ldquo;Add to Home screen&rdquo;) and it appears in the share sheet of every app.</span>
+                  </div>
+                  <div className="capkit-row">
+                    <span className="capkit-label"><b>iPhone</b> — Shortcuts app → ＋ → &ldquo;Receive input from Share Sheet&rdquo; → add &ldquo;Open URLs&rdquo; with:</span>
+                    <button className="kbtn" onClick={(e) => {
+                      const tpl = `${window.location.origin}/?vcap_url=[Shortcut Input]`;
+                      navigator.clipboard?.writeText(tpl);
+                      e.currentTarget.textContent = "✓ Copied";
+                    }}>Copy capture URL</button>
                   </div>
                 </div>
 
