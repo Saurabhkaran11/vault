@@ -1099,8 +1099,8 @@ export default function App() {
               {REPORTS.map((r) => (
                 <div key={r.id} className={`reportrow ${r.id === "all" ? "reportrow-all" : ""}`}>
                   <span className="reportname">{r.label}</span>
-                  <button className="kbtn" onClick={() => openReport(r.id)} title="Open in a new tab — read it, or print to PDF">👁 Open</button>
-                  <button className="kbtn" onClick={() => downloadReport(r.id)} title="Download as a self-contained HTML file">⬇ Download</button>
+                  <button className="kbtn" onClick={() => openReport(r.id, range)} title="Open in a new tab — read it, or print to PDF">👁 Open</button>
+                  <button className="kbtn" onClick={() => downloadReport(r.id, range)} title="Download as a self-contained HTML file">⬇ Download</button>
                 </div>
               ))}
               <div className="menu-foot" style={{ border: "none" }}>
@@ -1882,7 +1882,7 @@ export default function App() {
                   {/* the chart area begins here — Add chart sits top-right above it */}
                   <div className="sec-label mono charts-head">
                     Insights · {RANGE_WORD[range]}
-                    <button className="kbtn yc-add" onClick={() => setExplore({ cfg: newChartCfg(), isNew: true })}
+                    <button className="kbtn yc-add" onClick={() => setExplore({ cfg: { ...newChartCfg(), range }, isNew: true })}
                       title="Build your own chart from any feature's data — it lands at the bottom of the charts">＋ Add chart</button>
                   </div>
                   <div className="charts-duo">
@@ -1991,7 +1991,7 @@ export default function App() {
             <div className="crumb">Money</div>
             <h2 className="display">Finance</h2>
             <Intro id="finance">Track daily expenses and keep every pending payment — credit card, rent, subscriptions — on the board until it&rsquo;s paid.</Intro>
-            <FinanceBoard key={`fb-${capBump}`} />
+            <FinanceBoard key={`fb-${capBump}`} range={range} onRange={(r) => setProfile({ ...profile, range: r })} />
           </>
         )}
 

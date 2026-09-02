@@ -11,6 +11,14 @@ const read = (k, fb) => { try { return JSON.parse(localStorage.getItem(k)) ?? fb
 const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
 const daysAgo = (iso) => Math.floor((new Date(today()) - new Date(iso)) / 86400000);
 
+/* reports follow the app-wide Daily/Weekly/Monthly/Yearly toggle */
+const RANGE_DAYS = { day: 1, week: 7, month: 31, year: 365 };
+const RANGE_WORD = { day: "today", week: "this week", month: "this month", year: "this year" };
+let RANGE = "week";
+const rDays = () => RANGE_DAYS[RANGE] || 7;
+const rWord = () => RANGE_WORD[RANGE] || "this week";
+const inRange = (iso) => !!iso && daysAgo(iso) >= 0 && daysAgo(iso) <= rDays();
+
 const stat = (label, value, note = "") =>
   `<div class="stat"><div class="v">${esc(value)}</div><div class="k">${esc(label)}</div>${note ? `<div class="n">${esc(note)}</div>` : ""}</div>`;
 const table = (heads, rows) =>
@@ -23,13 +31,13 @@ function itemsOf(type) {
 
 function notesReport() {
   const notes = itemsOf("note");
-  const week = notes.filter((n) => daysAgo(n.date) <= 7).length;
+  const week = notes.filter((n) => inRange(n.date)).length;
   const folders = {};
   notes.forEach((n) => { const f = n.folder || "No folder"; folders[f] = (folders[f] || 0) + 1; });
   const tags = {};
   notes.forEach((n) => n.tags.forEach((t) => { tags[t] = (tags[t] || 0) + 1; }));
   return {
-    title: "Notes", stats: [stat("Total notes", notes.length), stat("Added this week", week), stat("Pinned", notes.filter((n) => n.pinned).length), stat("Folders", Object.keys(folders).filter((f) => f !== "No folder").length)],
+    title: "Notes", stats: [stat("Total notes", notes.length), stat(`Added ${rWord()}`, week), stat("Pinned", notes.filter((n) => n.pinned).length), stat("Folders", Object.keys(folders).filter((f) => f !== "No folder").length)],
     body: section("By folder", table(["Folder", "Notes"], Object.entries(folders).sort((a, b) => b[1] - a[1]).map(([f, n]) => [f, n])))
       + section("Top tags", table(["Tag", "Notes"], Object.entries(tags).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([t, n]) => [`#${t}`, n])))
       + section("Recent notes", table(["Title", "Added", "Tags"], notes.sort((a, b) => b.date.localeCompare(a.date)).slice(0, 12).map((n) => [n.title, n.date, n.tags.map((t) => `#${t}`).join(" ") || "—"]))),
@@ -40,7 +48,7 @@ function videosReport() {
   const vids = itemsOf("video");
   const done = vids.filter((v) => v.status === "Done").length;
   return {
-    title: "YouTube", stats: [stat("Saved videos", vids.length), stat("Watched", done), stat("In the queue", vids.length - done)],
+    title: "YouTube", stats: [stat("Saved videos", vids.length), stat(`Saved ${rWord()}`, vids.filter((v) => inRange(v.date)).length), stat("Watched", done), stat("In the queue", vids.length - done)],
     body: section("Queue", table(["Video", "Status", "Saved", "Tags"], vids.sort((a, b) => b.date.localeCompare(a.date)).map((v) => [v.alias || v.title, v.status, v.date, v.tags.map((t) => `#${t}`).join(" ") || "—"]))),
   };
 }
@@ -62,7 +70,7 @@ function docsReport() {
   const written = docs.filter((d) => !d.file && !d.url);
   const bytes = files.reduce((a, d) => a + (d.file.size || 0), 0);
   return {
-    title: "Documents", stats: [stat("Total", docs.length), stat("Uploaded files", files.length, `${Math.round(bytes / 1024)} KB stored`), stat("Cloud links", cloud.length), stat("Written docs", written.length)],
+    title: "Documents", stats: [stat("Total", docs.length), stat(`Added ${rWord()}`, docs.filter((d) => inRange(d.date)).length), stat("Uploaded files", files.length, `${Math.round(bytes / 1024)} KB stored`), stat("Cloud links", cloud.length)],
     body: section("All documents", table(["Name", "Kind", "Added"], docs.map((d) => [d.title, d.file ? (d.file.name.split(".").pop() || "file").toUpperCase() : d.cloud ? "Cloud link" : "Written", d.date]))),
   };
 }
@@ -72,11 +80,11 @@ function todosReport() {
   const t0 = today();
   const open = tasks.filter((t) => !t.done);
   const overdue = open.filter((t) => t.due && t.due < t0);
-  const doneWeek = tasks.filter((t) => t.done && t.doneAt && daysAgo(t.doneAt) <= 7);
-  const doneMonth = tasks.filter((t) => t.done && t.doneAt && daysAgo(t.doneAt) <= 30);
+  const doneRange = tasks.filter((t) => t.done && t.doneAt && inRange(t.doneAt));
+  const hoursRange = tasks.flatMap((t) => t.hlog || []).filter((e) => inRange(e.d)).reduce((a, e) => a + (+e.h || 0), 0);
   const rate = tasks.length ? Math.round((tasks.filter((t) => t.done).length / tasks.length) * 100) : 0;
   return {
-    title: "To-dos", stats: [stat("Open", open.length, `${overdue.length} overdue`), stat("Done this week", doneWeek.length), stat("Done this month", doneMonth.length), stat("Completion rate", `${rate}%`, "all time")],
+    title: "To-dos", stats: [stat("Open", open.length, `${overdue.length} overdue`), stat(`Done ${rWord()}`, doneRange.length), stat(`Hours ${rWord()}`, hoursRange ? `${Math.round(hoursRange * 4) / 4}h` : "—"), stat("Completion rate", `${rate}%`, "all time")],
     body: section("Overdue", overdue.length ? table(["Task", "Was due"], overdue.map((t) => [t.text, t.due])) : "<p>Nothing overdue. 🎉</p>")
       + section("Due in the next 7 days", table(["Task", "Due", "Priority"], open.filter((t) => t.due && t.due >= t0 && daysAgo(t.due) >= -7).sort((a, b) => a.due.localeCompare(b.due)).map((t) => [t.text, t.due, t.high ? "⚑ high" : "—"])))
       + section("Recently completed", table(["Task", "Done on"], tasks.filter((t) => t.done && t.doneAt).sort((a, b) => b.doneAt.localeCompare(a.doneAt)).slice(0, 10).map((t) => [t.text, t.doneAt]))),
@@ -109,19 +117,18 @@ function financeReport() {
   const fin = read("vault.finance.v1", {});
   const sym = CUR[fin.currency] || "$";
   const f = (n) => `${sym}${(+n || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
-  const ym = today().slice(0, 7);
-  const exp = (fin.expenses || []).filter((e) => (e.date || "").startsWith(ym));
+  const exp = (fin.expenses || []).filter((e) => inRange(e.date));
   const spent = exp.reduce((a, e) => a + e.amount, 0);
   const byCat = {}; exp.forEach((e) => { byCat[e.cat] = (byCat[e.cat] || 0) + e.amount; });
   const methods = fin.payMethods || [];
   const byPay = {}; exp.forEach((e) => { const m = methods.find((x) => x.id === e.pay)?.name || "—"; byPay[m] = (byPay[m] || 0) + e.amount; });
-  const income = (fin.incomes || []).filter((i) => (i.date || "").startsWith(ym)).reduce((a, i) => a + i.amount, 0);
+  const income = (fin.incomes || []).filter((i) => inRange(i.date)).reduce((a, i) => a + i.amount, 0);
   const pending = (fin.bills || []).filter((b) => !b.paid);
   const budget = +(fin.budgets?.overall) || 0;
   return {
     title: "Finance", stats: [
-      stat("Spent this month", f(spent), budget ? `${Math.round((spent / budget) * 100)}% of ${f(budget)} budget` : ""),
-      stat("Income this month", f(income)),
+      stat(`Spent ${rWord()}`, f(spent), budget && RANGE === "month" ? `${Math.round((spent / budget) * 100)}% of ${f(budget)} budget` : ""),
+      stat(`Income ${rWord()}`, f(income)),
       stat("Savings rate", income > 0 ? `${Math.round(((income - spent) / income) * 100)}%` : "—"),
       stat("Bills pending", pending.length, f(pending.reduce((a, b) => a + b.amount, 0))),
     ],
@@ -165,7 +172,8 @@ const SHELL_CSS = `
   @media print{.page{padding:0} .stat{break-inside:avoid} table{break-inside:auto}}
 `;
 
-export function buildReportHTML(id) {
+export function buildReportHTML(id, range = "week") {
+  RANGE = RANGE_DAYS[range] ? range : "week";
   const parts = id === "all"
     ? Object.values(BUILDERS).map((b) => b())
     : [BUILDERS[id]()];
@@ -176,15 +184,15 @@ export function buildReportHTML(id) {
     ${p.body}`).join("<hr style='border:none;margin:8px 0'>");
   const html = `<!doctype html><html><head><meta charset="utf-8"><title>Vault — ${esc(titleText)}</title><style>${SHELL_CSS}</style></head>
 <body><div class="page">
-  <header><div class="brand">Vault</div><h1>${esc(titleText)}</h1><div class="when">Generated ${today()} · data lives in your browser</div></header>
+  <header><div class="brand">Vault</div><h1>${esc(titleText)}</h1><div class="when">Generated ${today()} · window: ${rWord()} · data lives in your browser</div></header>
   ${inner}
   <footer>Generated by Vault · print this page to save it as a PDF (Ctrl/Cmd+P)</footer>
 </div></body></html>`;
   return { html, filename: `vault-report-${id}-${today()}.html` };
 }
 
-export function downloadReport(id) {
-  const { html, filename } = buildReportHTML(id);
+export function downloadReport(id, range) {
+  const { html, filename } = buildReportHTML(id, range);
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob([html], { type: "text/html" }));
   a.download = filename;
@@ -192,8 +200,8 @@ export function downloadReport(id) {
   URL.revokeObjectURL(a.href);
 }
 
-export function openReport(id) {
-  const { html } = buildReportHTML(id);
+export function openReport(id, range) {
+  const { html } = buildReportHTML(id, range);
   const url = URL.createObjectURL(new Blob([html], { type: "text/html" }));
   window.open(url, "_blank", "noopener");
   setTimeout(() => URL.revokeObjectURL(url), 60000);
