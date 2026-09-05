@@ -211,6 +211,10 @@ export default function FinanceAnalytics({ fin, fmt, spentByCat = {}, savingsRat
   }, [inRange]);
 
   const periodName = PERIODS.find((p) => p.key === period)?.label;
+  /* the human name of the window the buckets cover — every insight chart
+     below scopes itself to this same window via `rangeFrom` */
+  const winLabel = { daily: "Last 14 days", weekly: "Last 8 weeks", monthly: "Last 12 months", yearly: "All years" }[period];
+  const unit5 = { daily: "days", weekly: "weeks", monthly: "months", yearly: "years" }[period];
 
   /* local insights: this month vs the average of the previous 3 months */
   const insights = useMemo(() => {
@@ -279,25 +283,26 @@ export default function FinanceAnalytics({ fin, fmt, spentByCat = {}, savingsRat
 
   return (
     <>
-    <div className="card">
-      <div className="fanal-head">
-        <div className="doctabs" role="tablist" aria-label="Report period">
-          {PERIODS.map((p) => (
-            <button key={p.key} className={period === p.key ? "on" : ""} role="tab"
-              aria-selected={period === p.key} onClick={() => { setPeriod(p.key); onRange?.(P2G[p.key]); }}>{p.label}</button>
-          ))}
-        </div>
-        <div className="charttabs" role="group" aria-label="Chart type">
-          {CHARTS.map(([k, label]) => (
-            <button key={k} className={chart === k ? "on" : ""}
-              aria-pressed={chart === k} onClick={() => setChart(k)}
-              title={k === "donut" ? "Share of spending by category" : `${label.slice(2)} chart over time`}>
-              {label}
-            </button>
-          ))}
-        </div>
+    {/* the range + chart-type controls float just under the Finance featbar,
+       so switching Daily/Weekly/Monthly/Yearly never needs a scroll back up */}
+    <div className="featbar fanal-sticky">
+      <div className="doctabs" role="tablist" aria-label="Report period" style={{ display: "inline-flex" }}>
+        {PERIODS.map((p) => (
+          <button key={p.key} className={period === p.key ? "on" : ""} role="tab"
+            aria-selected={period === p.key} onClick={() => { setPeriod(p.key); onRange?.(P2G[p.key]); }}>{p.label}</button>
+        ))}
       </div>
-
+      <div className="charttabs" role="group" aria-label="Chart type">
+        {CHARTS.map(([k, label]) => (
+          <button key={k} className={chart === k ? "on" : ""}
+            aria-pressed={chart === k} onClick={() => setChart(k)}
+            title={k === "donut" ? "Share of spending by category" : `${label.slice(2)} chart over time`}>
+            {label}
+          </button>
+        ))}
+      </div>
+    </div>
+    <div className="card">
       <div className="fanal-stats">
         <span><b>{fmt(total)}</b> total in this {periodName.toLowerCase()} range</span>
         <span><b>{fmt(avg)}</b> avg per active {period === "daily" ? "day" : period === "weekly" ? "week" : period === "monthly" ? "month" : "year"}</span>
@@ -352,39 +357,39 @@ export default function FinanceAnalytics({ fin, fmt, spentByCat = {}, savingsRat
       <div className="fanal-grid">
         <div className="card fanal-card">
           <h3>Category shifts</h3>
-          <div className="m fanal-sub">This month vs last — red grows, green shrinks.</div>
-          <Zoom title="Category shifts" sub="This month vs last — red grows, green shrinks."
-            note={<><b>How to read:</b> each row is a spending category with its 8-week trend. The chip compares this month to last — <b>red</b> means it grew, <b>green</b> means it shrank, &ldquo;new&rdquo; had no spend last month.</>}><CategoryShifts expenses={fin.expenses} fmt={fmt} /></Zoom>
+          <div className="m fanal-sub">{winLabel} vs the period before — red grows, green shrinks.</div>
+          <Zoom title="Category shifts" sub={`${winLabel} vs the period before — red grows, green shrinks.`}
+            note={<><b>How to read:</b> each row is a spending category with its 8-week trend. The chip compares the chosen range to the equal window before it — <b>red</b> means it grew, <b>green</b> means it shrank, &ldquo;new&rdquo; had no spend before.</>}><CategoryShifts expenses={fin.expenses} fmt={fmt} from={rangeFrom} /></Zoom>
         </div>
         <div className="card fanal-card">
           <h3>Income vs spend</h3>
-          <div className="m fanal-sub">Last 5 months — the green haze is what you kept.</div>
-          <Zoom title="Income vs spend" sub="Last 5 months — the green haze is what you kept."
-            note={<><b>How to read:</b> two bars per month — income beside spending. When the income bar is taller, the gap between them is money you kept that month.</>}><IncomeVsSpend incomes={fin.incomes} expenses={fin.expenses} fmt={fmt} /></Zoom>
+          <div className="m fanal-sub">Last 5 {unit5} — the green haze is what you kept.</div>
+          <Zoom title="Income vs spend" sub={`Last 5 ${unit5} — the green haze is what you kept.`}
+            note={<><b>How to read:</b> two bars per {unit5.slice(0, -1)} — income beside spending. When the income bar is taller, the gap between them is money you kept.</>}><IncomeVsSpend incomes={fin.incomes} expenses={fin.expenses} fmt={fmt} period={period} /></Zoom>
         </div>
         <div className="card fanal-card">
           <h3>Savings waterfall</h3>
-          <div className="m fanal-sub">This month: income stepping down to what you kept.</div>
-          <Zoom title="Savings waterfall" sub="This month: income stepping down to what you kept."
-            note={<><b>How to read:</b> start at the income bar on the left; every step down is one category&rsquo;s spending. The final bar is what survived the month — your savings.</>}><SavingsWaterfall incomes={fin.incomes} expenses={fin.expenses} fmt={fmt} /></Zoom>
+          <div className="m fanal-sub">{winLabel}: income stepping down to what you kept.</div>
+          <Zoom title="Savings waterfall" sub={`${winLabel}: income stepping down to what you kept.`}
+            note={<><b>How to read:</b> start at the income bar on the left; every step down is one category&rsquo;s spending. The final bar is what survived the range — your savings.</>}><SavingsWaterfall incomes={fin.incomes} expenses={fin.expenses} fmt={fmt} from={rangeFrom} /></Zoom>
         </div>
         <div className="card fanal-card">
           <h3>Weekend premium</h3>
-          <div className="m fanal-sub">Average daily spend, weekday vs weekend · last 8 weeks.</div>
-          <Zoom title="Weekend premium" sub="Average daily spend, weekday vs weekend · last 8 weeks."
-            note={<><b>How to read:</b> the two bars are your average spend on a weekday vs a weekend day. The multiplier says how much pricier your weekends run — most people&rsquo;s are 1.5–2×.</>}><WeekendPremium expenses={fin.expenses} fmt={fmt} /></Zoom>
+          <div className="m fanal-sub">Average daily spend, weekday vs weekend · {winLabel.toLowerCase()}.</div>
+          <Zoom title="Weekend premium" sub={`Average daily spend, weekday vs weekend · ${winLabel.toLowerCase()}.`}
+            note={<><b>How to read:</b> the two bars are your average spend on a weekday vs a weekend day. The multiplier says how much pricier your weekends run — most people&rsquo;s are 1.5–2×.</>}><WeekendPremium expenses={fin.expenses} fmt={fmt} from={rangeFrom} /></Zoom>
         </div>
         <div className="card fanal-card fanal-wide">
           <h3>Money flow</h3>
-          <div className="m fanal-sub">This month: income → categories → where it lands. Hover any ribbon.</div>
-          <Zoom title="Money flow" sub="This month: income → categories → where it lands."
-            note={<><b>How to read:</b> money flows left to right — income sources → spending categories → the merchants where it landed. Ribbon thickness is the amount; hover any ribbon for the exact figure. The green ribbon is money you kept.</>}><MoneyFlow incomes={fin.incomes} expenses={fin.expenses} fmt={fmt} /></Zoom>
+          <div className="m fanal-sub">{winLabel}: income → categories → where it lands. Hover any ribbon.</div>
+          <Zoom title="Money flow" sub={`${winLabel}: income → categories → where it lands.`}
+            note={<><b>How to read:</b> money flows left to right — income sources → spending categories → the merchants where it landed. Ribbon thickness is the amount; hover any ribbon for the exact figure. The green ribbon is money you kept.</>}><MoneyFlow incomes={fin.incomes} expenses={fin.expenses} fmt={fmt} from={rangeFrom} /></Zoom>
         </div>
         <div className="card fanal-card fanal-wide">
           <h3>Top merchants</h3>
-          <div className="m fanal-sub">Last 90 days — click a merchant for its habit math.</div>
-          <Zoom title="Top merchants" sub="Last 90 days — click a merchant for its habit math."
-            note={<><b>How to read:</b> your biggest destinations for money over 90 days, largest first; the ×&nbsp;count is visits. Click a bar to see the habit math — per-visit and per-month cost.</>}><TopMerchants expenses={expenses} fmt={fmt} /></Zoom>
+          <div className="m fanal-sub">{winLabel} — click a merchant for its habit math.</div>
+          <Zoom title="Top merchants" sub={`${winLabel} — click a merchant for its habit math.`}
+            note={<><b>How to read:</b> your biggest destinations for money in the chosen range, largest first; the ×&nbsp;count is visits. Click a bar to see the habit math — per-visit and per-month cost.</>}><TopMerchants expenses={expenses} fmt={fmt} from={rangeFrom} /></Zoom>
         </div>
       </div>
     )}

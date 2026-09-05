@@ -2110,3 +2110,89 @@ button:disabled{opacity:.5; cursor:not-allowed}
 /* truncated placeholders end in an ellipsis, never mid-letter */
 input::placeholder{text-overflow:ellipsis}
 input{text-overflow:ellipsis}
+
+/* ---------- Graph: space view + shape legend */
+/* The space backdrop forces its own palette locally, so every node, label
+ * and edge that reads the theme vars adapts without per-element overrides.
+ * Listed with the glass-theme selectors because those set the wrap's
+ * background at higher specificity. */
+.graphwrap.gspace,
+.graphwrap.graphfull.gspace,
+.vault.glass .graphwrap.gspace,
+.vault.glass.vivid .graphwrap.gspace,
+.vault.glass .graphwrap.graphfull.gspace:not(.gfull),
+.vault.glass .graphwrap.graphfull.gfull.gspace{
+  --panel:#0d142e; --field:#131f45; --bg:#0a1128;
+  --ink:#e8efff; --ink-soft:#9fb2d8; --line:rgba(151,180,255,.24);
+  /* the dark-theme accent palette: same hues, luminous enough to carry
+     text and nodes on the starfield */
+  --moss:#82B4E8; --moss-soft:#1D3350;
+  --gold:#5EC1DC; --gold-soft:#123240;
+  --blue:#93B6DE; --blue-soft:#20344E;
+  --violet:#9FA6EC; --violet-soft:#282D4F;
+  --azure:#6AB3EE; --azure-soft:#173553;
+  background:
+    radial-gradient(1.4px 1.4px at 11% 24%, rgba(255,255,255,.9) 45%, transparent 55%),
+    radial-gradient(1px 1px at 27% 68%, rgba(255,255,255,.7) 45%, transparent 55%),
+    radial-gradient(1.6px 1.6px at 41% 12%, rgba(255,255,255,.8) 45%, transparent 55%),
+    radial-gradient(1px 1px at 56% 84%, rgba(255,255,255,.6) 45%, transparent 55%),
+    radial-gradient(1.3px 1.3px at 68% 34%, rgba(255,255,255,.85) 45%, transparent 55%),
+    radial-gradient(1px 1px at 79% 62%, rgba(255,255,255,.65) 45%, transparent 55%),
+    radial-gradient(1.5px 1.5px at 88% 18%, rgba(255,255,255,.8) 45%, transparent 55%),
+    radial-gradient(1px 1px at 17% 88%, rgba(255,255,255,.6) 45%, transparent 55%),
+    radial-gradient(1px 1px at 93% 79%, rgba(255,255,255,.7) 45%, transparent 55%),
+    radial-gradient(900px 520px at 72% 6%, rgba(103,88,255,.18), transparent 60%),
+    radial-gradient(760px 480px at 14% 92%, rgba(0,170,255,.12), transparent 60%),
+    linear-gradient(180deg, #0a1128, #0d142e 55%, #0a0f24);
+  border-color:rgba(140,165,255,.28);
+  backdrop-filter:none; -webkit-backdrop-filter:none; box-shadow:none;
+}
+.graphwrap.gspace .graphkey{border-bottom-color:rgba(151,180,255,.18)}
+.graphwrap.gspace .gsearch{color:var(--ink)}
+/* the glass theme paints the floating toolbar pills white — in space they
+   must go dark or the (now light) text inside them washes out */
+.vault.glass .graphwrap.gspace .gk-search,
+.vault.glass .graphwrap.gspace .gk-row{background:rgba(15,23,52,.78); border-color:rgba(151,180,255,.26)}
+.vault.glass .graphwrap.gspace .gk-stats{background:rgba(15,23,52,.7); border-color:rgba(151,180,255,.22)}
+.vault.glass .graphwrap.gspace .gsearch{background:transparent}
+.vault.glass .graphwrap.gspace .gzoom{background:rgba(19,31,69,.85)}
+.graphwrap.gspace .gk-search .gsearch::placeholder{color:var(--ink-soft)}
+.graphwrap.gspace .gmode button.on{background:var(--violet); border-color:var(--violet); color:#0b1226}
+.graphwrap.gspace .kbtn{background:rgba(19,31,69,.85)}
+.graphwrap.gspace .kbtn:hover{background:var(--moss-soft)}
+/* nodes glow softly against the dark, so small dots stay findable */
+.graphwrap.gspace .gnode circle,
+.graphwrap.gspace .gnode rect{filter:drop-shadow(0 0 6px rgba(133,162,255,.4))}
+
+/* the shape legend: a tiny pill by default, expands to the chip row */
+.glegend-pill{display:inline-flex; align-items:center; gap:6px; font-size:11px;
+  font-family:"IBM Plex Mono", monospace; color:var(--ink-soft);
+  background:var(--field); border:1px solid var(--line); border-radius:999px;
+  padding:4px 12px; cursor:pointer; width:fit-content; line-height:1.4}
+.glegend-pill:hover{color:var(--ink); border-color:var(--ink-soft)}
+.glegend{display:flex; flex-wrap:wrap; align-items:center; gap:5px 14px;
+  font-size:11px; color:var(--ink-soft); font-family:"IBM Plex Mono", monospace;
+  background:var(--field); border:1px solid var(--line); border-radius:9px;
+  padding:5px 11px; width:fit-content; max-width:100%;
+  animation:glegend-in .18s ease}
+@keyframes glegend-in{from{opacity:0; transform:translateY(-4px)} to{opacity:1; transform:none}}
+.gl-close{background:none; border:none; color:var(--ink-soft); cursor:pointer;
+  font-size:11px; padding:0 0 0 2px; line-height:1}
+.gl-close:hover{color:var(--ink)}
+.gl-chip{display:inline-flex; align-items:center; gap:6px; white-space:nowrap}
+.gl-dot{width:10px; height:10px; border-radius:50%; display:inline-block; flex:none}
+.gl-diamond{width:9px; height:9px; transform:rotate(45deg); border-radius:2px;
+  background:var(--violet); display:inline-block; flex:none}
+.gl-untagged{background:transparent; border:1.5px dashed var(--ink-soft)}
+.gl-line{width:16px; height:0; border-top:2px solid var(--line); display:inline-block; flex:none}
+.gl-line.gl-gold{border-top:2px dashed var(--gold)}
+
+/* ---------- Finance analytics: the range/chart toggle floats below the
+   Finance featbar so it stays reachable while scrolling the charts */
+.fanal-sticky{top:68px; z-index:30}
+.fanal-sticky .charttabs{margin-left:auto}
+@media (max-width: 900px){
+  /* the featbar wraps to two rows on narrow screens — a second sticky bar
+     would overlap it, so this one rides in normal flow there */
+  .fanal-sticky{position:static}
+}

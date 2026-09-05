@@ -338,19 +338,20 @@ export function BudgetBurn({ expenses, budget, fmt }) {
 
 /* ---------- Top merchants: where the money actually goes, ranked. Fed by
  * expense descriptions (statement imports make these merchant names). */
-export function TopMerchants({ expenses, fmt }) {
+export function TopMerchants({ expenses, fmt, from }) {
   const [sel, setSel] = React.useState(null);   // click a row → the habit card
   const rows = useMemo(() => {
     const by = new Map();
     expenses.forEach((e) => {
-      if (daysAgo(e.date) > 90) return;
+      /* `from` scopes to the caller's range; without it, the last 90 days */
+      if (from ? !(e.date && e.date >= from) : daysAgo(e.date) > 90) return;
       const key = (e.desc || "—").trim().replace(/\s+/g, " ").toUpperCase().slice(0, 28);
       const cur = by.get(key) || { total: 0, n: 0 };
       cur.total += +e.amount || 0; cur.n += 1;
       by.set(key, cur);
     });
     return [...by.entries()].sort((a, b) => b[1].total - a[1].total).slice(0, 5);
-  }, [expenses]);
+  }, [expenses, from]);
 
   if (!rows.length) return <div className="m" style={{ color: "var(--ink-soft)" }}>No expenses in the last 90 days yet.</div>;
   const max = rows[0][1].total;
@@ -535,7 +536,7 @@ export function TaskRhythm({ doneDates, range = "week" }) {
 
 /* ---------- Money flow: income → categories → merchants for this month,
  * as a Sankey. Ribbon width is dollars — one picture of the whole month. */
-export function MoneyFlow({ incomes, expenses, fmt }) {
+export function MoneyFlow({ incomes, expenses, fmt, from }) {
   const { ref, tip, show, hide } = useChartTip();
   /* render at the card's REAL width — a stretched viewBox distorts text and
      pushes the right-column labels out of the card */
@@ -549,9 +550,10 @@ export function MoneyFlow({ incomes, expenses, fmt }) {
   }, [ref]);
 
   const model = useMemo(() => {
+    /* `from` scopes the flow to the caller's range; without it, this month */
     const ym = new Date().toISOString().slice(0, 7);
-    const exp = expenses.filter((e) => e.date?.startsWith(ym));
-    const inc = incomes.filter((i) => i.date?.startsWith(ym));
+    const exp = from ? expenses.filter((e) => e.date && e.date >= from) : expenses.filter((e) => e.date?.startsWith(ym));
+    const inc = from ? incomes.filter((i) => i.date && i.date >= from) : incomes.filter((i) => i.date?.startsWith(ym));
     if (!exp.length) return null;
 
     const catTotals = {};
@@ -563,7 +565,7 @@ export function MoneyFlow({ incomes, expenses, fmt }) {
     const merged = {};
     sources.forEach(([n, v]) => { merged[n] = (merged[n] || 0) + v; });
     sources = Object.entries(merged).sort((a, b) => b[1] - a[1]).slice(0, 3);
-    if (!sources.length) sources = [["This month's spending", spendTotal]];
+    if (!sources.length) sources = [["Spending", spendTotal]];
 
     /* income above spending doesn't vanish — it flows to an explicit Saved
        node, which keeps the picture honest AND is the happiest ribbon here */
@@ -578,9 +580,9 @@ export function MoneyFlow({ incomes, expenses, fmt }) {
     });
     const merchants = Object.entries(merchTotals).sort((a, b) => b[1].v - a[1].v).slice(0, 4);
     return { sources, cats, merchants, spendTotal };
-  }, [incomes, expenses]);
+  }, [incomes, expenses, from]);
 
-  if (!model) return <div className="m" style={{ color: "var(--ink-soft)" }}>No expenses this month yet — the flow draws itself as you spend.</div>;
+  if (!model) return <div className="m" style={{ color: "var(--ink-soft)" }}>No expenses in this range yet — the flow draws itself as you spend.</div>;
   const { sources, cats, merchants } = model;
 
   const W = Math.max(320, w || 560);
@@ -700,18 +702,27 @@ export function MoneyFlow({ incomes, expenses, fmt }) {
 
 /* ---------- Category shifts: this month vs last, per category — the
  * headline version of the trend charts. Red grows, green shrinks. */
-export function CategoryShifts({ expenses, fmt }) {
+export function CategoryShifts({ expenses, fmt, from }) {
   const rows = useMemo(() => {
+    /* with `from`, compare the range against the equal-length window before
+       it; without it, this calendar month vs last */
     const now = new Date();
     const thisYm = now.toISOString().slice(0, 7);
     const lastD = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     const lastYm = `${lastD.getFullYear()}-${String(lastD.getMonth() + 1).padStart(2, "0")}`;
+    let prevFrom = null;
+    if (from) {
+      const winDays = Math.max(1, daysAgo(from));
+      const d = new Date(from + "T00:00:00");
+      d.setDate(d.getDate() - winDays);
+      prevFrom = d.toISOString().slice(0, 10);
+    }
     const by = {};
     expenses.forEach((e) => {
       const c = e.cat || "Other";
       by[c] = by[c] || { cur: 0, prev: 0, weeks: Array(8).fill(0) };
-      if (e.date?.startsWith(thisYm)) by[c].cur += +e.amount || 0;
-      if (e.date?.startsWith(lastYm)) by[c].prev += +e.amount || 0;
+      if (from ? (e.date && e.date >= from) : e.date?.startsWith(thisYm)) by[c].cur += +e.amount || 0;
+      if (from ? (e.date && e.date >= prevFrom && e.date < from) : e.date?.startsWith(lastYm)) by[c].prev += +e.amount || 0;
       const w = Math.floor(daysAgo(e.date) / 7);
       if (w >= 0 && w < 8) by[c].weeks[7 - w] += +e.amount || 0;
     });
@@ -723,9 +734,9 @@ export function CategoryShifts({ expenses, fmt }) {
         const pct = v.prev > 0 ? Math.round(((v.cur - v.prev) / v.prev) * 100) : (v.cur > 0 ? null : 0);
         return { cat, ...v, pct };
       });
-  }, [expenses]);
+  }, [expenses, from]);
 
-  if (!rows.length) return <div className="m" style={{ color: "var(--ink-soft)" }}>Two months of expenses make this light up.</div>;
+  if (!rows.length) return <div className="m" style={{ color: "var(--ink-soft)" }}>Two periods of expenses make this light up.</div>;
   return (
     <div className="shifts">
       {rows.map((r) => {
@@ -734,7 +745,7 @@ export function CategoryShifts({ expenses, fmt }) {
         const pts = r.weeks.map((v, i) => `${i * 34},${26 - (v / max) * 22}`).join(" ");
         return (
           <div key={r.cat} className="shift-row"
-            data-tip={`${r.cat}: ${fmt(Math.round(r.cur))} this month vs ${fmt(Math.round(r.prev))} last month`}>
+            data-tip={`${r.cat}: ${fmt(Math.round(r.cur))} this ${from ? "period" : "month"} vs ${fmt(Math.round(r.prev))} the ${from ? "period" : "month"} before`}>
             <span className="shift-name">{r.cat}</span>
             <svg className="shift-spark" viewBox="0 0 238 30" preserveAspectRatio="none" aria-hidden="true">
               <polyline points={pts} fill="none" strokeWidth="2.5" strokeLinejoin="round"
@@ -788,18 +799,37 @@ export function CaptureSources({ items, importedCount }) {
 
 /* ---------- Income vs spend: paired monthly bars with the kept-money gap
  * shaded green — savings made visible instead of implied. */
-export function IncomeVsSpend({ incomes, expenses, fmt }) {
+export function IncomeVsSpend({ incomes, expenses, fmt, period = "monthly" }) {
   const { ref, tip, show, hide } = useChartTip();
   const months = useMemo(() => {
+    /* five buckets of whatever unit the caller's range toggle picked */
     const now = new Date();
+    const iso10 = (d) => d.toISOString().slice(0, 10);
+    const sumIn = (from, to) => incomes.filter((x) => x.date && x.date >= from && x.date <= to).reduce((a, x) => a + (+x.amount || 0), 0);
+    const sumSp = (from, to) => expenses.filter((x) => x.date && x.date >= from && x.date <= to).reduce((a, x) => a + (+x.amount || 0), 0);
     return Array.from({ length: 5 }, (_, i) => {
-      const d = new Date(now.getFullYear(), now.getMonth() - (4 - i), 1);
-      const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-      const inc = incomes.filter((x) => x.date?.startsWith(ym)).reduce((a, x) => a + (+x.amount || 0), 0);
-      const sp = expenses.filter((x) => x.date?.startsWith(ym)).reduce((a, x) => a + (+x.amount || 0), 0);
-      return { label: d.toLocaleDateString(undefined, { month: "short" }), inc, sp };
+      let label, from, to;
+      if (period === "daily") {
+        const d = new Date(now); d.setDate(now.getDate() - (4 - i));
+        from = to = iso10(d);
+        label = `${d.getDate()}/${d.getMonth() + 1}`;
+      } else if (period === "weekly") {
+        const end = new Date(now); end.setDate(now.getDate() - (4 - i) * 7);
+        const start = new Date(end); start.setDate(end.getDate() - 6);
+        from = iso10(start); to = iso10(end);
+        label = `${start.getDate()}/${start.getMonth() + 1}`;
+      } else if (period === "yearly") {
+        const y = now.getFullYear() - (4 - i);
+        from = `${y}-01-01`; to = `${y}-12-31`;
+        label = String(y);
+      } else {
+        const d = new Date(now.getFullYear(), now.getMonth() - (4 - i), 1);
+        from = iso10(d); to = iso10(new Date(d.getFullYear(), d.getMonth() + 1, 0));
+        label = d.toLocaleDateString(undefined, { month: "short" });
+      }
+      return { label, inc: sumIn(from, to), sp: sumSp(from, to) };
     });
-  }, [incomes, expenses]);
+  }, [incomes, expenses, period]);
 
   const max = Math.max(...months.map((m) => Math.max(m.inc, m.sp)), 1) * 1.1;
   const W = 560, H = 210, pad = 14, gw = (W - pad * 2) / 5;
@@ -830,12 +860,14 @@ export function IncomeVsSpend({ incomes, expenses, fmt }) {
 
 /* ---------- Savings waterfall: this month as a staircase — income at the
  * left, categories stepping down, what you kept at the right. */
-export function SavingsWaterfall({ incomes, expenses, fmt }) {
+export function SavingsWaterfall({ incomes, expenses, fmt, from }) {
   const model = useMemo(() => {
+    /* `from` scopes the staircase to the caller's range; without it, this month */
     const ym = new Date().toISOString().slice(0, 7);
-    const income = incomes.filter((x) => x.date?.startsWith(ym)).reduce((a, x) => a + (+x.amount || 0), 0);
+    const inWin = (x) => (from ? x.date && x.date >= from : x.date?.startsWith(ym));
+    const income = incomes.filter(inWin).reduce((a, x) => a + (+x.amount || 0), 0);
     const byCat = {};
-    expenses.filter((x) => x.date?.startsWith(ym)).forEach((e) => {
+    expenses.filter(inWin).forEach((e) => {
       byCat[e.cat || "Other"] = (byCat[e.cat || "Other"] || 0) + (+e.amount || 0);
     });
     let cats = Object.entries(byCat).sort((a, b) => b[1] - a[1]);
@@ -843,9 +875,9 @@ export function SavingsWaterfall({ incomes, expenses, fmt }) {
     const spend = cats.reduce((a, [, v]) => a + v, 0);
     if (!income || !spend) return null;
     return { income, cats, saved: income - spend };
-  }, [incomes, expenses]);
+  }, [incomes, expenses, from]);
 
-  if (!model) return <div className="m" style={{ color: "var(--ink-soft)" }}>Log income and expenses this month and the staircase appears.</div>;
+  if (!model) return <div className="m" style={{ color: "var(--ink-soft)" }}>Log income and expenses in this range and the staircase appears.</div>;
   const { income, cats, saved } = model;
   const steps = [["Income", income, "var(--moss)", "start"],
     ...cats.map(([n, v], i) => [n, -v, ["var(--gold)", "var(--violet)", "var(--azure)", "var(--blue)"][i % 4], "drop"]),
@@ -879,12 +911,13 @@ export function SavingsWaterfall({ incomes, expenses, fmt }) {
 
 /* ---------- Weekend premium: weekday vs weekend average daily spend.
  * One ratio, instantly felt. */
-export function WeekendPremium({ expenses, fmt }) {
+export function WeekendPremium({ expenses, fmt, from }) {
   const m = useMemo(() => {
     let wd = 0, we = 0, wdDays = 0, weDays = 0;
     const seen = new Set();
     expenses.forEach((e) => {
-      if (!e.date || daysAgo(e.date) > 56) return;
+      /* `from` scopes to the caller's range; without it, the last 8 weeks */
+      if (!e.date || (from ? e.date < from : daysAgo(e.date) > 56)) return;
       const day = new Date(e.date + "T00:00:00").getDay();
       const isWe = day === 0 || day === 6;
       if (isWe) we += +e.amount || 0; else wd += +e.amount || 0;
@@ -893,7 +926,7 @@ export function WeekendPremium({ expenses, fmt }) {
     if (!wdDays || !weDays) return null;
     const a = wd / Math.max(wdDays, 1), b = we / Math.max(weDays, 1);
     return { a, b, ratio: (b / Math.max(a, 0.01)).toFixed(1) };
-  }, [expenses]);
+  }, [expenses, from]);
 
   if (!m) return <div className="m" style={{ color: "var(--ink-soft)" }}>A few weeks of expenses make this comparison meaningful.</div>;
   const max = Math.max(m.a, m.b);

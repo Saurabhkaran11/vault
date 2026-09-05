@@ -13,7 +13,7 @@ import { SECTIONS } from "@/lib/seed";
 
 const MAX_NODES = 500;
 
-export default function Graph3D({ items, query, onOpenTag, onOpenSection }) {
+export default function Graph3D({ items, query, space, onOpenTag, onOpenSection }) {
   const wrapRef = useRef(null);
   const boxRef = useRef(null);         // the bordered canvas box itself
   const fgRef = useRef();
@@ -50,9 +50,12 @@ export default function Graph3D({ items, query, onOpenTag, onOpenSection }) {
       } catch { return "#5B6675"; }
     };
 
+    /* on the space backdrop the light-theme section blues read muddy —
+       swap in the dark-palette variants (same hues, more luminous) */
+    const SPACE_COLORS = { note: "#82B4E8", video: "#6AB3EE", book: "#5EC1DC", doc: "#93B6DE" };
     const nodes = pool.map((it) => ({
       id: `i${it.id}`, name: it.alias || it.title, kind: "item", type: it.type,
-      color: cssColor(SECTIONS[it.type]?.color),
+      color: (space && SPACE_COLORS[it.type]) || cssColor(SECTIONS[it.type]?.color),
     }));
     const links = [];
     const seen = new Set();
@@ -66,14 +69,16 @@ export default function Graph3D({ items, query, onOpenTag, onOpenSection }) {
     if (showTags) {
       const counts = {};
       pool.forEach((it) => it.tags?.forEach((t) => { counts[t] = (counts[t] || 0) + 1; }));
-      Object.entries(counts).forEach(([t, n]) => nodes.push({ id: `t${t}`, name: `#${t}`, kind: "tag", tag: t, color: "#6C4FB0", count: n }));
+      Object.entries(counts).forEach(([t, n]) => nodes.push({ id: `t${t}`, name: `#${t}`, kind: "tag", tag: t, color: space ? "#9FA6EC" : "#6C4FB0", count: n }));
       pool.forEach((it) => it.tags?.forEach((t) => links.push({ source: `i${it.id}`, target: `t${t}`, kind: "tag" })));
     }
     const deg = {};
     links.forEach((l) => { deg[l.source] = (deg[l.source] || 0) + 1; deg[l.target] = (deg[l.target] || 0) + 1; });
     nodes.forEach((n) => { n.val = 1.5 + Math.min(14, (deg[n.id] || 0) * 1.6); });
     return { nodes, links };
-  }, [items, query, showTags]);
+    /* `space` is a dep so label sprites rebuild with dark-aware colors —
+       nodeThreeObject results are cached per data identity otherwise */
+  }, [items, query, showTags, space]);
 
   /* the orbit controls only exist once the WebGL scene mounts — poll briefly */
   useEffect(() => {
@@ -111,13 +116,13 @@ export default function Graph3D({ items, query, onOpenTag, onOpenSection }) {
               if (!fewNodes) return undefined;
               const label = n.name.length > 22 ? n.name.slice(0, 21) + "…" : n.name;
               const sprite = new SpriteText(label);
-              sprite.color = n.kind === "tag" ? "#6C4FB0" : "#4A5563";
+              sprite.color = n.kind === "tag" ? (space ? "#B4A6F2" : "#6C4FB0") : (space ? "#C7D2E8" : "#4A5563");
               sprite.textHeight = n.kind === "tag" ? 3.6 : 3.1;
               sprite.position.y = -(7 + Math.sqrt(n.val) * 2.2);
               return sprite;
             }}
             nodeThreeObjectExtend={true}
-            linkColor={(l) => (l.kind === "link" ? "#A87718" : "#AEB9C9")}
+            linkColor={(l) => (l.kind === "link" ? (space ? "#E0B44C" : "#A87718") : (space ? "#65779F" : "#AEB9C9"))}
             linkOpacity={0.5}
             linkWidth={(l) => (l.kind === "link" ? 1.4 : 0.5)}
             linkDirectionalParticles={(l) => (l.kind === "link" ? 2 : 0)}
