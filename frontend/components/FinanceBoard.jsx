@@ -718,6 +718,16 @@ export default function FinanceBoard({ range: globalRange, onRange } = {}) {
           <button className={tab === "analytics" ? "on" : ""} role="tab" aria-selected={tab === "analytics"}
             onClick={() => setTab("analytics")}>◔ Analytics</button>
         </div>
+        {/* the report range rides IN the floating bar on analytics, so it
+           follows every scroll at any window width */}
+        {tab === "analytics" && (
+          <div className="doctabs" role="tablist" aria-label="Report period" style={{ display: "inline-flex" }}>
+            {[["day", "Daily"], ["week", "Weekly"], ["month", "Monthly"], ["year", "Yearly"]].map(([k, label]) => (
+              <button key={k} className={(globalRange || "day") === k ? "on" : ""} role="tab"
+                aria-selected={(globalRange || "day") === k} onClick={() => onRange?.(k)}>{label}</button>
+            ))}
+          </div>
+        )}
         <button className="btn sm" onClick={() => setStmtOpen(true)}
           title="Upload a credit-card or bank statement — Vault extracts name, amount, date and time for every transaction">＋ Import statement</button>
         <details className="dl-menu">

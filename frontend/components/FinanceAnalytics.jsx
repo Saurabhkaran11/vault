@@ -155,7 +155,6 @@ export default function FinanceAnalytics({ fin, fmt, spentByCat = {}, savingsRat
   const budgets = fin.budgets || { overall: null, byCat: {} };
   /* follows the app-wide range toggle, and pushes changes back to it */
   const G2P = { day: "daily", week: "weekly", month: "monthly", year: "yearly" };
-  const P2G = { daily: "day", weekly: "week", monthly: "month", yearly: "year" };
   const [period, setPeriod] = useState(G2P[globalRange] || "daily");
   useEffect(() => { if (globalRange && G2P[globalRange] !== period) setPeriod(G2P[globalRange]); /* eslint-disable-line react-hooks/exhaustive-deps */ }, [globalRange]);
   const [chart, setChart] = useState("bar");
@@ -283,26 +282,21 @@ export default function FinanceAnalytics({ fin, fmt, spentByCat = {}, savingsRat
 
   return (
     <>
-    {/* the range + chart-type controls float just under the Finance featbar,
-       so switching Daily/Weekly/Monthly/Yearly never needs a scroll back up */}
-    <div className="featbar fanal-sticky">
-      <div className="doctabs" role="tablist" aria-label="Report period" style={{ display: "inline-flex" }}>
-        {PERIODS.map((p) => (
-          <button key={p.key} className={period === p.key ? "on" : ""} role="tab"
-            aria-selected={period === p.key} onClick={() => { setPeriod(p.key); onRange?.(P2G[p.key]); }}>{p.label}</button>
-        ))}
-      </div>
-      <div className="charttabs" role="group" aria-label="Chart type">
-        {CHARTS.map(([k, label]) => (
-          <button key={k} className={chart === k ? "on" : ""}
-            aria-pressed={chart === k} onClick={() => setChart(k)}
-            title={k === "donut" ? "Share of spending by category" : `${label.slice(2)} chart over time`}>
-            {label}
-          </button>
-        ))}
-      </div>
-    </div>
+    {/* the Daily/Weekly/Monthly/Yearly toggle lives in FinanceBoard's
+       floating featbar (it must float at every width); only the
+       chart-type picker stays here with the chart it controls */}
     <div className="card">
+      <div className="fanal-head">
+        <div className="charttabs" role="group" aria-label="Chart type">
+          {CHARTS.map(([k, label]) => (
+            <button key={k} className={chart === k ? "on" : ""}
+              aria-pressed={chart === k} onClick={() => setChart(k)}
+              title={k === "donut" ? "Share of spending by category" : `${label.slice(2)} chart over time`}>
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
       <div className="fanal-stats">
         <span><b>{fmt(total)}</b> total in this {periodName.toLowerCase()} range</span>
         <span><b>{fmt(avg)}</b> avg per active {period === "daily" ? "day" : period === "weekly" ? "week" : period === "monthly" ? "month" : "year"}</span>

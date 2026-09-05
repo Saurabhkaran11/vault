@@ -2187,12 +2187,5 @@ input{text-overflow:ellipsis}
 .gl-line{width:16px; height:0; border-top:2px solid var(--line); display:inline-block; flex:none}
 .gl-line.gl-gold{border-top:2px dashed var(--gold)}
 
-/* ---------- Finance analytics: the range/chart toggle floats below the
-   Finance featbar so it stays reachable while scrolling the charts */
-.fanal-sticky{top:68px; z-index:30}
-.fanal-sticky .charttabs{margin-left:auto}
-@media (max-width: 900px){
-  /* the featbar wraps to two rows on narrow screens — a second sticky bar
-     would overlap it, so this one rides in normal flow there */
-  .fanal-sticky{position:static}
-}
+/* (the finance range toggle now lives inside the floating .featbar itself —
+   see FinanceBoard — so it follows scrolling at every window width) */
