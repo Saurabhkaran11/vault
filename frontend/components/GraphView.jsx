@@ -129,6 +129,15 @@ export default function GraphView({ items, onOpenTag, onOpenSection }) {
   const [query, setQuery] = useState("");
   const [mode, setMode] = useState("web");   // "web" | "cosmos" | "explorer" | "3d"
   const [full, setFull] = useState(false);   // full-page takeover
+  /* space view: dark starfield backdrop — read after mount so SSR markup matches */
+  const [space, setSpace] = useState(false);
+  useEffect(() => { try { if (localStorage.getItem("vault.graph.space") === "1") setSpace(true); } catch { /* private mode */ } }, []);
+  const toggleSpace = () => setSpace((s) => {
+    const v = !s;
+    try { localStorage.setItem("vault.graph.space", v ? "1" : "0"); } catch { /* private mode */ }
+    return v;
+  });
+  const [legendOpen, setLegendOpen] = useState(false);
   useEffect(() => {
     if (!full) return;
     const onKey = (e) => { if (e.key === "Escape") setFull(false); };
@@ -341,7 +350,7 @@ export default function GraphView({ items, onOpenTag, onOpenSection }) {
   if (!items.length) return <div className="empty">Nothing to map yet — add a few items with #tags and the graph draws itself.</div>;
 
   return (
-    <div className={`graphwrap graphfull${full ? " gfull" : ""}`}>
+    <div className={`graphwrap graphfull${full ? " gfull" : ""}${space ? " gspace" : ""}`}>
       <div className="graphkey">
         {/* row 1 — the floating search pill, dashboard-style */}
         {mode !== "explorer" && (
@@ -371,11 +380,36 @@ export default function GraphView({ items, onOpenTag, onOpenSection }) {
             <button onClick={() => { setView({ k: 1, x: 0, y: 0 }); seedPositions(true); tick((t) => t + 1); }} title="Reset view & re-settle" aria-label="Reset view">⤢</button>
           </span>
           )}
+          <button className={`kbtn gspace-btn ${space ? "on" : ""}`} onClick={toggleSpace}
+            title={space ? "Back to the paper backdrop" : "Space view — dark starfield backdrop, brighter dots"}>
+            🌌 Space
+          </button>
           <button className={`kbtn gfull-btn ${full ? "on" : ""}`} onClick={() => setFull((f) => !f)}
             title={full ? "Back to the page (Esc works too)" : "Take over the whole page"}>
             {full ? "🗕 Exit full page" : "⛶ Full page"}
           </button>
         </div>
+        {/* legend — a tiny pill until asked, so it never crowds the map:
+         * ◆ diamonds are tags, ● dots are items (colored by section) */}
+        {(mode === "web" || mode === "cosmos") && (legendOpen ? (
+          <div className="glegend" aria-label="What the shapes mean">
+            <span className="gl-chip"><span className="gl-diamond" aria-hidden="true" />tag</span>
+            {Object.values(SECTIONS).map((s) => (
+              <span key={s.label} className="gl-chip"><span className="gl-dot" style={{ background: s.color }} aria-hidden="true" />{s.label}</span>
+            ))}
+            <span className="gl-chip"><span className="gl-dot gl-untagged" aria-hidden="true" />untagged · +N</span>
+            <span className="gl-chip"><span className="gl-line gl-gold" aria-hidden="true" />item↔item</span>
+            <span className="gl-chip"><span className="gl-line" aria-hidden="true" />tag link</span>
+            <button className="gl-close" onClick={() => setLegendOpen(false)} aria-label="Collapse legend">✕</button>
+          </div>
+        ) : (
+          <button className="glegend-pill" onClick={() => setLegendOpen(true)}
+            title="What do the shapes and colors mean?">
+            <span className="gl-diamond" aria-hidden="true" />
+            <span className="gl-dot" style={{ background: "var(--moss)" }} aria-hidden="true" />
+            Legend
+          </button>
+        ))}
         {/* row 3 — the quiet stats line */}
         {mode === "web" && (
           <span className="gk-stats mono">
@@ -389,7 +423,7 @@ export default function GraphView({ items, onOpenTag, onOpenSection }) {
       ) : mode === "explorer" ? (
         <GraphExplorer items={items} onOpenTag={onOpenTag} onOpenSection={onOpenSection} />
       ) : mode === "3d" ? (
-        <Graph3D items={items} query={query} onOpenTag={onOpenTag} onOpenSection={onOpenSection} />
+        <Graph3D items={items} query={query} space={space} onOpenTag={onOpenTag} onOpenSection={onOpenSection} />
       ) : (
       <svg ref={svgRef} viewBox={`0 0 ${W} ${H}`} role="img"
         aria-label="Live force-directed map of your items grouped by project tag"
@@ -418,7 +452,9 @@ export default function GraphView({ items, onOpenTag, onOpenSection }) {
                 onMouseEnter={() => setHover(key)} onMouseLeave={() => setHover(null)}
                 onPointerDown={onNodeDown(key)}
                 onClick={onNodeClick(key, () => onOpenTag(t))}>
-                <circle cx={h.x} cy={h.y} r={24} fill="var(--violet)" stroke="var(--panel)" strokeWidth="3" />
+                <rect x={h.x - 19} y={h.y - 19} width={38} height={38} rx={9}
+                  transform={`rotate(45 ${h.x} ${h.y})`}
+                  fill="var(--violet)" stroke="var(--panel)" strokeWidth="3" />
                 <text x={h.x} y={h.y + 4} textAnchor="middle" fontSize="12" fontFamily="IBM Plex Mono" fontWeight="600" fill="#fff" style={{ pointerEvents: "none" }}>{g.counts[t]}</text>
                 <text className="gtext" x={h.x} y={h.y - 33} textAnchor="middle" fontSize="16" fontFamily="Fraunces" fontWeight="650" fill="var(--ink)" style={{ pointerEvents: "none" }}>#{t}</text>
               </g>
@@ -439,7 +475,9 @@ export default function GraphView({ items, onOpenTag, onOpenSection }) {
                 onMouseEnter={() => setHover(key)} onMouseLeave={() => setHover(null)}
                 onPointerDown={onNodeDown(key)}>
                 <title>{`${g.untagged} untagged item${g.untagged === 1 ? "" : "s"} — add a #tag to file them`}</title>
-                <circle cx={h.x} cy={h.y} r={24} fill="var(--ink-soft)" stroke="var(--panel)" strokeWidth="3" strokeDasharray="4 4" />
+                <rect x={h.x - 19} y={h.y - 19} width={38} height={38} rx={9}
+                  transform={`rotate(45 ${h.x} ${h.y})`}
+                  fill="var(--ink-soft)" stroke="var(--panel)" strokeWidth="3" strokeDasharray="4 4" />
                 <text x={h.x} y={h.y + 4} textAnchor="middle" fontSize="12" fontFamily="IBM Plex Mono" fontWeight="600" fill="#fff" style={{ pointerEvents: "none" }}>{g.untagged}</text>
                 <text className="gtext" x={h.x} y={h.y - 33} textAnchor="middle" fontSize="16" fontFamily="Fraunces" fontWeight="650" fill="var(--ink-soft)" style={{ pointerEvents: "none" }}>Untagged</text>
               </g>
@@ -467,8 +505,8 @@ export default function GraphView({ items, onOpenTag, onOpenSection }) {
                 onPointerDown={onNodeDown(n.key)}
                 onClick={onNodeClick(n.key, () => onOpenSection(n.it.type))}>
                 <title>{`${s.label}: ${n.it.title} — drag me, click to open`}</title>
-                <circle cx={p.x} cy={p.y} r={10} fill={s.color} stroke="var(--panel)" strokeWidth="2.5" />
-                <text x={p.x} y={p.y + 3.5} textAnchor="middle" fontSize="9" fill="#fff" style={{ pointerEvents: "none" }}>{s.icon}</text>
+                <circle cx={p.x} cy={p.y} r={11.5} fill={s.color} stroke="var(--panel)" strokeWidth="2.5" />
+                <text x={p.x} y={p.y + 3.7} textAnchor="middle" fontSize="10" fill="#fff" style={{ pointerEvents: "none" }}>{s.icon}</text>
                 {(showItemLabels || hover === n.key) && (
                   <text className="gtext" x={p.x} y={p.y + 24} textAnchor="middle" fontSize={13 / Math.max(1, view.k * 0.8)} fontFamily="Public Sans"
                     fill={hover === n.key ? "var(--ink)" : "var(--ink-soft)"} fontWeight={hover === n.key ? 600 : 400}
@@ -820,7 +858,7 @@ function CosmosGraph({ items, query, onOpenTag, onOpenSection }) {
             if (!p) return null;
             const d = g.deg[n.key] || 0;
             const isTag = n.kind === "tag";
-            const r = isTag ? 6 + Math.min(11, Math.sqrt(n.count) * 2.4) : 4.5 + Math.min(13, Math.sqrt(d) * 3);
+            const r = isTag ? 6.5 + Math.min(11, Math.sqrt(n.count) * 2.4) : 5.5 + Math.min(13, Math.sqrt(d) * 3);
             const color = isTag ? "var(--violet)" : (SECTIONS[n.it.type]?.color || "var(--ink-soft)");
             const label = isTag ? `#${n.tag}` : (n.it.alias || n.it.title);
             const lop = hover === n.key || (connected && connected.has(n.key)) ? 1 : labelOp;
@@ -836,9 +874,15 @@ function CosmosGraph({ items, query, onOpenTag, onOpenSection }) {
                 {(hover === n.key || focus === n.key) && (
                   <circle cx={p.x} cy={p.y} r={r + 7} fill={color} opacity="0.18" style={{ pointerEvents: "none" }} />
                 )}
-                <circle cx={p.x} cy={p.y} r={r} fill={color}
-                  opacity={isTag ? 0.85 : 1}
-                  stroke={focus === n.key ? "var(--ink)" : "var(--panel)"} strokeWidth={(focus === n.key ? 2.5 : 1.8) / Math.max(1, view.k * 0.7)} />
+                {isTag ? (
+                  /* tags are diamonds, items are dots — tell them apart at any zoom */
+                  <rect x={p.x - r} y={p.y - r} width={r * 2} height={r * 2} rx={r * 0.35}
+                    transform={`rotate(45 ${p.x} ${p.y})`} fill={color} opacity="0.92"
+                    stroke={focus === n.key ? "var(--ink)" : "var(--panel)"} strokeWidth={(focus === n.key ? 2.5 : 1.8) / Math.max(1, view.k * 0.7)} />
+                ) : (
+                  <circle cx={p.x} cy={p.y} r={r} fill={color}
+                    stroke={focus === n.key ? "var(--ink)" : "var(--panel)"} strokeWidth={(focus === n.key ? 2.5 : 1.8) / Math.max(1, view.k * 0.7)} />
+                )}
                 {lop > 0.02 && (
                   <text className="gtext" x={p.x} y={p.y + r + 13 / Math.max(1, view.k * 0.8)} textAnchor="middle"
                     fontSize={(isTag ? 12.5 : 11.5) / Math.max(1, view.k * 0.8)}
@@ -854,7 +898,7 @@ function CosmosGraph({ items, query, onOpenTag, onOpenSection }) {
           })}
         </g>
         <text x={W - 8} y={H - 10} textAnchor="end" fontSize="11" fontFamily="IBM Plex Mono" fill="var(--ink-soft)">
-          size = connections · solid = direct link · dashed = shared tag · double-click any star to focus its neighborhood
+          size = connections · ◆ tag · ● item · solid = direct link · dashed = shared tag · double-click any star to focus its neighborhood
         </text>
       </svg>
     </div>
