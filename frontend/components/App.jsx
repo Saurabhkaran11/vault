@@ -1069,7 +1069,9 @@ export default function App() {
   };
 
   return (
-    <div className={`vault ${profile?.glass === false ? "" : profile?.glass === "vivid" ? "glass vivid" : "glass"}`}>
+    <div className={`vault ${(profile?.design || "glass") === "glass"
+      ? (profile?.glass === false ? "" : profile?.glass === "vivid" ? "glass vivid" : "glass")
+      : `design-${profile.design}`}`}>
       {storageWarn && (
         <div className={`storage-warn ${storageWarn}`} role="alert">
           {storageWarn === "full"
@@ -1195,9 +1197,41 @@ export default function App() {
 
               <details className="setfold"><summary className="setfold-head"><span>🎨 Appearance</span><span className="cardsub mono">theme · colours · fonts ▾</span></summary>
               <div className="set-sec">
-                <button className="menu-item" onClick={() => setProfile({ ...profile, theme: profile.theme === "dark" ? "light" : "dark" })}>
-                  {profile.theme === "dark" ? "☀ Light mode" : "◐ Dark mode"} <span className="menukey kbd">{keymap.theme.toUpperCase()}</span>
-                </button>
+                {/* explicit Light | Dark control (the keyboard shortcut still toggles) */}
+                <div className="conn-row">
+                  <span>Theme</span>
+                  <span className="cardsub mono">shortcut: {keymap.theme.toUpperCase()}</span>
+                </div>
+                <div className="doctabs" role="tablist" aria-label="Theme" style={{ display: "inline-flex", marginBottom: 10 }}>
+                  <button className={profile.theme !== "dark" ? "on" : ""} role="tab" aria-selected={profile.theme !== "dark"}
+                    onClick={() => setProfile({ ...profile, theme: "light" })}>☀ Light</button>
+                  <button className={profile.theme === "dark" ? "on" : ""} role="tab" aria-selected={profile.theme === "dark"}
+                    onClick={() => setProfile({ ...profile, theme: "dark" })}>◐ Dark</button>
+                </div>
+
+                {/* design language — each restyles every card, bar and button */}
+                <div className="conn-row">
+                  <span>Design style</span>
+                  <span className="cardsub mono">{({ glass: "Glassmorphism", skeuo: "Classic Skeuomorphism", neu: "Neumorphism", minimal: "Minimalism", clay: "Claymorphism" })[profile.design || "glass"]}</span>
+                </div>
+                <div className="design-pick" role="group" aria-label="Design style">
+                  {[
+                    ["glass", "❄ Glassmorphism", "Frosted, translucent cards over a soft ambient wash"],
+                    ["skeuo", "📜 Classic Skeuomorphism", "Beveled, tactile surfaces with real-world depth"],
+                    ["neu", "🫧 Neumorphism", "Soft shapes extruded from the background itself"],
+                    ["minimal", "▭ Minimalism", "Flat and quiet — thin borders, zero shadows"],
+                    ["clay", "🏺 Claymorphism", "Puffy, rounded 3D clay with playful depth"],
+                  ].map(([id, label, hint]) => {
+                    const on = (profile.design || "glass") === id;
+                    return (
+                      <button key={id} type="button" className={"menu-item design-opt" + (on ? " on" : "")}
+                        aria-pressed={on} title={hint}
+                        onClick={() => setProfile({ ...profile, design: id })}>
+                        {label}{on ? <span className="menukey">✓</span> : null}
+                      </button>
+                    );
+                  })}
+                </div>
 
                 <div className="accent-pick">
                   <div className="accent-lead">
@@ -1216,12 +1250,14 @@ export default function App() {
                       );
                     })}
                   </div>
-                  <button className="menu-item" aria-pressed={profile.glass !== false}
-                    title="Frosted card surfaces over a soft ambient wash — subtle, vivid, or off"
-                    onClick={() => setProfile({ ...profile, glass: profile.glass === false ? true : profile.glass === "vivid" ? false : "vivid" })}>
-                    ❄ Glass surfaces
-                    <span className="menukey">{profile.glass === false ? "off" : profile.glass === "vivid" ? "vivid" : "subtle"}</span>
-                  </button>
+                  {(profile.design || "glass") === "glass" && (
+                    <button className="menu-item" aria-pressed={profile.glass !== false}
+                      title="Frosted card surfaces over a soft ambient wash — subtle, vivid, or off"
+                      onClick={() => setProfile({ ...profile, glass: profile.glass === false ? true : profile.glass === "vivid" ? false : "vivid" })}>
+                      ❄ Glass intensity
+                      <span className="menukey">{profile.glass === false ? "off" : profile.glass === "vivid" ? "vivid" : "subtle"}</span>
+                    </button>
+                  )}
 
                   <div className="conn-row" style={{ marginTop: 10 }}>
                     <span>Background</span>
