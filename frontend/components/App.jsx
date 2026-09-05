@@ -26,7 +26,7 @@ import TaskBoard, { seedTodoStore } from "./TaskBoard";
 import ProjectBoard from "./ProjectBoard";
 import CustomBoards from "./CustomBoards";
 import FinanceBoard, { seedFinance } from "./FinanceBoard";
-import LocalModels from "./LocalModels";
+import LocalModels, { QuickAISetup } from "./LocalModels";
 import SearchIndexCard from "./SearchIndexCard";
 import AskVault from "./AskVault";
 import { emptyBlock } from "./NoteBlocks";
@@ -1148,7 +1148,7 @@ export default function App() {
                 onClick={() => { setSettingsOpen(false); setKeyEdit(false); }}>✕</button>
             </div>
             <div className="cd-body">
-              <details className="setfold"><summary className="setfold-head"><span>🗄 Your data</span><span className="cardsub mono">backup · import · reports · erase ▾</span></summary>
+              <details className="setfold"><summary className="setfold-head"><span>🗄 Your data</span><span className="setfold-caret" aria-hidden="true">▾</span></summary>
               <div className="set-sec">
                 <button className="menu-item" onClick={() => { downloadBackup(); setToast("Backup downloaded — keep it somewhere safe."); }}>
                   ⬇ Back up this vault (.json)
@@ -1181,7 +1181,7 @@ export default function App() {
               </div>
               </details>
 
-              <details className="setfold"><summary className="setfold-head"><span>👤 Account & profile</span><span className="cardsub mono">sign-in · display name ▾</span></summary>
+              <details className="setfold"><summary className="setfold-head"><span>👤 Account & profile</span><span className="setfold-caret" aria-hidden="true">▾</span></summary>
               <AccountSection />
 
               <div className="set-sec">
@@ -1195,7 +1195,7 @@ export default function App() {
               </div>
               </details>
 
-              <details className="setfold"><summary className="setfold-head"><span>🎨 Appearance</span><span className="cardsub mono">theme · colours · fonts ▾</span></summary>
+              <details className="setfold"><summary className="setfold-head"><span>🎨 Appearance</span><span className="setfold-caret" aria-hidden="true">▾</span></summary>
               <div className="set-sec">
                 {/* explicit Light | Dark control (the keyboard shortcut still toggles) */}
                 <div className="conn-row">
@@ -1314,7 +1314,7 @@ export default function App() {
               </div>
               </details>
 
-              <details className="setfold"><summary className="setfold-head"><span>📥 Capture from anywhere</span><span className="cardsub mono">bookmarklet · share sheet · iPhone ▾</span></summary>
+              <details className="setfold"><summary className="setfold-head"><span>📥 Capture from anywhere</span><span className="setfold-caret" aria-hidden="true">▾</span></summary>
                 <div className="capkit">
                   <div className="capkit-row">
                     <span className="capkit-label"><b>Bookmarklet</b> — drag this to your bookmarks bar; click it on any page to capture it:</span>
@@ -1335,7 +1335,7 @@ export default function App() {
                 </div>
               </details>
 
-              <details className="setfold"><summary className="setfold-head"><span>⌨ Shortcuts</span><span className="cardsub mono">cheat sheet · custom bindings ▾</span></summary>
+              <details className="setfold"><summary className="setfold-head"><span>⌨ Shortcuts</span><span className="setfold-caret" aria-hidden="true">▾</span></summary>
               <div className="set-sec">
                 <button className="menu-item" onClick={() => { setHelpOpen(true); setSettingsOpen(false); }}>
                   ⌨ Keyboard shortcuts <span className="menukey kbd">?</span>
@@ -1383,7 +1383,16 @@ export default function App() {
               </div>
               </details>
 
-              <details className="setfold"><summary className="setfold-head"><span>✦ AI models</span><span className="cardsub mono">Claude · local models · search index ▾</span></summary>
+              <details className="setfold"><summary className="setfold-head"><span>✦ AI models</span><span className="setfold-caret" aria-hidden="true">▾</span></summary>
+              <div className="set-sec">
+                {/* the no-key path comes first: one click finds a local server
+                   (or downloads a small model) and AI just turns on */}
+                <QuickAISetup onConfigured={(cfg) => { updateAI(cfg); setKeyEdit(false); }} />
+              </div>
+
+              {/* everything below is optional detail — each topic folds away */}
+              <details className="subfold">
+                <summary className="subfold-head"><span>🛠 Manual setup — Claude or hosted providers</span><span className="setfold-caret" aria-hidden="true">▾</span></summary>
               <div className="set-sec">
                 <select className="menu-input" value={aiCfg.provider || "anthropic"} aria-label="AI provider"
                   onChange={(e) => { updateAI({ provider: e.target.value }); setKeyEdit(false); }}>
@@ -1483,12 +1492,20 @@ export default function App() {
                     : "Pick a hosted model and paste its key, or point at a local model (Ollama, LM Studio) with no key at all."}
                 </div>
               </div>
-
-              <LocalModels />
-              <SearchIndexCard items={items} />
               </details>
 
-              <details className="setfold"><summary className="setfold-head"><span>🔗 Connected apps & sync</span><span className="cardsub mono">calendar · cloud files · devices ▾</span></summary>
+              <details className="subfold">
+                <summary className="subfold-head"><span>💾 Local models · Ollama</span><span className="setfold-caret" aria-hidden="true">▾</span></summary>
+                <LocalModels />
+              </details>
+
+              <details className="subfold">
+                <summary className="subfold-head"><span>🔎 Semantic search index</span><span className="setfold-caret" aria-hidden="true">▾</span></summary>
+                <SearchIndexCard items={items} />
+              </details>
+              </details>
+
+              <details className="setfold"><summary className="setfold-head"><span>🔗 Connected apps & sync</span><span className="setfold-caret" aria-hidden="true">▾</span></summary>
               <div className="set-sec">
                 <div className="conn-row">
                   <span>☁ Cloud files linked</span>

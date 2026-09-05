@@ -28,6 +28,93 @@ import {
   CURATED, humanSize, isEmbedModel,
 } from "@/lib/ollama";
 
+/* One-click, zero-key AI setup. Finds whatever free local server is already
+ * running (Ollama first, then LM Studio), wires its first chat model into
+ * Vault, and if Ollama is up but empty, pulls a small default model itself.
+ * The user never touches a URL, a model name, or an API key. */
+const QUICK_MODEL = "llama3.2:3b";   // small enough to download on a whim
+
+export function QuickAISetup({ onConfigured }) {
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(null);        // {ok, text}
+  const [prog, setProg] = useState(null);      // {name, pct, completed, total}
+  const abortRef = useRef(null);
+  useEffect(() => () => abortRef.current?.abort(), []);
+
+  async function run() {
+    if (busy) return;
+    setBusy(true); setMsg(null);
+    try {
+      const s = await ollamaUp();
+      if (s.up) {
+        const chat = (await listModels().catch(() => [])).filter((m) => !isEmbedModel(m.name));
+        if (chat.length) {
+          onConfigured({ provider: "oss", ossPreset: "ollama", ossBaseUrl: `${ollamaRoot()}/v1`, ossModel: chat[0].name, ossKey: undefined });
+          setMsg({ ok: true, text: `AI is on — ${chat[0].name} runs locally through Ollama. No API key, and nothing leaves this machine.` });
+          return;
+        }
+        /* Ollama is running but has no chat model — fetch one and finish */
+        const ctl = new AbortController();
+        abortRef.current = ctl;
+        setProg({ name: QUICK_MODEL, pct: null, completed: 0, total: 0 });
+        await pullModel(QUICK_MODEL, (p) => setProg({ name: QUICK_MODEL, ...p }), ctl.signal);
+        setProg(null);
+        onConfigured({ provider: "oss", ossPreset: "ollama", ossBaseUrl: `${ollamaRoot()}/v1`, ossModel: QUICK_MODEL, ossKey: undefined });
+        setMsg({ ok: true, text: `AI is on — downloaded ${QUICK_MODEL} and wired it up. No API key, and nothing leaves this machine.` });
+        return;
+      }
+      /* No Ollama — is LM Studio's local server up instead? */
+      try {
+        const r = await fetch("http://localhost:1234/v1/models", { signal: AbortSignal.timeout(1500) });
+        const d = await r.json();
+        const id = d?.data?.[0]?.id;
+        if (id) {
+          onConfigured({ provider: "oss", ossBaseUrl: "http://localhost:1234/v1", ossModel: id, ossKey: undefined });
+          setMsg({ ok: true, text: `AI is on — ${id} through LM Studio's local server. No API key needed.` });
+          return;
+        }
+      } catch { /* not running either */ }
+      setMsg({
+        ok: false,
+        text: "No local model server found. Install Ollama from ollama.com/download, start it with OLLAMA_ORIGINS='*' ollama serve, and click this again — the rest is automatic.",
+      });
+    } catch (e) {
+      setProg(null);
+      setMsg(e?.canceled ? null : { ok: false, text: e?.message || "Setup didn't finish — try again." });
+    } finally {
+      setBusy(false);
+      abortRef.current = null;
+    }
+  }
+
+  return (
+    <div className="quickai">
+      <button className="btn quickai-btn" onClick={run} disabled={busy}
+        title="Detects Ollama or LM Studio on this machine and wires a free model into Vault — no API key, no configuration">
+        {busy ? (prog ? "Downloading model…" : "Looking for a local model…") : "⚡ Use a free model — no API key"}
+      </button>
+      {prog && (
+        <div className="lm-progrow">
+          <span className="mono">{prog.name}</span>
+          <div className={prog.total ? "lm-prog" : "lm-prog busy"}>
+            <i style={prog.total ? { width: `${prog.pct}%` } : undefined} />
+          </div>
+          <span className="mono">
+            {prog.total ? `${prog.pct}% · ${humanSize(prog.completed)} / ${humanSize(prog.total)}` : prog.status || "starting…"}
+          </span>
+          <button className="kbtn kdel" onClick={() => abortRef.current?.abort()}
+            title="Cancel download" aria-label="Cancel download">✕</button>
+        </div>
+      )}
+      {msg && (
+        <div className={msg.ok ? "quickai-ok" : "quickai-note"} role="status">
+          {msg.ok ? "✓ " : ""}{msg.text}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* Settings → local model manager. Lives in the AI section, under the model
  * picker: see what's installed, pull new models with live progress, delete,
  * and wire a fresh model into chat or search with one click.

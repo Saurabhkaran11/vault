@@ -2286,3 +2286,24 @@ input{text-overflow:ellipsis}
 [data-theme="dark"] .vault.design-clay .doctabs button, [data-theme="dark"] .vault.design-clay .charttabs button{
   box-shadow:0 5px 10px rgba(0,0,0,.5), inset 0 -3px 5px rgba(0,0,0,.35), inset 0 2px 4px rgba(255,255,255,.07);
 }
+
+/* ---------- Quick AI setup: the zero-key path in Settings → AI models */
+.quickai{display:flex; flex-direction:column; gap:8px; padding:2px 8px 4px}
+.quickai-btn{width:100%; justify-content:center; font-weight:600}
+.quickai-ok{font-size:12.5px; color:var(--moss); background:var(--moss-soft);
+  border:1px solid var(--moss); border-radius:9px; padding:8px 12px; line-height:1.5}
+.quickai-note{font-size:12.5px; color:var(--ink-soft); background:var(--field);
+  border:1px solid var(--line); border-radius:9px; padding:8px 12px; line-height:1.5}
+
+/* ---------- Settings: nested collapsible sub-sections + clean tab heads */
+.setfold-caret{color:var(--ink-soft); transition:transform .15s; flex-shrink:0}
+.setfold[open] > .setfold-head > .setfold-caret{transform:rotate(180deg)}
+.subfold{margin:8px 8px 0; border:1px solid var(--line); border-radius:10px; background:var(--field); overflow:hidden}
+.subfold:last-child{margin-bottom:8px}
+.subfold-head{display:flex; align-items:center; justify-content:space-between; gap:10px;
+  padding:9px 12px; cursor:pointer; font-size:12.5px; font-weight:600; color:var(--ink); list-style:none}
+.subfold-head::-webkit-details-marker{display:none}
+.subfold-head:hover{color:var(--moss)}
+.subfold[open] > .subfold-head > .setfold-caret{transform:rotate(180deg)}
+/* the wrapped components carry their own heading — the summary replaces it */
+.subfold > .set-sec > .menu-sec:first-child{display:none}
