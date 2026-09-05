@@ -181,7 +181,10 @@ button.stampbtn.static:hover{transform:rotate(-3deg)}
 .topbar{display:flex; align-items:center; position:relative; margin:-8px 0 10px}
 .avatar{width:38px; height:38px; border-radius:50%; border:none; background:var(--moss); color:#fff; font-family:'Fraunces',serif; font-size:15px; font-weight:650; cursor:pointer; flex-shrink:0}
 .avatar:hover{background:#17497F}
-.menu{position:absolute; right:0; top:46px; background:var(--panel); border:1px solid var(--line); border-radius:12px; box-shadow:0 14px 40px rgba(32,41,31,.16); width:240px; padding:10px; z-index:40}
+/* z-index 45: above the sticky dashboard bars (40) so the bell and profile
+   dropdowns are never covered by page content; below the command palette
+   (50) and modals (70+) */
+.menu{position:absolute; right:0; top:46px; background:var(--panel); border:1px solid var(--line); border-radius:12px; box-shadow:0 14px 40px rgba(32,41,31,.16); width:240px; padding:10px; z-index:45}
 .menu-sec{font-family:'IBM Plex Mono',monospace; font-size:9.5px; letter-spacing:2px; color:var(--ink-soft); margin:8px 4px 5px}
 .menu-sec:first-child{margin-top:0}
 .menu-input{width:100%; border:1px solid var(--line); border-radius:8px; padding:8px 10px; font-family:'Public Sans',sans-serif; font-size:13px; background:var(--field); color:var(--ink)}
