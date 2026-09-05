@@ -283,25 +283,26 @@ export default function FinanceAnalytics({ fin, fmt, spentByCat = {}, savingsRat
 
   return (
     <>
-    <div className="card">
-      <div className="fanal-head">
-        <div className="doctabs" role="tablist" aria-label="Report period">
-          {PERIODS.map((p) => (
-            <button key={p.key} className={period === p.key ? "on" : ""} role="tab"
-              aria-selected={period === p.key} onClick={() => { setPeriod(p.key); onRange?.(P2G[p.key]); }}>{p.label}</button>
-          ))}
-        </div>
-        <div className="charttabs" role="group" aria-label="Chart type">
-          {CHARTS.map(([k, label]) => (
-            <button key={k} className={chart === k ? "on" : ""}
-              aria-pressed={chart === k} onClick={() => setChart(k)}
-              title={k === "donut" ? "Share of spending by category" : `${label.slice(2)} chart over time`}>
-              {label}
-            </button>
-          ))}
-        </div>
+    {/* the range + chart-type controls float just under the Finance featbar,
+       so switching Daily/Weekly/Monthly/Yearly never needs a scroll back up */}
+    <div className="featbar fanal-sticky">
+      <div className="doctabs" role="tablist" aria-label="Report period" style={{ display: "inline-flex" }}>
+        {PERIODS.map((p) => (
+          <button key={p.key} className={period === p.key ? "on" : ""} role="tab"
+            aria-selected={period === p.key} onClick={() => { setPeriod(p.key); onRange?.(P2G[p.key]); }}>{p.label}</button>
+        ))}
       </div>
-
+      <div className="charttabs" role="group" aria-label="Chart type">
+        {CHARTS.map(([k, label]) => (
+          <button key={k} className={chart === k ? "on" : ""}
+            aria-pressed={chart === k} onClick={() => setChart(k)}
+            title={k === "donut" ? "Share of spending by category" : `${label.slice(2)} chart over time`}>
+            {label}
+          </button>
+        ))}
+      </div>
+    </div>
+    <div className="card">
       <div className="fanal-stats">
         <span><b>{fmt(total)}</b> total in this {periodName.toLowerCase()} range</span>
         <span><b>{fmt(avg)}</b> avg per active {period === "daily" ? "day" : period === "weekly" ? "week" : period === "monthly" ? "month" : "year"}</span>
