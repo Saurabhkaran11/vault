@@ -13,7 +13,13 @@ export const metadata = {
 export const viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: "#0F2237",
+  /* browser chrome (address bar, PWA frame) follows the app's light/dark
+     background — the old fixed #0F2237 painted a dark frame around the
+     light app on phones, which read as "the site has no white view" */
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#EFF3F8" },
+    { media: "(prefers-color-scheme: dark)", color: "#0F1928" },
+  ],
 };
 
 /* Clerk is imported lazily and only mounted when a publishable key exists.
@@ -22,9 +28,12 @@ export const viewport = {
  * ClerkProvider unconditionally would make the whole app depend on an
  * account existing, which is the opposite of that promise. */
 export default async function RootLayout({ children }) {
+  /* data-theme is set in the server HTML so the very first paint is the
+     light theme in every environment (local, Vercel, PWA) — the client
+     then swaps in the user's saved preference after mount */
   if (!authEnabled()) {
     return (
-      <html lang="en">
+      <html lang="en" data-theme="light">
         <body>{children}</body>
       </html>
     );
@@ -33,7 +42,7 @@ export default async function RootLayout({ children }) {
   const { ClerkProvider } = await import("@clerk/nextjs");
   return (
     <ClerkProvider>
-      <html lang="en">
+      <html lang="en" data-theme="light">
         <body>
           <AuthGate>{children}</AuthGate>
         </body>
