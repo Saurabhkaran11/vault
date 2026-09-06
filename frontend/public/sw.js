@@ -8,7 +8,7 @@
  *    fonts CSS passthrough, and the OCR engine): cache-first
  * Bump VERSION to invalidate everything after a breaking deploy.
  */
-const VERSION = "vault-shell-v1";
+const VERSION = "vault-shell-v2";   // v2: light theme-color manifest must replace the cached dark one
 const STATIC = /^\/(_next\/static\/|icons\/|ocr\/|icon\.svg$|apple-icon\.png$|manifest\.webmanifest$)/;
 
 self.addEventListener("install", (e) => {
