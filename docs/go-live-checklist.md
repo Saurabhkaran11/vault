@@ -1,5 +1,7 @@
 # Go-live checklist — what's needed from you
 
+> Update: `CHAT_URL`, `CHAT_API_KEY` and `CHAT_MODEL` now only work in `AUTH_MODE=dev`. On a public deployment visitors use their own AI key, so skip those lines below.
+
 The code is done. This is the config that turns every feature on in production.
 Fastest path to "full AI live" is **§1 + §2**. Each section says what it unlocks.
 

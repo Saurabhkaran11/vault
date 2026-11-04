@@ -5,12 +5,9 @@ import { api, backendOn } from "./api";
 
 /* AI service layer — the single seam between Vault's UI and Claude.
  *
- * Frontend-first (BYO key) mode: the user pastes their Anthropic API key in
- * Settings; it lives only in this browser's localStorage and calls go straight
- * from the browser to the Claude API (the SDK's dangerouslyAllowBrowser mode —
- * acceptable for a personal, local-first app; NEVER ship this pattern in a
- * multi-user product). When the backend lands, only this file changes: the
- * helpers below become fetch("/api/ai/...") calls and the key moves server-side.
+ * BYO key: the visitor pastes their own key in Settings. It is held in this
+ * tab's memory only, never written to localStorage and gone on reload. Calls
+ * go straight from the browser to a provider URL fixed in the table below.
  */
 
 const KEY = "vault.ai.v1";
@@ -50,7 +47,7 @@ export const OSS_PRESETS = [
   {
     id: "gemini", label: "Google Gemini", url: "https://generativelanguage.googleapis.com/v1beta/openai/", needsKey: true,
     keyUrl: "https://aistudio.google.com/apikey",
-    models: ["gemini-2.0-flash", "gemini-1.5-pro"],
+    models: ["gemini-3.6-flash", "gemini-2.5-flash"],
     note: "Google's OpenAI-compatible endpoint. Has a free tier.",
   },
   {
@@ -89,28 +86,39 @@ export const OSS_MODEL_SUGGESTIONS = [
   "llama3.3", "qwen2.5:14b", "mistral-small-latest", "deepseek-chat", "gpt-4o-mini",
 ];
 
+/* The visitor's API keys: memory only. Everything else in the config persists. */
+const memKeys = {};
+const stripKeys = ({ apiKey, ossKey, ...rest }) => rest;
+
 export function getAIConfig() {
+  const base = { provider: "anthropic", model: "claude-opus-5" };
   try {
-    return { provider: "anthropic", model: "claude-opus-5", ...JSON.parse(localStorage.getItem(KEY) || "{}") };
+    const stored = JSON.parse(localStorage.getItem(KEY) || "{}");
+    // Older versions saved keys here. Remove them.
+    if (stored.apiKey || stored.ossKey) localStorage.setItem(KEY, JSON.stringify(stripKeys(stored)));
+    return { ...base, ...stripKeys(stored), ...memKeys };
   } catch {
-    return { provider: "anthropic", model: "claude-opus-5" };
+    return { ...base, ...memKeys };
   }
 }
 
 export function setAIConfig(patch) {
   const next = { ...getAIConfig(), ...patch };
-  localStorage.setItem(KEY, JSON.stringify(next));
+  for (const k of ["apiKey", "ossKey"]) if (k in patch) memKeys[k] = patch[k];
+  localStorage.setItem(KEY, JSON.stringify(stripKeys(next)));
   return next;
 }
 
 export function aiEnabled() {
   const c = getAIConfig();
-  return c.provider === "oss" ? !!(c.ossBaseUrl && c.ossModel) : !!c.apiKey;
+  if (c.provider !== "oss") return !!c.apiKey;
+  const preset = OSS_PRESETS.find((p) => p.url === c.ossBaseUrl);
+  return !!(c.ossBaseUrl && c.ossModel) && (!preset?.needsKey || !!c.ossKey);
 }
 
 function client() {
   const { apiKey } = getAIConfig();
-  if (!apiKey) throw new AIError("no_key", "Set up an AI model in Settings to enable AI features.");
+  if (!apiKey) throw new AIError("no_key", "Add your own API key in Settings, or use a free local model. Keys clear when you reload.");
   return new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
 }
 
@@ -140,7 +148,11 @@ function friendly(err) {
 async function completeOSS({ system, prompt, maxTokens = 16000, outputFormat }) {
   const { ossBaseUrl, ossModel, ossKey } = getAIConfig();
   if (!ossBaseUrl || !ossModel)
-    throw new AIError("no_key", "Set your open-source model's server URL and model name in Settings.");
+    throw new AIError("no_key", "Choose a provider and model name in Settings.");
+  // A key may only go to a provider URL fixed in code.
+  const preset = OSS_PRESETS.find((p) => p.url === ossBaseUrl);
+  if (!preset) throw new AIError("no_key", "Choose a provider from the list in Settings.");
+  if (preset.needsKey && !ossKey) throw new AIError("no_key", `Add your own ${preset.label} API key in Settings. Keys clear when you reload.`);
   const messages = [];
   if (system) messages.push({ role: "system", content: system });
   let p = prompt;
@@ -163,6 +175,7 @@ async function completeOSS({ system, prompt, maxTokens = 16000, outputFormat }) 
   if (res.status === 429) throw new AIError("rate", "Rate limited by the model server — wait a moment and try again.");
   if (!res.ok) {
     const t = await res.text().catch(() => "");
+    if (/api[ _]?key/i.test(t)) throw new AIError("auth", "The model server rejected the key — check it in Settings.");
     throw new AIError("api", `Model server error (${res.status})${t ? `: ${t.slice(0, 140)}` : ""}`);
   }
   let data;
@@ -269,8 +282,9 @@ export async function askJSON(prompt, schema, opts = {}) {
  *     blocked before it is sent. Server to server has no such restriction,
  *     which makes every OpenAI-compatible provider reachable — including a
  *     model you host yourself with no third party involved at all.
- *   · A browser-held key sits in localStorage on every device the user signs
- *     in from. A server-held one does not.
+ *
+ * The backend only reports this in AUTH_MODE=dev (local use). A public
+ * deployment never answers with a server key, so visitors use their own.
  */
 let _serverAI = null;
 

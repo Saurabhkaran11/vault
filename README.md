@@ -2,7 +2,7 @@
 
 A personal knowledge & life hub: **notes, YouTube saves, reading library, documents, to-dos, Jira-style boards with sprints, and personal finance** — every item date-stamped, linked by project tags, visualized in a live force-directed graph, and summarized on an analytics dashboard with per-feature reports.
 
-**Status:** production-shaped frontend (Next.js, local-first). FastAPI + PostgreSQL backend in progress — see [`docs/`](docs/) for the system design.
+**Status:** Next.js frontend that runs on its own with data in the browser. An optional FastAPI + PostgreSQL backend adds accounts and sync — see [`docs/`](docs/) for the system design.
 
 ![wireframe](docs/wireframes.md)
 
@@ -21,7 +21,7 @@ A personal knowledge & life hub: **notes, YouTube saves, reading library, docume
 | **Finance** | Expenses with categories & **payment methods**, recurring bills, budgets, savings goals, income & savings rate, multi-currency, analytics (bar/line/area/donut × day/week/month/year), CSV export |
 | **Graph** | Live force simulation of tags ↔ items; drag, zoom, search; scale-tested to 800+ items |
 | **Tags** | Directory of every project tag + create standalone custom tags |
-| **AI (BYO key)** | Claude (Anthropic) **or any open-source model** (Ollama/LM Studio/Groq/OpenRouter — OpenAI-compatible): Ask-your-Vault RAG with citations, weekly digest, note summaries, action-item extraction, finance smart-add |
+| **AI (BYO key)** | Claude (Anthropic) **or a listed provider** (Ollama, LM Studio, OpenAI, Gemini, Mistral, DeepSeek, Groq, Together, OpenRouter). Your key stays in tab memory, is never saved and clears on reload: Ask-your-Vault RAG with citations, weekly digest, note summaries, action-item extraction, finance smart-add |
 | **Reports** | Self-contained printable HTML report per feature (or the full vault) |
 | **Production details** | First-run onboarding (sample data vs clean start), notification bell + desktop alerts, `.ics` export, PWA manifest, WCAG AA contrast, dark mode, fully rebindable keyboard shortcuts, click-again destructive confirms, 30-day trash |
 
@@ -33,16 +33,26 @@ npm install
 npm run dev   # http://localhost:3100
 ```
 
-Data lives in `localStorage` (versioned schemas: `vault.items.v1`, `vault.todos.v1`, `vault.finance.v1`, `vault.boards.v1`, `vault.tags.v1`, `vault.keys.v1`, `vault.ai.v1`) with one-click JSON export/import. The backend swaps exactly two seams: `hooks/useStore.js` (data) and `lib/ai.js` (AI proxy).
+Data lives in `localStorage` (versioned schemas: `vault.items.v1`, `vault.todos.v1`, `vault.finance.v1`, `vault.boards.v1`, `vault.tags.v1`, `vault.keys.v1` for shortcuts, `vault.ai.v1` for AI settings but never API keys) with one-click JSON export/import.
 
 ## Repo layout
 
 ```
-frontend/   Next.js 14 app — the product
-backend/    FastAPI + PostgreSQL(pgvector) + Redis — in progress
+frontend/   Next.js 16 app — the product
+backend/    FastAPI + PostgreSQL(pgvector) + Redis — optional
 docs/       Wireframes + per-feature system design documents
-src/        Original Vite prototype (kept for reference)
 ```
+
+## Deploy
+
+**Frontend only (simplest):** Vercel with root directory `frontend`. No settings are required. Data stays in each visitor's browser and visitors bring their own AI key.
+
+**With accounts and sync:** also run `backend/` on Render or any Docker host with Postgres (pgvector) and Redis. The owner sets these. Details are in [`docs/runbook.md`](docs/runbook.md).
+
+- Frontend: `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`, optional `NEXT_PUBLIC_SENTRY_DSN`
+- Backend: `DATABASE_URL`, `REDIS_URL`, `AUTH_MODE=jwt`, `JWT_ISSUER`, `JWT_JWKS_URL`, `CORS_ORIGINS`. Optional: S3 storage, Google calendar, Sentry and embeddings
+
+`CHAT_URL` and `CHAT_API_KEY` only work in `AUTH_MODE=dev`, which is local only. A public deployment never answers with a server AI key.
 
 ## Roadmap
 

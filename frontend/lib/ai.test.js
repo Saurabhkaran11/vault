@@ -7,7 +7,7 @@ import { vi } from "vitest";
 vi.mock("@/lib/api", () => ({ api: vi.fn(), backendOn: () => false }));
 
 import {
-  AI_MODELS, OSS_PRESETS, presetById, getAIConfig, setAIConfig, aiEnabled, stripReasoning,
+  AI_MODELS, OSS_PRESETS, presetById, getAIConfig, setAIConfig, aiEnabled, stripReasoning, askText,
 } from "./ai";
 
 describe("stripReasoning", () => {
@@ -58,18 +58,38 @@ describe("AI config", () => {
     expect(getAIConfig()).toMatchObject({ provider: "anthropic", model: "claude-opus-5" });
   });
 
-  it("setAIConfig merges and persists", () => {
+  it("setAIConfig merges, persists settings and keeps keys in memory only", () => {
     setAIConfig({ apiKey: "sk-test" });
     setAIConfig({ model: "claude-sonnet-5" });
     const c = getAIConfig();
     expect(c.apiKey).toBe("sk-test");    // earlier patch survives
     expect(c.model).toBe("claude-sonnet-5");
+    expect(localStorage.getItem("vault.ai.v1")).toContain("claude-sonnet-5");
+    expect(localStorage.getItem("vault.ai.v1")).not.toContain("sk-test");
+    setAIConfig({ apiKey: undefined });
+  });
+
+  it("removes a key an older version saved to localStorage", () => {
+    localStorage.setItem("vault.ai.v1", JSON.stringify({ apiKey: "sk-old", model: "claude-sonnet-5" }));
+    expect(getAIConfig().apiKey).toBeUndefined();
+    expect(localStorage.getItem("vault.ai.v1")).not.toContain("sk-old");
+  });
+
+  it("refuses to send a key to a URL that is not a built-in provider", async () => {
+    const f = vi.fn();
+    vi.stubGlobal("fetch", f);
+    setAIConfig({ provider: "oss", ossBaseUrl: "https://evil.example/v1", ossModel: "m", ossKey: "sk-x" });
+    await expect(askText("hi")).rejects.toMatchObject({ code: "no_key" });
+    expect(f).not.toHaveBeenCalled();
+    setAIConfig({ ossKey: undefined });
+    vi.unstubAllGlobals();
   });
 
   it("aiEnabled requires a key for Anthropic and url+model for a custom server", () => {
     expect(aiEnabled()).toBe(false);
     setAIConfig({ provider: "anthropic", apiKey: "sk-x" });
     expect(aiEnabled()).toBe(true);
+    setAIConfig({ apiKey: undefined });
 
     setAIConfig({ provider: "oss", apiKey: "", ossBaseUrl: "", ossModel: "" });
     expect(aiEnabled()).toBe(false);

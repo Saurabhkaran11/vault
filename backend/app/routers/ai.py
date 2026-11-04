@@ -305,6 +305,12 @@ async def ask(body: AskIn, session: AsyncSession = Depends(get_session), user: s
     return AskOut(sources=sources, prompt=prompt)
 
 
+def _server_ai_on() -> bool:
+    """Server-key answers are for local use only. A public deployment runs
+    AUTH_MODE=jwt, and there every visitor brings their own key."""
+    return settings.auth_mode == "dev" and bool(settings.chat_url and settings.chat_model)
+
+
 @router.get("/status")
 async def ai_status():
     """Whether the server can generate answers itself.
@@ -313,8 +319,8 @@ async def ai_status():
     back to the browser's own key rather than failing at the moment someone
     presses Ask."""
     return {
-        "server_completion": bool(settings.chat_url and settings.chat_model),
-        "model": settings.chat_model if settings.chat_url else None,
+        "server_completion": _server_ai_on(),
+        "model": settings.chat_model if _server_ai_on() else None,
     }
 
 
@@ -331,8 +337,8 @@ async def complete(body: CompleteIn, user: str = Depends(current_user_id)):
     The second reason is arguably better: the key stays here. Browser-held
     keys sit in localStorage on every device a user signs in from.
     """
-    if not (settings.chat_url and settings.chat_model):
-        raise HTTPException(503, "Server-side AI is not configured — set CHAT_URL and CHAT_MODEL.")
+    if not _server_ai_on():
+        raise HTTPException(503, "Server-side AI is off on this deployment. Add your own API key in Settings.")
 
     headers = {"Content-Type": "application/json"}
     if settings.chat_api_key:

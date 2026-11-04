@@ -1404,8 +1404,8 @@ export default function App() {
                   <>
                     {aiCfg.apiKey && !keyEdit ? (
                       <div className="keyrow">
-                        {/* the stored key is never rendered — not even masked into an input */}
-                        <span className="keystate mono">API key saved ✓</span>
+                        {/* the key is never rendered — not even masked into an input */}
+                        <span className="keystate mono">API key added ✓</span>
                         <button className="kbtn" onClick={() => setKeyEdit(true)} title="Paste a different key">Replace</button>
                         <button className="kbtn kdel" onClick={() => { updateAI({ apiKey: undefined }); setKeyEdit(false); }}
                           title="Remove the key from this browser">Remove</button>
@@ -1413,7 +1413,7 @@ export default function App() {
                     ) : (
                       <input className="menu-input" type="password" autoComplete="off" defaultValue=""
                         style={{ marginTop: 6 }} aria-label="Claude API key"
-                        placeholder={aiCfg.apiKey ? "Paste a new key, press Enter (Esc to keep current)" : "Your Claude API key — press Enter to save"}
+                        placeholder={aiCfg.apiKey ? "Paste a new key, press Enter (Esc to keep current)" : "Your Claude API key — press Enter to add"}
                         onKeyDown={(e) => {
                           if (e.key === "Enter") {
                             const v = e.target.value.trim();
@@ -1431,7 +1431,7 @@ export default function App() {
                 ) : (
                   <>
                     <select className="menu-input" style={{ marginTop: 6 }} aria-label="Open-source preset"
-                      value={OSS_PRESETS.find((p) => p.url === aiCfg.ossBaseUrl)?.id || "custom"}
+                      value={OSS_PRESETS.find((p) => p.url === aiCfg.ossBaseUrl)?.id || ""}
                       onChange={(e) => {
                         const p = OSS_PRESETS.find((x) => x.id === e.target.value);
                         /* Carry the preset's first model across too. Leaving the
@@ -1439,12 +1439,9 @@ export default function App() {
                            common way this ends in a confusing 404. */
                         if (p) updateAI({ ossBaseUrl: p.url, ossModel: p.models?.[0] || aiCfg.ossModel });
                       }}>
+                      <option value="" disabled>Choose a provider…</option>
                       {OSS_PRESETS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
-                      <option value="custom">Custom server…</option>
                     </select>
-                    <input className="menu-input" style={{ marginTop: 6 }} aria-label="Server URL"
-                      value={aiCfg.ossBaseUrl || ""} placeholder="Server URL, e.g. http://localhost:11434/v1"
-                      onChange={(e) => updateAI({ ossBaseUrl: e.target.value.trim() })} />
                     <input className="menu-input" style={{ marginTop: 6 }} list="oss-models" aria-label="Model name"
                       value={aiCfg.ossModel || ""} placeholder="Model name, e.g. llama3.3 or qwen2.5:14b"
                       onChange={(e) => updateAI({ ossModel: e.target.value.trim() })} />
@@ -1467,7 +1464,7 @@ export default function App() {
                     })()}
                     {aiCfg.ossKey && !keyEdit ? (
                       <div className="keyrow">
-                        <span className="keystate mono">API key saved ✓</span>
+                        <span className="keystate mono">API key added ✓</span>
                         <button className="kbtn" onClick={() => setKeyEdit(true)} title="Paste a different key">Replace</button>
                         <button className="kbtn kdel" onClick={() => { updateAI({ ossKey: undefined }); setKeyEdit(false); }}
                           title="Remove the key from this browser">Remove</button>
@@ -1475,7 +1472,7 @@ export default function App() {
                     ) : (
                       <input className="menu-input" type="password" autoComplete="off" defaultValue=""
                         style={{ marginTop: 6 }} aria-label="Open-source provider API key"
-                        placeholder={aiCfg.ossKey ? "Paste new key, press Enter (Esc to keep current)" : "API key — only for hosted providers, Enter to save (local models: leave empty)"}
+                        placeholder={aiCfg.ossKey ? "Paste new key, press Enter (Esc to keep current)" : "API key — only for hosted providers, Enter to add (local models: leave empty)"}
                         onKeyDown={(e) => {
                           if (e.key === "Enter") {
                             const v = e.target.value.trim();
@@ -1488,8 +1485,8 @@ export default function App() {
                 )}
                 <div className="menu-foot" style={{ border: "none", marginTop: 4, paddingTop: 0 }}>
                   {(aiCfg.provider || "anthropic") === "anthropic"
-                    ? "Your key is kept only in this browser and never shown again once saved."
-                    : "Pick a hosted model and paste its key, or point at a local model (Ollama, LM Studio) with no key at all."}
+                    ? "Your key stays in this tab's memory only. It is not saved and clears when you reload."
+                    : "Pick a hosted model and paste its key, or pick a local model (Ollama, LM Studio) with no key at all. Keys are not saved and clear when you reload."}
                 </div>
               </div>
               </details>
